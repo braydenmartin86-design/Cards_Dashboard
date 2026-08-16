@@ -30,17 +30,17 @@
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
-  @font-face{font-family:'Oswald';src:local('Oswald');}
   h1,h2,h3,.oswald{font-family:'Oswald','Inter',sans-serif;letter-spacing:.01em}
   .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
   a{color:inherit}
   input,select,textarea,button{font-family:inherit;font-size:14px;color:var(--text);background:var(--surface2);border:1px solid #333844;border-radius:6px;padding:9px 11px;width:100%}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
   button{cursor:pointer;width:auto}
-  .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-weight:600;font-size:13.5px;border:1px solid var(--border);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-weight:600;font-size:13.5px;border:1px solid var(--border);background:var(--surface2);white-space:nowrap}
   .btn-primary{background:var(--gold);color:#14161C;border-color:var(--gold)}
   .btn-danger{color:var(--red);border-color:#4a2a24}
-  .wrap{max-width:900px;margin:0 auto;padding:1.5rem 1rem 5rem}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .wrap{max-width:960px;margin:0 auto;padding:1.5rem 1rem 5rem}
   .row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
   .stat-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px}
   .stat{background:var(--surface);padding:14px 16px}
@@ -50,6 +50,7 @@
   .field label{font-size:11.5px;color:var(--text-muted)}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
   .card-row{border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;background:var(--surface);cursor:pointer;border-left:4px solid transparent}
   .card-row.top{background:color-mix(in srgb, var(--accent) 8%, var(--surface));border-left-color:var(--accent)}
   .card-row.raw-sell{border-left:3px solid color-mix(in srgb, var(--accent) 55%, transparent);background:color-mix(in srgb, var(--accent) 4%, var(--surface))}
@@ -61,10 +62,21 @@
   .mini .l{font-size:10px;color:var(--text-muted);text-transform:uppercase}
   .mini .v{font-size:15px;font-weight:600;margin-top:2px}
   #installBtn{display:none}
-  .top-nav{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+  .top-nav{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:10px}
   .sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
-  #empty{text-align:center;color:var(--text-dim);padding:3rem 0;border:1px solid var(--border);border-radius:var(--radius)}
+  .empty{text-align:center;color:var(--text-dim);padding:3rem 0;border:1px solid var(--border);border-radius:var(--radius)}
   textarea{min-height:140px;resize:vertical}
+  .tabbar{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:18px}
+  .tabbtn{padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid transparent;background:transparent;color:var(--text-dim)}
+  .tabbtn.active{background:var(--surface2);border-color:var(--border);color:var(--gold)}
+  .tabbtn:disabled{opacity:.35;cursor:not-allowed}
+  .panel{border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;background:var(--surface);margin-bottom:16px}
+  .dash-row{display:flex;justify-content:space-between;align-items:center;padding:7px 8px;border-radius:6px;font-size:12.5px;cursor:pointer}
+  .dash-row:hover{background:var(--surface2)}
+  table.simple{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.simple th{text-align:left;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;padding:8px;border-bottom:1px solid var(--border)}
+  table.simple td{padding:8px;border-bottom:1px solid var(--border-soft)}
+  .soon{border:1px dashed var(--border);border-radius:var(--radius);padding:2.5rem 1.5rem;text-align:center;color:var(--text-muted)}
 </style>
 </head>
 <body>
@@ -76,36 +88,27 @@
     </div>
     <div style="text-align:right">
       <div id="syncStatus" style="font-size:11.5px;color:var(--text-dim)"><span class="sync-dot" style="background:var(--text-dim)"></span>Connecting…</div>
-      <button id="installBtn" class="btn" style="margin-top:8px;font-size:12px;padding:6px 12px">Install app</button>
+      <button id="installBtn" class="btn btn-sm" style="margin-top:8px">Install app</button>
     </div>
   </div>
 
-  <div class="stat-bar" id="statBar"></div>
-
-  <div class="row" style="margin-bottom:14px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <select id="statusFilter" style="width:auto"><option value="all">All statuses</option></select>
-      <select id="decisionFilter" style="width:auto"><option value="all">All decisions</option></select>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn" id="migrateBtn">Import / migrate data</button>
-      <button class="btn btn-primary" id="addBtn">+ Add card</button>
-    </div>
-  </div>
-
-  <div id="list"></div>
+  <div class="tabbar" id="tabbar"></div>
+  <div id="tabContent"></div>
 </div>
 
 <div id="modalRoot"></div>
 
 <script>
 /* ============================== ENGINE ==============================
-   Ported from the CardFlip EV grading decision engine: same thresholds,
-   same $20 minimum-sell bar, same PSA-via-Australia declared-value tiers.
+   Same grading decision engine used for both My Cards and Pokémon: same
+   $20 minimum-sell bar, same PSA-via-Australia declared-value tiers, same
+   PSA10-floors-at-PSA9-when-unknown fix.
    ===================================================================== */
 const AUD_TO_USD = 0.65;
 const PSA9_GRADES = ['psa 9','sgc 9','bgs 9','bgs 9.5'];
 const PSA10_GRADES = ['psa 10','sgc 10','bgs 10'];
+const SPORT_OPTIONS = ['NFL','NBA','WNBA','MLB','AFL','Soccer','MMA','WWE','Other'];
+const STATUS_OPTIONS = ['Raw','At Grading','Graded','Listed','Sold'];
 
 function tieredPsaAuCost(declaredAUD){
   const usd = (declaredAUD||0) * AUD_TO_USD;
@@ -131,6 +134,7 @@ function fmtMoney(n){
   return s + '$' + Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 function fmtPct(n){ return n==null ? '—' : (n*100).toFixed(1)+'%'; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function computeCard(c){
   const holdingCost = c.shipMyCards === 'ShipMyCards' ? 4.5 : 0;
@@ -145,8 +149,6 @@ function computeCard(c){
   const hasPsa10Own = c.psa10Avg!=null && c.psa10Avg!=='';
   const raw = hasRaw ? Number(c.rawAvg) : null;
   const psa9 = hasPsa9 ? Number(c.psa9Avg) : null;
-  // Unknown PSA10 floors at PSA9's price rather than $0 — a real PSA10 should never
-  // realistically sell for less than a 9 of the same card.
   const psa10 = hasPsa10Own ? Number(c.psa10Avg) : (hasPsa9 ? psa9 : null);
   const hasPsa10 = psa10!=null;
 
@@ -158,11 +160,9 @@ function computeCard(c){
   const psa10GGR = (isActive && hasPsa10) ? (psa10*(1-fees) - totalCost - gCost) : null;
 
   let gradeWorthIt = 'NO';
-  if(psa10GGR!=null){
-    if(psa9GGR!=null){
-      if(psa10GGR>=20 && psa9GGR>=0) gradeWorthIt='YES';
-      else if(psa10GGR>=20 && psa9GGR>=-10 && psa9GGR<0) gradeWorthIt='HIGH RISK';
-    }
+  if(psa10GGR!=null && psa9GGR!=null){
+    if(psa10GGR>=20 && psa9GGR>=0) gradeWorthIt='YES';
+    else if(psa10GGR>=20 && psa9GGR>=-10 && psa9GGR<0) gradeWorthIt='HIGH RISK';
   }
 
   let gradedEV = null;
@@ -224,14 +224,21 @@ const SELL_STYLE = {
 
 /* ============================== STORAGE / SYNC ==============================
    Supabase realtime is the source of truth when reachable; localStorage is a
-   read/write cache used offline and as the seed on first run. Writes always hit
-   the local cache first (instant UI), then attempt the Supabase upsert.
+   read/write cache used offline and as the seed on first run.
    ============================================================================ */
 const ROW_ID = 'tandem-shared';
 const LOCAL_KEY = 'tandem_cache_v1';
 let supabaseClient = null;
-let state = { cards: [] };
+let state = { cards: [], pokemonCards: [], boxBreaks: [], targets: [], manualExpenses: [] };
 let channel = null;
+
+function ensureStateShape(){
+  state.cards = state.cards || [];
+  state.pokemonCards = state.pokemonCards || [];
+  state.boxBreaks = state.boxBreaks || [];
+  state.targets = state.targets || [];
+  state.manualExpenses = state.manualExpenses || [];
+}
 
 function loadLocal(){
   try{ const raw = localStorage.getItem(LOCAL_KEY); return raw ? JSON.parse(raw) : null; }
@@ -252,7 +259,7 @@ async function initSupabase(){
     return false;
   }
   try{
-    supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
     return true;
   }catch(e){
     console.error('Supabase init failed', e);
@@ -264,19 +271,20 @@ async function initSupabase(){
 async function loadState(){
   const cached = loadLocal();
   if(cached) state = cached;
+  ensureStateShape();
 
-  if(!supabase){ render(); return; }
+  if(!supabaseClient){ render(); return; }
   setSyncStatus('Syncing…', 'var(--gold)');
   try{
-    const { data, error } = await supabase.from('tandem_state').select('*').eq('id', ROW_ID).maybeSingle();
+    const { data, error } = await supabaseClient.from('tandem_state').select('*').eq('id', ROW_ID).maybeSingle();
     if(error) throw error;
     if(data && data.payload){
       state = data.payload;
+      ensureStateShape();
       saveLocal(state);
       setSyncStatus('Synced', 'var(--green)');
     } else if(cached){
-      // First run against an empty row — push the local cache up so this device becomes seed.
-      await supabase.from('tandem_state').upsert({ id: ROW_ID, payload: state, updated_at: new Date().toISOString() });
+      await supabaseClient.from('tandem_state').upsert({ id: ROW_ID, payload: state, updated_at: new Date().toISOString() });
       setSyncStatus('Synced', 'var(--green)');
     } else {
       setSyncStatus('Synced (empty)', 'var(--green)');
@@ -290,13 +298,14 @@ async function loadState(){
 }
 
 async function saveState(){
+  ensureStateShape();
   saveLocal(state);
-  if(!supabase || !navigator.onLine){
+  if(!supabaseClient || !navigator.onLine){
     setSyncStatus(navigator.onLine ? 'Local only' : 'Offline — saved locally', 'var(--text-dim)');
     return;
   }
   try{
-    const { error } = await supabase.from('tandem_state').upsert({ id: ROW_ID, payload: state, updated_at: new Date().toISOString() });
+    const { error } = await supabaseClient.from('tandem_state').upsert({ id: ROW_ID, payload: state, updated_at: new Date().toISOString() });
     if(error) throw error;
     setSyncStatus('Synced', 'var(--green)');
   }catch(e){
@@ -306,11 +315,12 @@ async function saveState(){
 }
 
 function subscribeRealtime(){
-  if(!supabase || channel) return;
-  channel = supabase.channel('public:tandem_state')
+  if(!supabaseClient || channel) return;
+  channel = supabaseClient.channel('public:tandem_state')
     .on('postgres_changes', { event:'*', schema:'public', table:'tandem_state', filter:`id=eq.${ROW_ID}` }, (payload) => {
       if(payload.new && payload.new.payload){
         state = payload.new.payload;
+        ensureStateShape();
         saveLocal(state);
         render();
         setSyncStatus('Synced (updated elsewhere)', 'var(--green)');
@@ -322,56 +332,122 @@ function subscribeRealtime(){
 window.addEventListener('online', () => { setSyncStatus('Reconnecting…','var(--gold)'); saveState(); });
 window.addEventListener('offline', () => setSyncStatus('Offline — using local copy','var(--red)'));
 
-/* ============================== UI ============================== */
-const STATUS_OPTIONS = ['Raw','At Grading','Graded','Listed','Sold'];
-const SPORT_OPTIONS = ['NFL','NBA','WNBA','MLB','AFL','Soccer','MMA','WWE','Pokémon','Other'];
-let currentFilter = { status:'all', decision:'all' };
-let openCardId = null;
+/* ============================== TAB ROUTER ============================== */
+const TABS = [
+  { id:'home', label:'Home', ready:true },
+  { id:'cards', label:'My Cards', ready:true },
+  { id:'pokemon', label:'Pokémon', ready:true },
+  { id:'sales', label:'My Sales', ready:true },
+  { id:'boxbreaks', label:'Box Breaks', ready:true },
+  { id:'gradecheck', label:'Grade Check', ready:false },
+  { id:'gradingtracker', label:'Grading Tracker', ready:false },
+  { id:'lotscanner', label:'Lot Scanner', ready:false },
+  { id:'targets', label:'Monthly Targets', ready:true },
+  { id:'playbook', label:'Selling Playbook', ready:true },
+  { id:'business', label:'Business Summary', ready:true },
+  { id:'content', label:'Content Creation', ready:false },
+  { id:'buyeval', label:'Buy Evaluator', ready:false },
+  { id:'tips', label:'Tips & Tricks', ready:true },
+];
+let currentTab = 'home';
 
-function newCard(){
-  return { id: crypto.randomUUID(), player:'', card:'', cardNum:'', sport:'NFL', status:'Raw',
-    paid:'', shipping:0, feesPct:0.137, shipMyCards:'None', quantity:1,
-    rawAvg:'', psa9Avg:'', psa10Avg:'', grade:'', gradingService:'PSA via Australia',
-    gradingCostPaid:0, actualSellPrice:'', datePurchased:new Date().toISOString().slice(0,10) };
-}
-
-function renderStatBar(computed){
-  const active = computed.filter(c=>c.status!=='Sold');
-  const invested = active.reduce((s,c)=>s+c.totalCost*(Number(c.quantity)||1),0);
-  const potential = active.reduce((s,c)=>s+(c.rawGGR??c.gradedEV??0)*(Number(c.quantity)||1),0);
-  const realised = computed.filter(c=>c.status==='Sold').reduce((s,c)=>s+(c.realisedProfit||0)*(Number(c.quantity)||1),0);
-  const actionable = computed.filter(c=>c.sellPriority<=2).length;
-  document.getElementById('statBar').innerHTML = `
-    <div class="stat"><div class="label">Cards tracked</div><div class="value">${computed.length}</div></div>
-    <div class="stat"><div class="label">Invested</div><div class="value">${fmtMoney(invested)}</div></div>
-    <div class="stat"><div class="label">Potential profit</div><div class="value" style="color:${potential>=0?'var(--green)':'var(--red)'}">${fmtMoney(potential)}</div></div>
-    <div class="stat"><div class="label">Realised profit</div><div class="value" style="color:${realised>=0?'var(--green)':'var(--red)'}">${fmtMoney(realised)}</div></div>
-    <div class="stat"><div class="label">Ready to sell</div><div class="value" style="color:var(--gold)">${actionable}</div></div>
-  `;
-}
-
-function renderFilters(computed){
-  const sf = document.getElementById('statusFilter');
-  const df = document.getElementById('decisionFilter');
-  const statuses = [...new Set(computed.map(c=>c.status))];
-  const decisions = [...new Set(computed.map(c=>c.sellDecision).filter(Boolean))];
-  sf.innerHTML = '<option value="all">All statuses</option>' + statuses.map(s=>`<option value="${s}">${s}</option>`).join('');
-  df.innerHTML = '<option value="all">All decisions</option>' + decisions.map(d=>`<option value="${d}">${d}</option>`).join('');
-  sf.value = currentFilter.status; df.value = currentFilter.decision;
+function renderTabbar(){
+  document.getElementById('tabbar').innerHTML = TABS.map(t =>
+    `<button class="tabbtn ${t.id===currentTab?'active':''}" data-tab="${t.id}" ${t.ready?'':'disabled title="Coming soon — not yet built in this version"'}>${t.label}${t.ready?'':' 🔜'}</button>`
+  ).join('');
+  document.querySelectorAll('.tabbtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ if(!btn.disabled){ currentTab = btn.dataset.tab; render(); } });
+  });
 }
 
 function render(){
-  const computed = (state.cards||[]).map(computeCard).sort((a,b)=>a.sellPriority-b.sellPriority || b.totalCost-a.totalCost);
-  renderStatBar(computed);
-  renderFilters(computed);
+  renderTabbar();
+  const root = document.getElementById('tabContent');
+  const tab = TABS.find(t=>t.id===currentTab);
+  if(!tab || !tab.ready){
+    root.innerHTML = `<div class="soon"><div class="oswald" style="font-size:16px;color:var(--text);margin-bottom:6px">${tab?tab.label:''} — coming next</div>This tool needs its own dedicated build (AI image analysis, live auction math, or ledger accounting) to do properly rather than a rushed port. Ask for it directly and it'll get built with the same care as everything else.</div>`;
+    return;
+  }
+  const renderers = {
+    home: renderHome, cards: ()=>renderCardTab('cards'), pokemon: ()=>renderCardTab('pokemon'),
+    sales: renderSales, boxbreaks: renderBoxBreaks, targets: renderTargets,
+    playbook: renderPlaybook, business: renderBusiness, tips: renderTips,
+  };
+  (renderers[currentTab] || (()=>{root.innerHTML='';}))();
+}
+
+/* ============================== HOME ============================== */
+function renderHome(){
+  const cardsC = state.cards.map(computeCard);
+  const pkmnC = state.pokemonCards.map(computeCard);
+  const all = [...cardsC, ...pkmnC];
+  const active = all.filter(c=>c.status!=='Sold');
+  const invested = active.reduce((s,c)=>s+c.totalCost*(Number(c.quantity)||1),0);
+  const potential = active.reduce((s,c)=>s+(c.rawGGR??c.gradedEV??0)*(Number(c.quantity)||1),0);
+  const realised = all.filter(c=>c.status==='Sold').reduce((s,c)=>s+(c.realisedProfit||0)*(Number(c.quantity)||1),0);
+  const needsAttention = all.filter(c=>c.sellPriority<=2).sort((a,b)=>a.sellPriority-b.sellPriority).slice(0,5);
+  const watching = state.targets.filter(t=>t.status==='Watching');
+
+  document.getElementById('tabContent').innerHTML = `
+    <div class="stat-bar">
+      <div class="stat"><div class="label">Invested</div><div class="value">${fmtMoney(invested)}</div></div>
+      <div class="stat"><div class="label">Potential profit</div><div class="value" style="color:${potential>=0?'var(--green)':'var(--red)'}">${fmtMoney(potential)}</div></div>
+      <div class="stat"><div class="label">Realised profit</div><div class="value" style="color:${realised>=0?'var(--green)':'var(--red)'}">${fmtMoney(realised)}</div></div>
+      <div class="stat"><div class="label">Box breaks</div><div class="value">${state.boxBreaks.length}</div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="oswald" style="font-size:15px;margin-bottom:10px">⚡ Needs your attention</div>
+        ${needsAttention.length===0 ? '<div style="font-size:12px;color:var(--text-dim)">Nothing flagged to sell right now.</div>' :
+          needsAttention.map(c=>`<div class="dash-row" data-goto="${c.player&&state.cards.includes ? '' : ''}"><span>${esc(c.player)}</span><span class="badge" style="background:${(SELL_STYLE[c.sellDecision]||SELL_STYLE['']).color}22;color:${(SELL_STYLE[c.sellDecision]||SELL_STYLE['']).color}">${c.sellDecision}</span></div>`).join('')}
+      </div>
+      <div class="panel">
+        <div class="oswald" style="font-size:15px;margin-bottom:10px">🎯 Monthly Targets — Watching</div>
+        ${watching.length===0 ? '<div style="font-size:12px;color:var(--text-dim)">No targets being watched.</div>' :
+          watching.slice(0,5).map(t=>`<div class="dash-row"><span>${esc(t.player)}</span><span class="mono" style="font-size:11px;color:var(--gold)">${t.researchScore??'—'}</span></div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/* ============================== MY CARDS / POKÉMON (shared) ============================== */
+let filters = { cards:{status:'all',decision:'all'}, pokemon:{status:'all',decision:'all'} };
+
+function renderCardTab(key){
+  const arr = state[key==='cards' ? 'cards' : 'pokemonCards'];
+  const computed = arr.map(computeCard).sort((a,b)=>a.sellPriority-b.sellPriority || b.totalCost-a.totalCost);
+  const f = filters[key];
+  const statuses = [...new Set(computed.map(c=>c.status))];
+  const decisions = [...new Set(computed.map(c=>c.sellDecision).filter(Boolean))];
 
   let visible = computed;
-  if(currentFilter.status!=='all') visible = visible.filter(c=>c.status===currentFilter.status);
-  if(currentFilter.decision!=='all') visible = visible.filter(c=>c.sellDecision===currentFilter.decision);
+  if(f.status!=='all') visible = visible.filter(c=>c.status===f.status);
+  if(f.decision!=='all') visible = visible.filter(c=>c.sellDecision===f.decision);
 
-  const list = document.getElementById('list');
-  if(visible.length===0){ list.innerHTML = '<div id="empty">No cards match — add one, or clear filters.</div>'; return; }
+  const invested = computed.filter(c=>c.status!=='Sold').reduce((s,c)=>s+c.totalCost*(Number(c.quantity)||1),0);
+  const potential = computed.filter(c=>c.status!=='Sold').reduce((s,c)=>s+(c.rawGGR??c.gradedEV??0)*(Number(c.quantity)||1),0);
 
+  document.getElementById('tabContent').innerHTML = `
+    <div class="stat-bar">
+      <div class="stat"><div class="label">Cards</div><div class="value">${computed.length}</div></div>
+      <div class="stat"><div class="label">Invested</div><div class="value">${fmtMoney(invested)}</div></div>
+      <div class="stat"><div class="label">Potential profit</div><div class="value" style="color:${potential>=0?'var(--green)':'var(--red)'}">${fmtMoney(potential)}</div></div>
+    </div>
+    <div class="row" style="margin-bottom:14px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="cf_status" style="width:auto"><option value="all">All statuses</option>${statuses.map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}</select>
+        <select id="cf_decision" style="width:auto"><option value="all">All decisions</option>${decisions.map(d=>`<option value="${d}" ${f.decision===d?'selected':''}>${d}</option>`).join('')}</select>
+      </div>
+      <button class="btn btn-primary" id="cAddBtn">+ Add ${key==='cards'?'card':'Pokémon card'}</button>
+    </div>
+    <div id="cList"></div>
+  `;
+  document.getElementById('cf_status').addEventListener('change', e=>{ f.status=e.target.value; renderCardTab(key); });
+  document.getElementById('cf_decision').addEventListener('change', e=>{ f.decision=e.target.value; renderCardTab(key); });
+  document.getElementById('cAddBtn').addEventListener('click', ()=> openCardModal(key, newCard(), true));
+
+  const list = document.getElementById('cList');
+  if(visible.length===0){ list.innerHTML = '<div class="empty">No cards match — add one, or clear filters.</div>'; return; }
   list.innerHTML = visible.map(c=>{
     const style = SELL_STYLE[c.sellDecision] || SELL_STYLE[''];
     const isTop = c.sellPriority===1;
@@ -381,8 +457,8 @@ function render(){
     <div class="card-row ${cls}" style="--accent:${style.color}" data-id="${c.id}">
       <div class="row">
         <div>
-          <div class="oswald" style="font-size:15px;font-weight:600">${c.player||'Unnamed'} <span class="mono" style="font-size:10px;color:var(--text-dim)">${c.sport}</span></div>
-          <div style="font-size:12px;color:var(--text-dim)">${c.card||''} ${c.cardNum?('#'+c.cardNum):''}</div>
+          <div class="oswald" style="font-size:15px;font-weight:600">${esc(c.player)||'Unnamed'} <span class="mono" style="font-size:10px;color:var(--text-dim)">${esc(c.sport)}</span></div>
+          <div style="font-size:12px;color:var(--text-dim)">${esc(c.card)||''} ${c.cardNum?('#'+esc(c.cardNum)):''}</div>
         </div>
         <div style="text-align:right">
           <span class="badge" style="background:${style.color}22;color:${style.color}">${style.label}</span>
@@ -391,52 +467,49 @@ function render(){
       </div>
     </div>`;
   }).join('');
-
   list.querySelectorAll('.card-row').forEach(el=>{
-    el.addEventListener('click', ()=> openDetail(el.dataset.id));
+    el.addEventListener('click', ()=>{
+      const c = arr.find(x=>x.id===el.dataset.id);
+      if(c) openCardModal(key, c, false);
+    });
   });
 }
 
-document.getElementById('statusFilter').addEventListener('change', e=>{ currentFilter.status=e.target.value; render(); });
-document.getElementById('decisionFilter').addEventListener('change', e=>{ currentFilter.decision=e.target.value; render(); });
-
-/* ---------- Add / Edit modal ---------- */
-function fieldHtml(label, inner){ return `<div class="field"><label>${label}</label>${inner}</div>`; }
-
-function openAdd(){
-  renderCardModal(newCard(), true);
-}
-function openDetail(id){
-  const c = (state.cards||[]).find(c=>c.id===id);
-  if(c) renderCardModal(c, false);
+function newCard(){
+  return { id: crypto.randomUUID(), player:'', card:'', cardNum:'', sport:'NFL', status:'Raw',
+    paid:'', shipping:0, feesPct:0.137, shipMyCards:'None', quantity:1,
+    rawAvg:'', psa9Avg:'', psa10Avg:'', grade:'', gradingService:'PSA via Australia',
+    gradingCostPaid:0, actualSellPrice:'', datePurchased:new Date().toISOString().slice(0,10), dateSold:null };
 }
 
-function renderCardModal(card, isNew){
+function openCardModal(key, card, isNew){
+  const arrKey = key==='cards' ? 'cards' : 'pokemonCards';
   const computed = computeCard(card);
   const root = document.getElementById('modalRoot');
+  const sportField = key==='pokemon' ? '' : `${fieldHtml('Sport', `<select id="f_sport">${SPORT_OPTIONS.map(s=>`<option ${s===card.sport?'selected':''}>${s}</option>`).join('')}</select>`)}`;
   root.innerHTML = `
   <div class="modal-overlay" id="overlay">
     <div class="modal">
       <div class="row" style="margin-bottom:4px">
         <h2 class="oswald" style="margin:0;font-size:19px">${isNew?'Add card':'Edit card'}</h2>
-        <button class="btn" id="closeModal" style="padding:4px 10px">✕</button>
+        <button class="btn btn-sm" id="closeModal">✕</button>
       </div>
       <div class="grid2">
-        ${fieldHtml('Player', `<input id="f_player" value="${card.player||''}" placeholder="e.g. Nick Daicos" />`)}
-        <div></div>
+        ${fieldHtml('Player', `<input id="f_player" value="${esc(card.player)}" placeholder="e.g. Nick Daicos" />`)}
+        ${fieldHtml('Card #', `<input id="f_cardNum" value="${esc(card.cardNum)}" />`)}
       </div>
       <div class="grid2">
-        ${fieldHtml('Card / set', `<input id="f_card" value="${card.card||''}" />`)}
-        ${fieldHtml('Card #', `<input id="f_cardNum" value="${card.cardNum||''}" />`)}
+        ${fieldHtml('Card / set', `<input id="f_card" value="${esc(card.card)}" />`)}
+        ${key==='pokemon' ? '' : sportField}
       </div>
       <div class="grid2">
-        ${fieldHtml('Sport', `<select id="f_sport">${SPORT_OPTIONS.map(s=>`<option ${s===card.sport?'selected':''}>${s}</option>`).join('')}</select>`)}
         ${fieldHtml('Status', `<select id="f_status">${STATUS_OPTIONS.map(s=>`<option ${s===card.status?'selected':''}>${s}</option>`).join('')}</select>`)}
+        ${fieldHtml('Quantity', `<input id="f_quantity" type="number" min="1" value="${card.quantity||1}" />`)}
       </div>
       <div class="grid3">
         ${fieldHtml('Paid ($)', `<input id="f_paid" type="number" step="0.01" value="${card.paid||''}" />`)}
         ${fieldHtml('Shipping ($)', `<input id="f_shipping" type="number" step="0.01" value="${card.shipping||0}" />`)}
-        ${fieldHtml('Quantity', `<input id="f_quantity" type="number" min="1" value="${card.quantity||1}" />`)}
+        ${fieldHtml('Grading service', `<input id="f_gradingService" value="${esc(card.gradingService||'PSA via Australia')}" />`)}
       </div>
       <div class="section-title">Market averages (recent sales)</div>
       <div class="grid3">
@@ -444,10 +517,7 @@ function renderCardModal(card, isNew){
         ${fieldHtml('PSA 9', `<input id="f_psa9Avg" type="number" step="0.01" value="${card.psa9Avg??''}" />`)}
         ${fieldHtml('PSA 10', `<input id="f_psa10Avg" type="number" step="0.01" value="${card.psa10Avg??''}" />`)}
       </div>
-      <div class="grid2">
-        ${fieldHtml('Grade (if graded)', `<input id="f_grade" value="${card.grade||''}" placeholder="e.g. PSA 10" />`)}
-        ${fieldHtml('Grading service', `<input id="f_gradingService" value="${card.gradingService||'PSA via Australia'}" />`)}
-      </div>
+      ${fieldHtml('Grade (if graded)', `<input id="f_grade" value="${esc(card.grade)}" placeholder="e.g. PSA 10" />`)}
       <div class="section-title">Profitability</div>
       <div class="grid3" style="margin-bottom:10px">
         <div class="mini"><div class="l">Raw GGR</div><div class="v" style="color:${(computed.rawGGR||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(computed.rawGGR)}</div></div>
@@ -458,7 +528,7 @@ function renderCardModal(card, isNew){
         <div class="mini"><div class="l">Graded EV</div><div class="v" style="color:${(computed.gradedEV||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(computed.gradedEV)}</div></div>
         <div class="mini"><div class="l">Decision</div><div class="v">${computed.sellDecision||'—'}</div></div>
       </div>
-      ${!isNew ? `${fieldHtml('Actual sell price (if sold)', `<input id="f_actualSellPrice" type="number" step="0.01" value="${card.actualSellPrice??''}" />`)}` : ''}
+      ${!isNew ? fieldHtml('Actual sell price (if sold)', `<input id="f_actualSellPrice" type="number" step="0.01" value="${card.actualSellPrice??''}" />`) : ''}
       <div class="row" style="margin-top:16px">
         <button class="btn btn-primary" id="saveCard" style="flex:1;justify-content:center">Save</button>
         ${!isNew?`<button class="btn btn-danger" id="deleteCard">Remove</button>`:''}
@@ -469,13 +539,15 @@ function renderCardModal(card, isNew){
   document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
   document.getElementById('closeModal').addEventListener('click', closeModal);
   document.getElementById('saveCard').addEventListener('click', ()=>{
+    const prevStatus = card.status;
+    const newStatus = document.getElementById('f_status').value;
     const updated = {
       ...card,
       player: document.getElementById('f_player').value.trim(),
       card: document.getElementById('f_card').value.trim(),
       cardNum: document.getElementById('f_cardNum').value.trim(),
-      sport: document.getElementById('f_sport').value,
-      status: document.getElementById('f_status').value,
+      sport: key==='pokemon' ? 'Pokémon' : document.getElementById('f_sport').value,
+      status: newStatus,
       paid: Number(document.getElementById('f_paid').value)||0,
       shipping: Number(document.getElementById('f_shipping').value)||0,
       quantity: Number(document.getElementById('f_quantity').value)||1,
@@ -485,59 +557,250 @@ function renderCardModal(card, isNew){
       grade: document.getElementById('f_grade').value.trim(),
       gradingService: document.getElementById('f_gradingService').value.trim(),
     };
+    if(newStatus==='Sold' && prevStatus!=='Sold') updated.dateSold = new Date().toISOString().slice(0,10);
     if(!isNew){
       const asp = document.getElementById('f_actualSellPrice');
       updated.actualSellPrice = asp.value===''?null:Number(asp.value);
     }
     if(!updated.player){ alert('Player name is required.'); return; }
-    if(isNew) state.cards = [updated, ...(state.cards||[])];
-    else state.cards = (state.cards||[]).map(c=>c.id===updated.id?updated:c);
-    saveState(); render(); closeModal();
+    if(isNew) state[arrKey] = [updated, ...state[arrKey]];
+    else state[arrKey] = state[arrKey].map(c=>c.id===updated.id?updated:c);
+    saveState(); renderCardTab(key); closeModal();
   });
   if(!isNew){
     document.getElementById('deleteCard').addEventListener('click', ()=>{
-      state.cards = (state.cards||[]).filter(c=>c.id!==card.id);
-      saveState(); render(); closeModal();
+      state[arrKey] = state[arrKey].filter(c=>c.id!==card.id);
+      saveState(); renderCardTab(key); closeModal();
     });
   }
 }
+
+function fieldHtml(label, inner){ return `<div class="field"><label>${label}</label>${inner}</div>`; }
 function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
 
-document.getElementById('addBtn').addEventListener('click', openAdd);
+/* ============================== MY SALES ============================== */
+function renderSales(){
+  const all = [...state.cards, ...state.pokemonCards].map(computeCard);
+  const listed = all.filter(c=>c.status==='Listed');
+  const sold = all.filter(c=>c.status==='Sold');
+  const realised = sold.reduce((s,c)=>s+(c.realisedProfit||0)*(Number(c.quantity)||1),0);
 
-/* ---------- Data migration / import ---------- */
-document.getElementById('migrateBtn').addEventListener('click', ()=>{
-  const root = document.getElementById('modalRoot');
-  root.innerHTML = `
-  <div class="modal-overlay" id="mOverlay">
-    <div class="modal">
-      <div class="row" style="margin-bottom:10px">
-        <h2 class="oswald" style="margin:0;font-size:19px">Import / migrate data</h2>
-        <button class="btn" id="mClose" style="padding:4px 10px">✕</button>
+  document.getElementById('tabContent').innerHTML = `
+    <div class="stat-bar">
+      <div class="stat"><div class="label">Currently listed</div><div class="value">${listed.length}</div></div>
+      <div class="stat"><div class="label">Sold</div><div class="value">${sold.length}</div></div>
+      <div class="stat"><div class="label">Realised profit</div><div class="value" style="color:${realised>=0?'var(--green)':'var(--red)'}">${fmtMoney(realised)}</div></div>
+    </div>
+    <div class="section-title">Sold</div>
+    ${sold.length===0 ? '<div class="empty">Nothing sold yet.</div>' : `<table class="simple"><thead><tr><th>Date</th><th>Player</th><th>Cost</th><th>Sold for</th><th>Profit</th></tr></thead><tbody>
+      ${sold.map(c=>`<tr><td>${c.dateSold||'—'}</td><td>${esc(c.player)}</td><td>${fmtMoney(c.totalCost)}</td><td>${fmtMoney(c.actualSellPrice)}</td><td style="color:${(c.realisedProfit||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(c.realisedProfit)}</td></tr>`).join('')}
+    </tbody></table>`}
+    <div class="section-title">Listed</div>
+    ${listed.length===0 ? '<div class="empty">Nothing listed right now.</div>' : listed.map(c=>`<div class="card-row"><div class="row"><span>${esc(c.player)}</span><span class="mono" style="color:var(--blue)">Listed</span></div></div>`).join('')}
+  `;
+}
+
+/* ============================== BOX BREAKS ============================== */
+function boxTotals(box){
+  const cost = Number(box.cost)||0;
+  const revenue = (box.spots||[]).reduce((s,sp)=>s+(Number(sp.soldPrice)||0),0);
+  return { cost, revenue, profit: revenue-cost };
+}
+function renderBoxBreaks(){
+  const totalProfit = state.boxBreaks.reduce((s,b)=>s+boxTotals(b).profit,0);
+  document.getElementById('tabContent').innerHTML = `
+    <div class="stat-bar">
+      <div class="stat"><div class="label">Boxes</div><div class="value">${state.boxBreaks.length}</div></div>
+      <div class="stat"><div class="label">Total profit</div><div class="value" style="color:${totalProfit>=0?'var(--green)':'var(--red)'}">${fmtMoney(totalProfit)}</div></div>
+    </div>
+    <div class="row" style="margin-bottom:14px"><div></div><button class="btn btn-primary" id="bbAdd">+ Add box break</button></div>
+    <div id="bbList"></div>
+  `;
+  document.getElementById('bbAdd').addEventListener('click', ()=>{
+    state.boxBreaks = [{ id:crypto.randomUUID(), name:'New box', cost:0, date:new Date().toISOString().slice(0,10), spots:[] }, ...state.boxBreaks];
+    saveState(); renderBoxBreaks();
+  });
+  const list = document.getElementById('bbList');
+  if(state.boxBreaks.length===0){ list.innerHTML = '<div class="empty">No box breaks logged yet.</div>'; return; }
+  list.innerHTML = state.boxBreaks.map(b=>{
+    const t = boxTotals(b);
+    return `<div class="panel">
+      <div class="row" style="margin-bottom:8px">
+        <input value="${esc(b.name)}" data-bb="${b.id}" data-f="name" style="max-width:220px;font-weight:600" />
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" step="0.01" value="${b.cost}" data-bb="${b.id}" data-f="cost" style="width:100px" title="Box cost" />
+          <button class="btn btn-sm btn-danger" data-del="${b.id}">Remove</button>
+        </div>
       </div>
-      <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">
-        Paste a JSON backup (an array of cards, or an object with a "cards" array) to populate this shared Supabase row. This replaces all current data — can't be undone.
+      <div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px">Cost ${fmtMoney(t.cost)} · Revenue ${fmtMoney(t.revenue)} · Profit <span style="color:${t.profit>=0?'var(--green)':'var(--red)'}">${fmtMoney(t.profit)}</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${(b.spots||[]).map((sp,i)=>`<span class="mono" style="font-size:11px;padding:4px 8px;border-radius:6px;background:var(--surface2)">${esc(sp.team)}: ${fmtMoney(sp.soldPrice)}</span>`).join('')}
+        <button class="btn btn-sm" data-addspot="${b.id}">+ Spot</button>
       </div>
-      <textarea id="mPaste" placeholder='[{"player":"...", "card":"...", ...}]'></textarea>
-      <div class="row" style="margin-top:14px">
-        <button class="btn btn-primary" id="mApply" style="flex:1;justify-content:center">Import and replace</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('input[data-bb]').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const box = state.boxBreaks.find(b=>b.id===inp.dataset.bb);
+      if(!box) return;
+      box[inp.dataset.f] = inp.dataset.f==='cost' ? Number(inp.value)||0 : inp.value;
+      saveState(); renderBoxBreaks();
+    });
+  });
+  list.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ state.boxBreaks = state.boxBreaks.filter(b=>b.id!==btn.dataset.del); saveState(); renderBoxBreaks(); });
+  });
+  list.querySelectorAll('[data-addspot]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const team = prompt('Team/spot name:'); if(!team) return;
+      const price = Number(prompt('Sold price (0 if unsold):','0'))||0;
+      const box = state.boxBreaks.find(b=>b.id===btn.dataset.addspot);
+      box.spots = [...(box.spots||[]), {team,soldPrice:price}];
+      saveState(); renderBoxBreaks();
+    });
+  });
+}
+
+/* ============================== MONTHLY TARGETS ============================== */
+function computeConfidence(t){
+  const base = Number(t.researchScore)||0;
+  if(!t.lastRefreshed) return base;
+  const months = (Date.now() - new Date(t.lastRefreshed).getTime()) / (1000*60*60*24*30);
+  const graceMonths = 1;
+  if(months<=graceMonths) return base;
+  const decayRate = t.performanceTrend==='Improving' ? 0.35*5 : t.performanceTrend==='Declining' ? 1.8*5 : 5;
+  const decay = Math.min(30, (months-graceMonths)*decayRate);
+  return Math.max(0, Math.round(base-decay));
+}
+function renderTargets(){
+  const sorted = [...state.targets].sort((a,b)=>computeConfidence(b)-computeConfidence(a));
+  document.getElementById('tabContent').innerHTML = `
+    <div class="row" style="margin-bottom:14px"><div class="oswald" style="font-size:15px">${state.targets.length} targets</div><button class="btn btn-primary" id="tgAdd">+ Add target</button></div>
+    <div id="tgList"></div>
+  `;
+  document.getElementById('tgAdd').addEventListener('click', ()=>{
+    const player = prompt('Player name:'); if(!player) return;
+    state.targets = [{ id:crypto.randomUUID(), player, sport:'NFL', cardToLookFor:'', tier:'Speculative',
+      researchScore:40, performanceTrend:'Stable', reasoning:'', status:'Watching', lastRefreshed:new Date().toISOString().slice(0,10) }, ...state.targets];
+    saveState(); renderTargets();
+  });
+  const list = document.getElementById('tgList');
+  if(sorted.length===0){ list.innerHTML = '<div class="empty">No targets yet.</div>'; return; }
+  list.innerHTML = sorted.map(t=>{
+    const score = computeConfidence(t);
+    const color = score>=70?'var(--green)':score>=50?'var(--gold)':score>=30?'#C9A227':'var(--red)';
+    return `<div class="card-row">
+      <div class="row">
+        <div><div class="oswald" style="font-weight:600">${esc(t.player)} <span class="mono" style="font-size:10px;color:var(--text-dim)">${esc(t.sport)}</span></div>
+        <div style="font-size:12px;color:var(--text-dim)">${esc(t.cardToLookFor)}</div></div>
+        <div style="text-align:right"><span class="mono" style="font-weight:700;color:${color}">${score}</span>
+        <div style="font-size:11px;color:var(--text-dim)">${esc(t.status)}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ============================== SELLING PLAYBOOK (static) ============================== */
+function renderPlaybook(){
+  document.getElementById('tabContent').innerHTML = `
+    <div class="panel">
+      <div class="oswald" style="font-size:15px;margin-bottom:8px">Golden rule</div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.6">Never ship a card home if it's already sitting in a vault (e.g. ShipMyCards) — that's paying for international shipping twice. Sell or consign it directly from where it already is.</div>
+    </div>
+    <div class="panel">
+      <div class="oswald" style="font-size:15px;margin-bottom:8px">Value-based routing</div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.6">
+        <b>Under $1,000, graded:</b> DCSports87 — no minimum, handles everyday value well.<br/>
+        <b>$1,000+, graded:</b> Fanatics Collect (PWCC) via ShipMyCards — 6% Buy Now, 0% seller fee at auction.<br/>
+        <b>In-hand, no following:</b> Standard eBay is the realistic default — Live/Whatnot need an audience to be worth the setup.
       </div>
     </div>
-  </div>`;
-  document.getElementById('mOverlay').addEventListener('click', e=>{ if(e.target.id==='mOverlay') closeModal(); });
-  document.getElementById('mClose').addEventListener('click', closeModal);
-  document.getElementById('mApply').addEventListener('click', ()=>{
-    try{
-      const parsed = JSON.parse(document.getElementById('mPaste').value);
-      const cards = Array.isArray(parsed) ? parsed : (parsed.cards || []);
-      if(!Array.isArray(cards)) throw new Error('No cards array found');
-      state.cards = cards.map(c=>({ id: c.id || crypto.randomUUID(), ...c }));
-      saveState(); render(); closeModal();
-    }catch(e){
-      alert('Could not parse that JSON — check the format and try again.');
-    }
+  `;
+}
+
+/* ============================== TIPS & TRICKS (static seasonal calendar) ============================== */
+const SEASON_ROWS = [
+  { sport:'NFL', note:'Draft (Apr) is the cheapest buying window; training camp (Jul-Aug) is peak sell hype before results matter.' },
+  { sport:'AFL', note:'Finals + Grand Final (Aug-Sep) is the year\'s biggest attention spike — best sell window.' },
+  { sport:'MLB', note:'Spring training (Feb-Mar) is peak hype before a season of stats can disappoint.' },
+  { sport:'NBA', note:'Playoffs (May-Jun) create buying dips for early-eliminated teams; tip-off (Oct) is the sell spike.' },
+  { sport:'WWE', note:'WrestleMania season (Feb-Apr) is the single biggest spike in the whole hobby.' },
+  { sport:'Soccer', note:'Season kickoff (Aug) and a World Cup/Euros summer are massive spikes.' },
+  { sport:'MMA', note:'International Fight Week (late Jun/early Jul) is the clearest annual sell spike.' },
+];
+function renderTips(){
+  document.getElementById('tabContent').innerHTML = `
+    <div class="section-title">Seasonal calendar — key spikes by sport</div>
+    ${SEASON_ROWS.map(r=>`<div class="panel"><div class="oswald" style="font-weight:600;margin-bottom:4px">${r.sport}</div><div style="font-size:12.5px;color:var(--text-muted);line-height:1.6">${r.note}</div></div>`).join('')}
+    <div class="section-title">Grading cost reference (PSA via Australia, tiered by declared value)</div>
+    <table class="simple"><thead><tr><th>Declared value (USD)</th><th>Cost (AUD)</th></tr></thead><tbody>
+      <tr><td>Up to $500</td><td>$50</td></tr><tr><td>Up to $1,000</td><td>$140</td></tr>
+      <tr><td>Up to $1,500</td><td>$165</td></tr><tr><td>Up to $2,500</td><td>$299</td></tr>
+      <tr><td>Up to $5,000</td><td>$699</td></tr><tr><td>Up to $10,000</td><td>$1,199</td></tr>
+      <tr><td>Above $10,000</td><td>$2,199</td></tr>
+    </tbody></table>
+  `;
+}
+
+/* ============================== BUSINESS SUMMARY ============================== */
+function currentFYLabel(){
+  const d = new Date(); const y = d.getFullYear(); const m = d.getMonth()+1;
+  return m>=7 ? `${y}-${String(y+1).slice(2)}` : `${y-1}-${String(y).slice(2)}`;
+}
+function fyBounds(label){
+  const startYear = Number(label.split('-')[0]);
+  return { start:`${startYear}-07-01`, end:`${startYear+1}-06-30` };
+}
+let bizPeriod = currentFYLabel();
+function renderBusiness(){
+  const { start, end } = bizPeriod==='all' ? {start:'0000-01-01',end:'9999-12-31'} : fyBounds(bizPeriod);
+  const inRange = d => d && d>=start && d<=end;
+
+  const allCards = [...state.cards, ...state.pokemonCards].map(computeCard);
+  const rows = [];
+  allCards.filter(c=>c.status==='Sold' && inRange(c.dateSold)).forEach(c=>{
+    rows.push({ date:c.dateSold, type:'Card sale', desc:c.player, revenue:Number(c.actualSellPrice)||0, cost:c.totalCost, profit:c.realisedProfit||0 });
   });
-});
+  allCards.filter(c=>c.status!=='Sold' && inRange(c.datePurchased)).forEach(c=>{
+    const cost = (Number(c.paid)||0)+(Number(c.shipping)||0);
+    rows.push({ date:c.datePurchased, type:'Card purchase', desc:c.player, revenue:0, cost, profit:-cost });
+  });
+  state.boxBreaks.filter(b=>inRange(b.date)).forEach(b=>{
+    const t = boxTotals(b);
+    rows.push({ date:b.date, type:'Box break', desc:b.name, revenue:t.revenue, cost:t.cost, profit:t.profit });
+  });
+  state.manualExpenses.filter(e=>inRange(e.date)).forEach(e=>{
+    rows.push({ date:e.date, type:'Manual expense', desc:e.description, revenue:0, cost:Number(e.amount)||0, profit:-(Number(e.amount)||0) });
+  });
+  rows.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+
+  const totalRevenue = rows.reduce((s,r)=>s+r.revenue,0);
+  const totalCost = rows.reduce((s,r)=>s+r.cost,0);
+  const totalProfit = rows.reduce((s,r)=>s+r.profit,0);
+
+  document.getElementById('tabContent').innerHTML = `
+    <div class="row" style="margin-bottom:14px">
+      <select id="bizPeriodSel" style="width:auto"><option value="${currentFYLabel()}" ${bizPeriod===currentFYLabel()?'selected':''}>FY ${currentFYLabel()} (current)</option><option value="all" ${bizPeriod==='all'?'selected':''}>All time</option></select>
+      <button class="btn btn-sm" id="addExpense">+ Add expense</button>
+    </div>
+    <div class="stat-bar">
+      <div class="stat"><div class="label">Revenue</div><div class="value">${fmtMoney(totalRevenue)}</div></div>
+      <div class="stat"><div class="label">Cost basis</div><div class="value">${fmtMoney(totalCost)}</div></div>
+      <div class="stat"><div class="label">Net profit</div><div class="value" style="color:${totalProfit>=0?'var(--green)':'var(--red)'}">${fmtMoney(totalProfit)}</div></div>
+    </div>
+    ${rows.length===0 ? '<div class="empty">No spend or income recorded in this period.</div>' :
+      `<table class="simple"><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Revenue</th><th>Cost</th><th>Profit</th></tr></thead><tbody>
+        ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.type}</td><td>${esc(r.desc)}</td><td>${fmtMoney(r.revenue)}</td><td>${fmtMoney(r.cost)}</td><td style="color:${r.profit>=0?'var(--green)':'var(--red)'}">${fmtMoney(r.profit)}</td></tr>`).join('')}
+      </tbody></table>`}
+  `;
+  document.getElementById('bizPeriodSel').addEventListener('change', e=>{ bizPeriod=e.target.value; renderBusiness(); });
+  document.getElementById('addExpense').addEventListener('click', ()=>{
+    const description = prompt('Expense description:'); if(!description) return;
+    const amount = Number(prompt('Amount ($):','0'))||0;
+    state.manualExpenses = [{ id:crypto.randomUUID(), date:new Date().toISOString().slice(0,10), description, amount }, ...state.manualExpenses];
+    saveState(); renderBusiness();
+  });
+}
 
 /* ---------- PWA install + service worker ---------- */
 let deferredPrompt;
@@ -560,9 +823,12 @@ if('serviceWorker' in navigator){
 
 /* ---------- Boot ---------- */
 (async function boot(){
-  const ok = await initSupabase();
+  await initSupabase();
   await loadState();
 })();
+</script>
+</body>
+</html>
 </script>
 </body>
 </html>
