@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Card Tracker</title>
+<meta name="description" content="Sports card portfolio tracker with grading decision engine, synced across devices." />
+<meta name="theme-color" content="#14161C" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Card Tracker" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
+
+<!-- ===== Supabase project config — anon key is safe to expose client-side as long as
+     Row Level Security policies on tandem_state actually restrict access. ===== -->
+<script>
+  window.SUPABASE_URL = 'https://aguyvxedljyhtllrcvvf.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFndXl2eGVkbGp5aHRsbHJjdnZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4NzEzNjAsImV4cCI6MjEwMjQ0NzM2MH0.IhLG61DKCneb0gYLgl70bjbGpc9yHZf4O-rqHNAIbGs';
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  :root{
+    --bg:#14161C; --surface:#191B22; --surface2:#1D2028; --border:#2C303B; --border-soft:#24272F;
+    --text:#EDEAE1; --text-muted:#8B90A0; --text-dim:#6B7180;
+    --gold:#C9A227; --green:#4E8B6B; --red:#B4472E; --purple:#8B6FD6; --blue:#5C7A99;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+  @font-face{font-family:'Oswald';src:local('Oswald');}
+  h1,h2,h3,.oswald{font-family:'Oswald','Inter',sans-serif;letter-spacing:.01em}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  a{color:inherit}
+  input,select,textarea,button{font-family:inherit;font-size:14px;color:var(--text);background:var(--surface2);border:1px solid #333844;border-radius:6px;padding:9px 11px;width:100%}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
+  button{cursor:pointer;width:auto}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-weight:600;font-size:13.5px;border:1px solid var(--border);background:var(--surface2)}
+  .btn-primary{background:var(--gold);color:#14161C;border-color:var(--gold)}
+  .btn-danger{color:var(--red);border-color:#4a2a24}
+  .wrap{max-width:900px;margin:0 auto;padding:1.5rem 1rem 5rem}
+  .row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  .stat-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px}
+  .stat{background:var(--surface);padding:14px 16px}
+  .stat .label{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+  .stat .value{font-size:19px;font-weight:600}
+  .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+  .field label{font-size:11.5px;color:var(--text-muted)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .card-row{border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;background:var(--surface);cursor:pointer;border-left:4px solid transparent}
+  .card-row.top{background:color-mix(in srgb, var(--accent) 8%, var(--surface));border-left-color:var(--accent)}
+  .card-row.raw-sell{border-left:3px solid color-mix(in srgb, var(--accent) 55%, transparent);background:color-mix(in srgb, var(--accent) 4%, var(--surface))}
+  .badge{display:inline-block;font-size:10.5px;padding:3px 9px;border-radius:999px;font-weight:700;font-family:'JetBrains Mono',monospace}
+  .modal-overlay{position:fixed;inset:0;background:#000c;display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow-y:auto;z-index:100}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;width:100%;max-width:520px}
+  .section-title{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 8px}
+  .mini{border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--surface2)}
+  .mini .l{font-size:10px;color:var(--text-muted);text-transform:uppercase}
+  .mini .v{font-size:15px;font-weight:600;margin-top:2px}
+  #installBtn{display:none}
+  .top-nav{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+  .sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  #empty{text-align:center;color:var(--text-dim);padding:3rem 0;border:1px solid var(--border);border-radius:var(--radius)}
+  textarea{min-height:140px;resize:vertical}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-nav">
+    <div>
+      <div class="mono" style="color:var(--gold);font-size:11px;letter-spacing:.12em">EV MODEL / GRADE &amp; FLIP</div>
+      <h1 class="oswald" style="font-size:26px;margin:2px 0 0">Card Tracker</h1>
+    </div>
+    <div style="text-align:right">
+      <div id="syncStatus" style="font-size:11.5px;color:var(--text-dim)"><span class="sync-dot" style="background:var(--text-dim)"></span>Connecting…</div>
+      <button id="installBtn" class="btn" style="margin-top:8px;font-size:12px;padding:6px 12px">Install app</button>
+    </div>
+  </div>
+
+  <div class="stat-bar" id="statBar"></div>
+
+  <div class="row" style="margin-bottom:14px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="statusFilter" style="width:auto"><option value="all">All statuses</option></select>
+      <select id="decisionFilter" style="width:auto"><option value="all">All decisions</option></select>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="migrateBtn">Import / migrate data</button>
+      <button class="btn btn-primary" id="addBtn">+ Add card</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script>
+/* ============================== ENGINE ==============================
+   Ported from the CardFlip EV grading decision engine: same thresholds,
+   same $20 minimum-sell bar, same PSA-via-Australia declared-value tiers.
+   ===================================================================== */
+const AUD_TO_USD = 0.65;
+const PSA9_GRADES = ['psa 9','sgc 9','bgs 9','bgs 9.5'];
+const PSA10_GRADES = ['psa 10','sgc 10','bgs 10'];
+
+function tieredPsaAuCost(declaredAUD){
+  const usd = (declaredAUD||0) * AUD_TO_USD;
+  if(usd<=500) return 50;
+  if(usd<=1000) return 140;
+  if(usd<=1500) return 165;
+  if(usd<=2500) return 299;
+  if(usd<=5000) return 699;
+  if(usd<=10000) return 1199;
+  return 2199;
+}
+function gradingCost(service, declaredAUD){
+  if(!service) return 0;
+  const s = service.toLowerCase();
+  if(s.includes('australia')) return tieredPsaAuCost(declaredAUD);
+  if(s.includes('shipmycards') || s.includes('usa')) return 38.9;
+  if(s.includes('sgc')) return 39.95;
+  return 0;
+}
+function fmtMoney(n){
+  if(n==null || isNaN(n)) return '—';
+  const s = n<0 ? '-' : '';
+  return s + '$' + Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+function fmtPct(n){ return n==null ? '—' : (n*100).toFixed(1)+'%'; }
+
+function computeCard(c){
+  const holdingCost = c.shipMyCards === 'ShipMyCards' ? 4.5 : 0;
+  const totalCost = (Number(c.paid)||0) + (Number(c.shipping)||0) + holdingCost + (Number(c.gradingCostPaid)||0);
+  const fees = c.feesPct!=null ? Number(c.feesPct) : 0.137;
+  const status = c.status || 'Raw';
+  const isActive = status==='Raw' || status==='Graded';
+  const grade = (c.grade||'').toLowerCase();
+
+  const hasRaw = c.rawAvg!=null && c.rawAvg!=='';
+  const hasPsa9 = c.psa9Avg!=null && c.psa9Avg!=='';
+  const hasPsa10Own = c.psa10Avg!=null && c.psa10Avg!=='';
+  const raw = hasRaw ? Number(c.rawAvg) : null;
+  const psa9 = hasPsa9 ? Number(c.psa9Avg) : null;
+  // Unknown PSA10 floors at PSA9's price rather than $0 — a real PSA10 should never
+  // realistically sell for less than a 9 of the same card.
+  const psa10 = hasPsa10Own ? Number(c.psa10Avg) : (hasPsa9 ? psa9 : null);
+  const hasPsa10 = psa10!=null;
+
+  const declaredValue = Math.max(psa9||0, psa10||0, raw||0);
+  const gCost = gradingCost(c.gradingService, declaredValue);
+
+  const rawGGR = (isActive && hasRaw && status!=='Graded') ? (raw*(1-fees) - totalCost) : null;
+  const psa9GGR = (isActive && hasPsa9) ? (psa9*(1-fees) - totalCost - gCost) : null;
+  const psa10GGR = (isActive && hasPsa10) ? (psa10*(1-fees) - totalCost - gCost) : null;
+
+  let gradeWorthIt = 'NO';
+  if(psa10GGR!=null){
+    if(psa9GGR!=null){
+      if(psa10GGR>=20 && psa9GGR>=0) gradeWorthIt='YES';
+      else if(psa10GGR>=20 && psa9GGR>=-10 && psa9GGR<0) gradeWorthIt='HIGH RISK';
+    }
+  }
+
+  let gradedEV = null;
+  if(isActive && status!=='Graded' && (psa10GGR!=null || psa9GGR!=null)){
+    gradedEV = 0.35*(psa10GGR??0) + 0.45*(psa9GGR??0);
+  }
+
+  let sellDecision = '';
+  if(!c.player) sellDecision='';
+  else if(status==='Sold') sellDecision='Sold';
+  else if(status==='Listed') sellDecision='Listed';
+  else if(status==='At Grading') sellDecision='At Grading';
+  else if(status==='Graded'){
+    if(PSA10_GRADES.includes(grade) && psa10GGR!=null && psa10GGR>=20) sellDecision='Sell PSA 10';
+    else if(PSA9_GRADES.includes(grade) && psa9GGR!=null && psa9GGR>=5) sellDecision='Sell PSA 9';
+    else sellDecision='Hold';
+  } else {
+    const gradeFirst = gradeWorthIt!=='NO' && psa10GGR!=null && rawGGR!=null && psa10GGR>rawGGR;
+    if(gradeFirst) sellDecision='Grade First';
+    else if(rawGGR!=null){
+      const threshAbs = totalCost<=30 ? Math.max(5,totalCost*0.15) : Math.max(20,totalCost*0.2);
+      const threshPct = totalCost<=30 ? 0.15 : 0.2;
+      const sellRawFirst = rawGGR>=threshAbs || (totalCost>0 && rawGGR/totalCost>=threshPct);
+      sellDecision = sellRawFirst ? 'Sell Raw First' : 'Hold';
+    } else sellDecision = 'Hold';
+  }
+
+  const gradeCall = status!=='Raw' ? 'NO' : (sellDecision==='Sell Raw First' ? 'NO' : gradeWorthIt);
+
+  let sellPriority = 9;
+  if(sellDecision==='Sell PSA 9'||sellDecision==='Sell PSA 10') sellPriority=1;
+  else if(sellDecision==='Sell Raw First') sellPriority=2;
+  else if(sellDecision==='Grade First' && gradeCall==='YES') sellPriority=3;
+  else if(sellDecision==='Grade First' && gradeCall==='HIGH RISK') sellPriority=4;
+  else if(sellDecision==='Grade First') sellPriority=5;
+  else if(sellDecision==='Hold') sellPriority=6;
+  else if(sellDecision==='At Grading') sellPriority=6.5;
+  else if(sellDecision==='Listed') sellPriority=7;
+  else if(sellDecision==='Sold') sellPriority=8;
+
+  const netSale = c.actualSellPrice!=null && c.actualSellPrice!=='' ? Number(c.actualSellPrice)*(1-fees) : null;
+  const realisedProfit = netSale!=null ? netSale - totalCost : null;
+
+  return {...c, totalCost, rawGGR, psa9GGR, psa10GGR, gradedEV, gradeCall, gradingCostValue:gCost,
+           sellDecision, sellPriority, realisedProfit, hasRaw, hasPsa9, hasPsa10};
+}
+
+const SELL_STYLE = {
+  'Sell Raw First':{color:'var(--green)',label:'Sell Raw First'},
+  'Sell PSA 9':{color:'var(--green)',label:'Sell PSA 9'},
+  'Sell PSA 10':{color:'var(--green)',label:'Sell PSA 10'},
+  'Grade First':{color:'var(--purple)',label:'Grade First'},
+  'Hold':{color:'var(--text-dim)',label:'Hold'},
+  'At Grading':{color:'var(--gold)',label:'At Grading'},
+  'Listed':{color:'var(--blue)',label:'Listed'},
+  'Sold':{color:'var(--text-dim)',label:'Sold'},
+  '':{color:'var(--text-dim)',label:'—'}
+};
+
+/* ============================== STORAGE / SYNC ==============================
+   Supabase realtime is the source of truth when reachable; localStorage is a
+   read/write cache used offline and as the seed on first run. Writes always hit
+   the local cache first (instant UI), then attempt the Supabase upsert.
+   ============================================================================ */
+const ROW_ID = 'tandem-shared';
+const LOCAL_KEY = 'tandem_cache_v1';
+let supabase = null;
+let state = { cards: [] };
+let channel = null;
+
+function loadLocal(){
+  try{ const raw = localStorage.getItem(LOCAL_KEY); return raw ? JSON.parse(raw) : null; }
+  catch(e){ console.error('local load failed', e); return null; }
+}
+function saveLocal(s){
+  try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(s)); }
+  catch(e){ console.error('local save failed', e); }
+}
+function setSyncStatus(text, color){
+  const el = document.getElementById('syncStatus');
+  el.innerHTML = `<span class="sync-dot" style="background:${color}"></span>${text}`;
+}
+
+async function initSupabase(){
+  if(!window.supabase || !window.SUPABASE_URL || window.SUPABASE_URL.includes('YOUR_')){
+    setSyncStatus('Local only (no Supabase configured)', 'var(--text-dim)');
+    return false;
+  }
+  try{
+    supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    return true;
+  }catch(e){
+    console.error('Supabase init failed', e);
+    setSyncStatus('Local only (init failed)', 'var(--red)');
+    return false;
+  }
+}
+
+async function loadState(){
+  const cached = loadLocal();
+  if(cached) state = cached;
+
+  if(!supabase){ render(); return; }
+  setSyncStatus('Syncing…', 'var(--gold)');
+  try{
+    const { data, error } = await supabase.from('tandem_state').select('*').eq('id', ROW_ID).maybeSingle();
+    if(error) throw error;
+    if(data && data.payload){
+      state = data.payload;
+      saveLocal(state);
+      setSyncStatus('Synced', 'var(--green)');
+    } else if(cached){
+      // First run against an empty row — push the local cache up so this device becomes seed.
+      await supabase.from('tandem_state').upsert({ id: ROW_ID, payload: state, updated_at: new Date().toISOString() });
+      setSyncStatus('Synced', 'var(--green)');
+    } else {
+      setSyncStatus('Synced (empty)', 'var(--green)');
+    }
+  }catch(e){
+    console.warn('Supabase load failed, using local cache', e);
+    setSyncStatus('Offline — using local copy', 'var(--red)');
+  }
+  render();
+  subscribeRealtime();
+}
+
+async function saveState(){
+  saveLocal(state);
+  if(!supabase || !navigator.onLine){
+    setSyncStatus(navigator.onLine ? 'Local only' : 'Offline — saved locally', 'var(--text-dim)');
+    return;
+  }
+  try{
+    const { error } = await supabase.from('tandem_state').upsert({ id: ROW_ID, payload: state, updated_at: new Date().toISOString() });
+    if(error) throw error;
+    setSyncStatus('Synced', 'var(--green)');
+  }catch(e){
+    console.warn('Supabase save failed, will retry on reconnect', e);
+    setSyncStatus('Save pending — will retry', 'var(--red)');
+  }
+}
+
+function subscribeRealtime(){
+  if(!supabase || channel) return;
+  channel = supabase.channel('public:tandem_state')
+    .on('postgres_changes', { event:'*', schema:'public', table:'tandem_state', filter:`id=eq.${ROW_ID}` }, (payload) => {
+      if(payload.new && payload.new.payload){
+        state = payload.new.payload;
+        saveLocal(state);
+        render();
+        setSyncStatus('Synced (updated elsewhere)', 'var(--green)');
+      }
+    })
+    .subscribe();
+}
+
+window.addEventListener('online', () => { setSyncStatus('Reconnecting…','var(--gold)'); saveState(); });
+window.addEventListener('offline', () => setSyncStatus('Offline — using local copy','var(--red)'));
+
+/* ============================== UI ============================== */
+const STATUS_OPTIONS = ['Raw','At Grading','Graded','Listed','Sold'];
+const SPORT_OPTIONS = ['NFL','NBA','WNBA','MLB','AFL','Soccer','MMA','WWE','Pokémon','Other'];
+let currentFilter = { status:'all', decision:'all' };
+let openCardId = null;
+
+function newCard(){
+  return { id: crypto.randomUUID(), player:'', card:'', cardNum:'', sport:'NFL', status:'Raw',
+    paid:'', shipping:0, feesPct:0.137, shipMyCards:'None', quantity:1,
+    rawAvg:'', psa9Avg:'', psa10Avg:'', grade:'', gradingService:'PSA via Australia',
+    gradingCostPaid:0, actualSellPrice:'', datePurchased:new Date().toISOString().slice(0,10) };
+}
+
+function renderStatBar(computed){
+  const active = computed.filter(c=>c.status!=='Sold');
+  const invested = active.reduce((s,c)=>s+c.totalCost*(Number(c.quantity)||1),0);
+  const potential = active.reduce((s,c)=>s+(c.rawGGR??c.gradedEV??0)*(Number(c.quantity)||1),0);
+  const realised = computed.filter(c=>c.status==='Sold').reduce((s,c)=>s+(c.realisedProfit||0)*(Number(c.quantity)||1),0);
+  const actionable = computed.filter(c=>c.sellPriority<=2).length;
+  document.getElementById('statBar').innerHTML = `
+    <div class="stat"><div class="label">Cards tracked</div><div class="value">${computed.length}</div></div>
+    <div class="stat"><div class="label">Invested</div><div class="value">${fmtMoney(invested)}</div></div>
+    <div class="stat"><div class="label">Potential profit</div><div class="value" style="color:${potential>=0?'var(--green)':'var(--red)'}">${fmtMoney(potential)}</div></div>
+    <div class="stat"><div class="label">Realised profit</div><div class="value" style="color:${realised>=0?'var(--green)':'var(--red)'}">${fmtMoney(realised)}</div></div>
+    <div class="stat"><div class="label">Ready to sell</div><div class="value" style="color:var(--gold)">${actionable}</div></div>
+  `;
+}
+
+function renderFilters(computed){
+  const sf = document.getElementById('statusFilter');
+  const df = document.getElementById('decisionFilter');
+  const statuses = [...new Set(computed.map(c=>c.status))];
+  const decisions = [...new Set(computed.map(c=>c.sellDecision).filter(Boolean))];
+  sf.innerHTML = '<option value="all">All statuses</option>' + statuses.map(s=>`<option value="${s}">${s}</option>`).join('');
+  df.innerHTML = '<option value="all">All decisions</option>' + decisions.map(d=>`<option value="${d}">${d}</option>`).join('');
+  sf.value = currentFilter.status; df.value = currentFilter.decision;
+}
+
+function render(){
+  const computed = (state.cards||[]).map(computeCard).sort((a,b)=>a.sellPriority-b.sellPriority || b.totalCost-a.totalCost);
+  renderStatBar(computed);
+  renderFilters(computed);
+
+  let visible = computed;
+  if(currentFilter.status!=='all') visible = visible.filter(c=>c.status===currentFilter.status);
+  if(currentFilter.decision!=='all') visible = visible.filter(c=>c.sellDecision===currentFilter.decision);
+
+  const list = document.getElementById('list');
+  if(visible.length===0){ list.innerHTML = '<div id="empty">No cards match — add one, or clear filters.</div>'; return; }
+
+  list.innerHTML = visible.map(c=>{
+    const style = SELL_STYLE[c.sellDecision] || SELL_STYLE[''];
+    const isTop = c.sellPriority===1;
+    const isRawSell = c.sellDecision==='Sell Raw First';
+    const cls = isTop ? 'top' : (isRawSell ? 'raw-sell' : '');
+    return `
+    <div class="card-row ${cls}" style="--accent:${style.color}" data-id="${c.id}">
+      <div class="row">
+        <div>
+          <div class="oswald" style="font-size:15px;font-weight:600">${c.player||'Unnamed'} <span class="mono" style="font-size:10px;color:var(--text-dim)">${c.sport}</span></div>
+          <div style="font-size:12px;color:var(--text-dim)">${c.card||''} ${c.cardNum?('#'+c.cardNum):''}</div>
+        </div>
+        <div style="text-align:right">
+          <span class="badge" style="background:${style.color}22;color:${style.color}">${style.label}</span>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmtMoney(c.totalCost)} cost</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.card-row').forEach(el=>{
+    el.addEventListener('click', ()=> openDetail(el.dataset.id));
+  });
+}
+
+document.getElementById('statusFilter').addEventListener('change', e=>{ currentFilter.status=e.target.value; render(); });
+document.getElementById('decisionFilter').addEventListener('change', e=>{ currentFilter.decision=e.target.value; render(); });
+
+/* ---------- Add / Edit modal ---------- */
+function fieldHtml(label, inner){ return `<div class="field"><label>${label}</label>${inner}</div>`; }
+
+function openAdd(){
+  renderCardModal(newCard(), true);
+}
+function openDetail(id){
+  const c = (state.cards||[]).find(c=>c.id===id);
+  if(c) renderCardModal(c, false);
+}
+
+function renderCardModal(card, isNew){
+  const computed = computeCard(card);
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+  <div class="modal-overlay" id="overlay">
+    <div class="modal">
+      <div class="row" style="margin-bottom:4px">
+        <h2 class="oswald" style="margin:0;font-size:19px">${isNew?'Add card':'Edit card'}</h2>
+        <button class="btn" id="closeModal" style="padding:4px 10px">✕</button>
+      </div>
+      <div class="grid2">
+        ${fieldHtml('Player', `<input id="f_player" value="${card.player||''}" placeholder="e.g. Nick Daicos" />`)}
+        <div></div>
+      </div>
+      <div class="grid2">
+        ${fieldHtml('Card / set', `<input id="f_card" value="${card.card||''}" />`)}
+        ${fieldHtml('Card #', `<input id="f_cardNum" value="${card.cardNum||''}" />`)}
+      </div>
+      <div class="grid2">
+        ${fieldHtml('Sport', `<select id="f_sport">${SPORT_OPTIONS.map(s=>`<option ${s===card.sport?'selected':''}>${s}</option>`).join('')}</select>`)}
+        ${fieldHtml('Status', `<select id="f_status">${STATUS_OPTIONS.map(s=>`<option ${s===card.status?'selected':''}>${s}</option>`).join('')}</select>`)}
+      </div>
+      <div class="grid3">
+        ${fieldHtml('Paid ($)', `<input id="f_paid" type="number" step="0.01" value="${card.paid||''}" />`)}
+        ${fieldHtml('Shipping ($)', `<input id="f_shipping" type="number" step="0.01" value="${card.shipping||0}" />`)}
+        ${fieldHtml('Quantity', `<input id="f_quantity" type="number" min="1" value="${card.quantity||1}" />`)}
+      </div>
+      <div class="section-title">Market averages (recent sales)</div>
+      <div class="grid3">
+        ${fieldHtml('Raw', `<input id="f_rawAvg" type="number" step="0.01" value="${card.rawAvg??''}" />`)}
+        ${fieldHtml('PSA 9', `<input id="f_psa9Avg" type="number" step="0.01" value="${card.psa9Avg??''}" />`)}
+        ${fieldHtml('PSA 10', `<input id="f_psa10Avg" type="number" step="0.01" value="${card.psa10Avg??''}" />`)}
+      </div>
+      <div class="grid2">
+        ${fieldHtml('Grade (if graded)', `<input id="f_grade" value="${card.grade||''}" placeholder="e.g. PSA 10" />`)}
+        ${fieldHtml('Grading service', `<input id="f_gradingService" value="${card.gradingService||'PSA via Australia'}" />`)}
+      </div>
+      <div class="section-title">Profitability</div>
+      <div class="grid3" style="margin-bottom:10px">
+        <div class="mini"><div class="l">Raw GGR</div><div class="v" style="color:${(computed.rawGGR||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(computed.rawGGR)}</div></div>
+        <div class="mini"><div class="l">PSA 9 GGR</div><div class="v" style="color:${(computed.psa9GGR||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(computed.psa9GGR)}</div></div>
+        <div class="mini"><div class="l">PSA 10 GGR</div><div class="v" style="color:${(computed.psa10GGR||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(computed.psa10GGR)}</div></div>
+      </div>
+      <div class="grid2" style="margin-bottom:14px">
+        <div class="mini"><div class="l">Graded EV</div><div class="v" style="color:${(computed.gradedEV||0)>=0?'var(--green)':'var(--red)'}">${fmtMoney(computed.gradedEV)}</div></div>
+        <div class="mini"><div class="l">Decision</div><div class="v">${computed.sellDecision||'—'}</div></div>
+      </div>
+      ${!isNew ? `${fieldHtml('Actual sell price (if sold)', `<input id="f_actualSellPrice" type="number" step="0.01" value="${card.actualSellPrice??''}" />`)}` : ''}
+      <div class="row" style="margin-top:16px">
+        <button class="btn btn-primary" id="saveCard" style="flex:1;justify-content:center">Save</button>
+        ${!isNew?`<button class="btn btn-danger" id="deleteCard">Remove</button>`:''}
+      </div>
+    </div>
+  </div>`;
+
+  document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
+  document.getElementById('closeModal').addEventListener('click', closeModal);
+  document.getElementById('saveCard').addEventListener('click', ()=>{
+    const updated = {
+      ...card,
+      player: document.getElementById('f_player').value.trim(),
+      card: document.getElementById('f_card').value.trim(),
+      cardNum: document.getElementById('f_cardNum').value.trim(),
+      sport: document.getElementById('f_sport').value,
+      status: document.getElementById('f_status').value,
+      paid: Number(document.getElementById('f_paid').value)||0,
+      shipping: Number(document.getElementById('f_shipping').value)||0,
+      quantity: Number(document.getElementById('f_quantity').value)||1,
+      rawAvg: document.getElementById('f_rawAvg').value===''?null:Number(document.getElementById('f_rawAvg').value),
+      psa9Avg: document.getElementById('f_psa9Avg').value===''?null:Number(document.getElementById('f_psa9Avg').value),
+      psa10Avg: document.getElementById('f_psa10Avg').value===''?null:Number(document.getElementById('f_psa10Avg').value),
+      grade: document.getElementById('f_grade').value.trim(),
+      gradingService: document.getElementById('f_gradingService').value.trim(),
+    };
+    if(!isNew){
+      const asp = document.getElementById('f_actualSellPrice');
+      updated.actualSellPrice = asp.value===''?null:Number(asp.value);
+    }
+    if(!updated.player){ alert('Player name is required.'); return; }
+    if(isNew) state.cards = [updated, ...(state.cards||[])];
+    else state.cards = (state.cards||[]).map(c=>c.id===updated.id?updated:c);
+    saveState(); render(); closeModal();
+  });
+  if(!isNew){
+    document.getElementById('deleteCard').addEventListener('click', ()=>{
+      state.cards = (state.cards||[]).filter(c=>c.id!==card.id);
+      saveState(); render(); closeModal();
+    });
+  }
+}
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+
+document.getElementById('addBtn').addEventListener('click', openAdd);
+
+/* ---------- Data migration / import ---------- */
+document.getElementById('migrateBtn').addEventListener('click', ()=>{
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+  <div class="modal-overlay" id="mOverlay">
+    <div class="modal">
+      <div class="row" style="margin-bottom:10px">
+        <h2 class="oswald" style="margin:0;font-size:19px">Import / migrate data</h2>
+        <button class="btn" id="mClose" style="padding:4px 10px">✕</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">
+        Paste a JSON backup (an array of cards, or an object with a "cards" array) to populate this shared Supabase row. This replaces all current data — can't be undone.
+      </div>
+      <textarea id="mPaste" placeholder='[{"player":"...", "card":"...", ...}]'></textarea>
+      <div class="row" style="margin-top:14px">
+        <button class="btn btn-primary" id="mApply" style="flex:1;justify-content:center">Import and replace</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('mOverlay').addEventListener('click', e=>{ if(e.target.id==='mOverlay') closeModal(); });
+  document.getElementById('mClose').addEventListener('click', closeModal);
+  document.getElementById('mApply').addEventListener('click', ()=>{
+    try{
+      const parsed = JSON.parse(document.getElementById('mPaste').value);
+      const cards = Array.isArray(parsed) ? parsed : (parsed.cards || []);
+      if(!Array.isArray(cards)) throw new Error('No cards array found');
+      state.cards = cards.map(c=>({ id: c.id || crypto.randomUUID(), ...c }));
+      saveState(); render(); closeModal();
+    }catch(e){
+      alert('Could not parse that JSON — check the format and try again.');
+    }
+  });
+});
+
+/* ---------- PWA install + service worker ---------- */
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault(); deferredPrompt = e;
+  document.getElementById('installBtn').style.display = 'inline-flex';
+});
+document.getElementById('installBtn').addEventListener('click', async ()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('installBtn').style.display = 'none';
+});
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(e=>console.warn('SW registration failed', e));
+  });
+}
+
+/* ---------- Boot ---------- */
+(async function boot(){
+  const ok = await initSupabase();
+  await loadState();
+})();
+</script>
+</body>
+</html>
