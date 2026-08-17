@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
 
-  <!-- Unregister any caching Service Workers causing CORS/fetch errors -->
+  <!-- Automatically clear old cached Service Workers -->
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -21,10 +21,9 @@
     }
   </script>
 
-  <!-- Fixed-Version UMD CDN Dependencies -->
+  <!-- Stable, Version-Locked UMD CDN Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-
   <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
   <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js"></script>
   <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
@@ -35,13 +34,13 @@
 <body style="margin: 0; padding: 0; background-color: #14161C;">
   <div id="root"></div>
 
-  <!-- Supabase Credentials -->
+  <!-- Supabase Credentials (replace values below if using live sync) -->
   <script>
-    window.SUPABASE_URL = "https://your-supabase-url.supabase.co";
-    window.SUPABASE_ANON_KEY = "your-supabase-anon-key";
+    window.SUPABASE_URL = "https://aguyvxedljyhtllrcvvf.supabase.co";
+    window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFndXl2eGVkbGp5aHRsbHJjdnZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4NzEzNjAsImV4cCI6MjEwMjQ0NzM2MH0.IhLG61DKCneb0gYLgl70bjbGpc9yHZf4O-rqHNAIbGs";
   </script>
 
-  <!-- App Script (Relative path ensures it loads inside subfolders) -->
+  <!-- Main Application Logic -->
   <script type="text/babel" src="./app.js"></script>
 </body>
 </html>
