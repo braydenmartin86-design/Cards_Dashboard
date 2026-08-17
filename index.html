@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
 
-  <!-- Automatically clear old cached Service Workers -->
+  <!-- Unregister cached Service Workers -->
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -21,7 +21,7 @@
     }
   </script>
 
-  <!-- Stable, Version-Locked UMD CDN Libraries -->
+  <!-- Stable CDN Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
@@ -34,7 +34,7 @@
 <body style="margin: 0; padding: 0; background-color: #14161C;">
   <div id="root"></div>
 
-  <!-- Supabase Credentials (replace values below if using live sync) -->
+  <!-- Live Supabase Credentials -->
   <script>
     window.SUPABASE_URL = "https://aguyvxedljyhtllrcvvf.supabase.co";
     window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFndXl2eGVkbGp5aHRsbHJjdnZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4NzEzNjAsImV4cCI6MjEwMjQ0NzM2MH0.IhLG61DKCneb0gYLgl70bjbGpc9yHZf4O-rqHNAIbGs";
