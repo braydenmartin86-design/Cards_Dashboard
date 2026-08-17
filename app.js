@@ -1,9 +1,26 @@
 // ===== 1. GLOBALS DESTRUCTURING & INITIALIZATION =====
 const { useState, useEffect, useMemo } = React;
-const { 
-  Plus, X, ChevronRight, RefreshCw, Trash2, TrendingUp, Target, Gavel, BookOpen, Copy, Check 
-} = window.lucide ? window.lucide.icons : {};
-const { LineChart, Line, ResponsiveContainer, YAxis } = window.Recharts || {};
+
+const LucideIcons = window.lucide ? window.lucide.icons : {};
+const Plus = LucideIcons.Plus || (() => null);
+const X = LucideIcons.X || (() => null);
+const ChevronRight = LucideIcons.ChevronRight || (() => null);
+const RefreshCw = LucideIcons.RefreshCw || (() => null);
+const Trash2 = LucideIcons.Trash2 || (() => null);
+const TrendingUp = LucideIcons.TrendingUp || (() => null);
+const Target = LucideIcons.Target || (() => null);
+const Gavel = LucideIcons.Gavel || (() => null);
+const BookOpen = LucideIcons.BookOpen || (() => null);
+const Copy = LucideIcons.Copy || (() => null);
+const Check = LucideIcons.Check || (() => null);
+
+const RC = window.Recharts || {};
+const LineChart = RC.LineChart || (() => null);
+const Line = RC.Line || (() => null);
+const ResponsiveContainer = RC.ResponsiveContainer || (({ children }) => children);
+const YAxis = RC.YAxis || (() => null);
+const BarChart = RC.BarChart || (() => null);
+const Bar = RC.Bar || (() => null);
 
 let supabaseClient = null;
 try {
