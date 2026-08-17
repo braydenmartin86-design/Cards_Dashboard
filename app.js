@@ -1360,32 +1360,58 @@ function App() {
         {tab === "taxsummary" && (
           <BusinessSummary cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} />
         )}
+const isPokemon = tab === "pokemon";
 
-        {(tab === "portfolio" || tab === "pokemon") && (
-          <>
-            <StatBar totals={totals} />
-            <FilterRow
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
-              decisionFilter={decisionFilter}
-              setDecisionFilter={setDecisionFilter}
-              sportFilter={sportFilter}
-              setSportFilter={setSportFilter}
-              locationFilter={locationFilter}
-              setLocationFilter={setLocationFilter}
-              setSortKey={setSortKey}
-              enriched={enriched}
-            />
-            <CardTable
-              cards={filtered}
-              onSelect={setSelected}
-              playerLabel={isPokemon ? "Pokémon" : "Player"}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={handleSort}
-            />
-          </>
-        )}
+// Applies calculations & filtering to Pokemon cards identical to sports cards
+const enrichedPokemonCards = useMemo(() => {
+  return (pokemonCards || []).map((card) => enrichCardData(card));
+}, [pokemonCards]);
+
+const filteredPokemonCards = useMemo(() => {
+  return filterAndSortCards(enrichedPokemonCards, {
+    statusFilter,
+    decisionFilter,
+    sportFilter,
+    locationFilter,
+    sortKey,
+    sortDir,
+  });
+}, [enrichedPokemonCards, statusFilter, decisionFilter, sportFilter, locationFilter, sortKey, sortDir]);
+
+const pokemonTotals = useMemo(() => {
+  return calculateTotals(enrichedPokemonCards);
+}, [enrichedPokemonCards]);
+       {(tab === "portfolio" || tab === "pokemon") && (
+  <>
+    {/* 1. Stat Bar dynamically calculates portfolio vs. pokemon metrics */}
+    <StatBar totals={isPokemon ? pokemonTotals : totals} />
+
+    {/* 2. Filter Row allows sorting and filtering both categories identically */}
+    <FilterRow
+      statusFilter={statusFilter}
+      setStatusFilter={setStatusFilter}
+      decisionFilter={decisionFilter}
+      setDecisionFilter={setDecisionFilter}
+      sportFilter={sportFilter}
+      setSportFilter={setSportFilter}
+      locationFilter={locationFilter}
+      setLocationFilter={setLocationFilter}
+      setSortKey={setSortKey}
+      enriched={isPokemon ? enrichedPokemonCards : enriched}
+    />
+
+    {/* 3. Card Table receives the specific category list with full EV & Grade Call logic */}
+    <CardTable
+      cards={isPokemon ? filteredPokemonCards : filtered}
+      onSelect={setSelected}
+      playerLabel={tab === "pokemon" ? "Pokémon / Card Name" : "Player"}
+      sortKey={sortKey}
+      sortDir={sortDir}
+      onSort={handleSort}
+      isPokemon={tab === "pokemon"}
+    />
+  </>
+)}
 
         {tab === "sales" && <MySales items={salesItems} onUpdate={updateCardIn} onDelete={deleteCardIn} />}
 
