@@ -6532,3 +6532,7 @@ function GlobalStyle() {
     `}</style>
   );
 }
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  ReactDOM.render(React.createElement(App), rootElement);
+}
