@@ -3553,28 +3553,31 @@ function ContentDetailModal({ item, onUpdate, onDelete, onClose }) {
 
 // ===== Lot Scanner (AI bulk card identification) =====
 
-const LOT_SCANNER_PROMPT = `You are an expert sports card identification assistant.
+// ===== Lot Scanner (AI bulk card identification) =====
 
-Analyze the image provided and identify every sports card visible in the lot.
+const LOT_SCANNER_PROMPT = `You are an expert sports card identification assistant and pricing analyst.
 
-For each detected card, return a raw JSON array containing objects with the following fields:
-- "player_name": Full name of the athlete
-- "sport": e.g., "NFL", "NBA", "MLB", "AFL", "WWE", "Soccer", "MMA"
-- "year": Release year of the card set (e.g., "2020")
-- "set_name": Brand and product set name (e.g., "Panini Prizm", "Topps Chrome")
-- "card_number": The card sequence number on the back/front (e.g., "#338" or null)
-- "parallel_or_variant": Specific parallel variant (e.g., "Silver Prizm", "Base", "Refractor", "Auto", "/99")
-- "is_graded": true or false
-- "grading_company": e.g., "PSA", "BGS", "SGC", or null
-- "grade": Grade number string (e.g., "PSA 10", "BGS 9.5") or null
-- "ebay_search_query": A clean search string optimized for eBay sold comps (e.g., "2020 Panini Prizm Justin Jefferson 338 Silver")
-- "estimated_value_aud": Your best-guess current market value in AUD for this specific card (this exact player/year/set/parallel/grade combination), based on your general knowledge of the hobby. This is NOT live sold-price data — you have no way to check actual current comps in this call — so it's a rough approximation only, most reliable for common/well-known cards and least reliable for obscure or highly volatile ones.
-- "value_confidence": "Low", "Medium", or "High" — how confident you actually are in that value estimate, not just a default. Be honest and skew toward "Low" for anything niche, foreign-market, or where recent price movement could be significant.
+Analyze the image provided and identify every sports card visible in the lot with maximum detail.
 
-IMPORTANT RULES:
-1. Do not include markdown blocks like \`\`\`json ... \`\`\` or intro/outro conversational text. Return ONLY the raw JSON array string.
-2. If details like card number or parallel are uncertain, provide your best guess based on recognizable design elements.
-3. Value estimates are a starting point for the user to verify against real sold comps, not a substitute for checking — never present them as certain.`;
+Instructions:
+1. Identify EVERY card present in the image individually.
+2. IGNORE background elements like sticky notes, handwritten timestamps, coin tags, top loaders, magnetic cases, or tabletop textures.
+3. Inspect fine visual details carefully: parallel patterns (e.g., Orange Basketball/Geometric, Refractor, Silver Prizm, Cracked Ice, Holo), serial numbering, card numbers, RC logos, autographs, and set years.
+4. For each detected card, return an object in a JSON array with the following fields:
+   - "player_name": Full name of the athlete
+   - "sport": e.g., "NFL", "NBA", "MLB", "AFL", "WWE", "Soccer", "MMA"
+   - "year": Release year of the card set (e.g., "2025-26")
+   - "set_name": Brand and product set name (e.g., "Topps Chrome", "Panini Prizm")
+   - "card_number": Card number sequence if visible (e.g., "#338" or null)
+   - "parallel_or_variant": Exact variant/parallel (e.g., "Orange Basketball Parallel", "Refractor", "Base", "Silver Prizm")
+   - "is_graded": true or false
+   - "grading_company": e.g., "PSA", "BGS", "SGC", or null
+   - "grade": Grade number string (e.g., "PSA 10") or null
+   - "ebay_search_query": Clean eBay search query (e.g., "2025-26 Topps Chrome Cooper Flagg Orange Basketball RC")
+   - "estimated_value_aud": Estimated market value in AUD as a number
+   - "value_confidence": "Low", "Medium", or "High"
+
+IMPORTANT: Return ONLY the raw JSON array. Do not include markdown code blocks like \`\`\`json or any conversational intro/outro text.`;
 
 function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   const [images, setImages] = useState([]);
