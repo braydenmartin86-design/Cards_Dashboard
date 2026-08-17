@@ -2111,7 +2111,119 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
 }
 
 function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
-  return <div style={{ marginTop: 24, color: "#8B90A0", fontSize: 13 }}>Grade Check feature ready for photo assessments.</div>;
+  const [image, setImage] = useState(null);
+  const [base64Data, setBase64Data] = useState("");
+  const [mimeType, setMimeType] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setMimeType(file.type);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImage(reader.result);
+      const base64Clean = reader.result.split(',')[1];
+      setBase64Data(base64Clean);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const runAiGradeCheck = async () => {
+    if (!base64Data) return;
+    setLoading(true);
+    setAnalysis(null);
+
+    try {
+      const { data, error } = await supabaseClient.functions.invoke('analyze-card', {
+        body: { imageBase64: base64Data, mimeType: mimeType }
+      });
+
+      if (error) throw error;
+      setAnalysis(data);
+    } catch (err) {
+      alert("AI Analysis Error: " + (err.message || "Failed to reach edge function"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto bg-slate-900 text-white rounded-xl shadow-lg border border-slate-800">
+      <h2 className="text-2xl font-bold mb-4 text-emerald-400">⚡ Gemini AI Grade Check</h2>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Upload Column */}
+        <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 p-4 rounded-lg bg-slate-950">
+          {image ? (
+            <img src={image} alt="Card Preview" className="max-h-72 object-contain mb-4 rounded" />
+          ) : (
+            <p className="text-slate-400 mb-4 text-center">Upload a clear photo of your card to check condition</p>
+          )}
+          
+          <input 
+            type="file" 
+            accept="image/*" 
+            onChange={handleImageUpload} 
+            className="text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-emerald-600 file:text-white file:font-semibold hover:file:bg-emerald-500 cursor-pointer"
+          />
+
+          {image && (
+            <button
+              onClick={runAiGradeCheck}
+              disabled={loading}
+              className="mt-4 w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2 px-4 rounded transition cursor-pointer"
+            >
+              {loading ? "Analyzing Condition..." : "Run AI Grade Scan"}
+            </button>
+          )}
+        </div>
+
+        {/* Results Column */}
+        <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+          <h3 className="text-lg font-semibold mb-3 text-slate-200">Scan Results</h3>
+          {loading && <p className="text-emerald-400 animate-pulse">Gemini Vision model analyzing centering and surface condition...</p>}
+          
+          {analysis && !loading && (
+            <div className="space-y-3 text-sm">
+              <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                <span className="text-slate-400 block text-xs">Identified Card</span>
+                <span className="font-bold text-white text-base">{analysis.cardName}</span>
+              </div>
+              <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                <span className="text-slate-400 block text-xs">Predicted Grade</span>
+                <span className="font-bold text-emerald-400 text-lg">{analysis.estimatedGrade}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                  <span className="text-slate-400 block text-xs">Centering</span>
+                  <span className="text-slate-200">{analysis.centeringScore}</span>
+                </div>
+                <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                  <span className="text-slate-400 block text-xs">Corners</span>
+                  <span className="text-slate-200">{analysis.cornerCondition}</span>
+                </div>
+              </div>
+              <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                <span className="text-slate-400 block text-xs">Surface</span>
+                <span className="text-slate-200">{analysis.surfaceCondition}</span>
+              </div>
+              <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                <span className="text-slate-400 block text-xs">Notes</span>
+                <span className="text-slate-300 italic">{analysis.notes}</span>
+              </div>
+            </div>
+          )}
+
+          {!analysis && !loading && (
+            <p className="text-slate-500 text-sm">Upload an image and click scan to populate centering and grade predictions.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function BusinessSummary({ cards, pokemonCards, boxBreaks, manualExpenses, setManualExpenses }) {
