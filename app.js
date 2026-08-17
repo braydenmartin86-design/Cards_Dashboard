@@ -58,7 +58,12 @@ async function storageGet(key) {
 
   if (supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.from('tandem_state').select('value').eq('id', key).maybeSingle();
+      const { data, error } = await supabaseClient
+        .from('tandem_state')
+        .select('value')
+        .eq('id', key)
+        .maybeSingle();
+
       if (!error && data && data.value) {
         remoteEnv = unwrapEnvelope(data.value);
       }
@@ -90,7 +95,12 @@ async function storageSet(key, value) {
 
     if (supabaseClient) {
       try {
-        await supabaseClient.from('tandem_state').upsert({ id: key, value: envelope, updated_at: new Date().toISOString() });
+        await supabaseClient
+          .from('tandem_state')
+          .upsert(
+            { id: key, value: envelope, updated_at: new Date().toISOString() },
+            { onConflict: 'id' }
+          );
       } catch (e) {}
     }
   });
@@ -99,7 +109,6 @@ async function storageSet(key, value) {
   await next;
   return true;
 }
-
 const hasArtifactStorage = false;
 
 // ===== 2. SEED DATA =====
