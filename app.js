@@ -30,8 +30,6 @@ const LineChart = RC.LineChart || (() => null);
 const Line = RC.Line || (() => null);
 const ResponsiveContainer = RC.ResponsiveContainer || (({ children }) => children);
 const YAxis = RC.YAxis || (() => null);
-const BarChart = RC.BarChart || (() => null);
-const Bar = RC.Bar || (() => null);
 
 let supabaseClient = null;
 try {
@@ -55,13 +53,13 @@ async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jp
 }
 
 // ===== SEED DATA =====
-const SEED_CARDS = [{"player": "Amen Thompson", "card": "Prizm RC Luck OT Lottery", "cardNum": "#12", "rookie": true, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 5.4, "shipping": 1.48, "feesPct": 0.137, "rawAvg": 9.29, "psa9Avg": 43.2, "psa10Avg": 16.09, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NBA", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 9.29}], "psa9History": [{"date": "2026-08-07", "value": 43.2}], "psa10History": [{"date": "2026-08-07", "value": 16.09}]}, {"player": "Jaren Jackson Jr", "card": "2018-19 Prizm Phenoms Silver", "cardNum": "#22", "rookie": true, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 1.9, "shipping": 1.47, "feesPct": 0.137, "rawAvg": 4.29, "psa9Avg": 9.66, "psa10Avg": 23.03, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NBA", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 4.29}], "psa9History": [{"date": "2026-08-07", "value": 9.66}], "psa10History": [{"date": "2026-08-07", "value": 23.03}]}];
+const SEED_CARDS = [{"player": "Amen Thompson", "card": "Prizm RC Luck OT Lottery", "cardNum": "#12", "rookie": true, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 5.4, "shipping": 1.48, "feesPct": 0.137, "rawAvg": 9.29, "psa9Avg": 43.2, "psa10Avg": 16.09, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NBA", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 9.29}], "psa9History": [{"date": "2026-08-07", "value": 43.2}], "psa10History": [{"date": "2026-08-07", "value": 16.09}]}, {"player": "Jaren Jackson Jr", "card": "2018-19 Prizm Phenoms Silver", "cardNum": "#22", "rookie": true, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 1.9, "shipping": 1.47, "feesPct": 0.137, "rawAvg": 4.29, "psa9Avg": 9.66, "psa10Avg": 23.03, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NBA", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 4.29}], "psa9History": [{"date": "2026-08-07", "value": 9.66}], "psa10History": [{"date": "2026-08-07", "value": 23.03}]}, {"player": "Jonathan Kuminga", "card": "2021-22 Obsidian Base", "cardNum": "#157", "rookie": true, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 10.0, "shipping": 0.0, "feesPct": 0.137, "rawAvg": 17.46, "psa9Avg": 15.6, "psa10Avg": 0.0, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NBA", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 17.46}], "psa9History": [{"date": "2026-08-07", "value": 15.6}], "psa10History": [{"date": "2026-08-07", "value": 0.0}]}, {"player": "Scoot Henderson", "card": "Prizm Monopoly Purple Wave", "cardNum": "#75", "rookie": true, "shipMyCards": "Yes", "status": "Raw", "grade": null, "paid": 1.49, "shipping": 0.7, "feesPct": 0.137, "rawAvg": 8.09, "psa9Avg": 8.2, "psa10Avg": 16.45, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NBA", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 8.09}], "psa9History": [{"date": "2026-08-07", "value": 8.2}], "psa10History": [{"date": "2026-08-07", "value": 16.45}]}, {"player": "Trevor Lawrence", "card": "Donruss RC Elite Series", "cardNum": "#ESR-TRL", "rookie": true, "shipMyCards": "Yes", "status": "Raw", "grade": null, "paid": 3.34, "shipping": 0.0, "feesPct": 0.137, "rawAvg": 25.26, "psa9Avg": 18.57, "psa10Avg": 28.23, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NFL", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 25.26}], "psa9History": [{"date": "2026-08-07", "value": 18.57}], "psa10History": [{"date": "2026-08-07", "value": 28.23}]}, {"player": "Dylan Harper", "card": "2025-26 Topps Chrome Instinct Aqua /199", "cardNum": "#INS-12", "rookie": true, "shipMyCards": "Yes", "status": "Raw", "grade": null, "paid": 38.57, "shipping": 7.79, "feesPct": 0.137, "rawAvg": 61.11, "psa9Avg": 0.0, "psa10Avg": 0.0, "gradingService": "PSA via ShipMyCards", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NBA", "location": "In Hand", "numbered": true, "outOf": 199, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 61.11}], "psa9History": [{"date": "2026-08-07", "value": 0.0}], "psa10History": [{"date": "2026-08-07", "value": 0.0}]}, {"player": "Alex Rodriguez", "card": "Donruss Bomb Squad Blue", "cardNum": "#BS1", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 7.0, "shipping": 0.0, "feesPct": 0.137, "rawAvg": 14.89, "psa9Avg": 0.0, "psa10Avg": 67.0, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "MLB", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 14.89}], "psa9History": [{"date": "2026-08-07", "value": 0.0}], "psa10History": [{"date": "2026-08-07", "value": 67.0}]}, {"player": "Bijan Robinson", "card": "2023 Rated Rookie Purple", "cardNum": "#206", "rookie": true, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 5.0, "shipping": 0.0, "feesPct": 0.137, "rawAvg": 10.86, "psa9Avg": 24.67, "psa10Avg": 77.62, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NFL", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 10.86}], "psa9History": [{"date": "2026-08-07", "value": 24.67}], "psa10History": [{"date": "2026-08-07", "value": 77.62}]}, {"player": "Bijan Robinson", "card": "2023 Pheonix Contours", "cardNum": "#CON-18", "rookie": true, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 5.0, "shipping": 0.0, "feesPct": 0.137, "rawAvg": 7.43, "psa9Avg": 20.1, "psa10Avg": 67.0, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NFL", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 7.43}], "psa9History": [{"date": "2026-08-07", "value": 20.1}], "psa10History": [{"date": "2026-08-07", "value": 67.0}]}, {"player": "Jarrett Allen", "card": "2017 Prizm Hyper Silver", "cardNum": "#154", "rookie": true, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 4.0, "shipping": 0.0, "feesPct": 0.137, "rawAvg": 8.94, "psa9Avg": 15.02, "psa10Avg": 77.49, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "NBA", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [{"date": "2026-08-07", "value": 8.94}], "psa9History": [{"date": "2026-08-07", "value": 15.02}], "psa10History": [{"date": "2026-08-07", "value": 77.49}]}];
 
 const SEED_POKEMON = [{"player": "Arcanine EX", "card": "2023 Scarlet & Violet", "cardNum": "#032/198", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 4.0, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pokémon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}];
 
-const SEED_TARGETS = [{"id": null, "player": "Jackson Chourio", "sport": "MLB", "cardToLookFor": "2024 Topps Chrome/Bowman base rookie", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Improving", "reasoning": "Elite power/speed combo.", "targetPriceRaw": 22, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}];
+const SEED_TARGETS = [{"id": null, "player": "Jackson Chourio", "sport": "MLB", "cardToLookFor": "2024 Topps Chrome/Bowman base rookie", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Improving", "reasoning": "Elite power/speed combo already producing at the MLB level for Milwaukee.", "targetPriceRaw": 22, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}];
 
-// ===== FORMULA ENGINE & CALCS =====
+// ===== FORMULA ENGINE =====
 const AUD_TO_USD_APPROX = 0.65;
 function tieredPsaAuCost(declaredValueAUD) {
   const usd = (declaredValueAUD || 0) * AUD_TO_USD_APPROX;
@@ -102,19 +100,6 @@ function estimateGradingTurnaroundDays(service, declaredValueAUD) {
 
 const PSA9_GRADES = ["psa 9", "sgc 9", "bgs 9", "bgs 9.5"];
 const PSA10_GRADES = ["psa 10", "sgc 10", "bgs 10"];
-
-function estimateSellingFee(method, price) {
-  const p = Number(price) || 0;
-  switch (method) {
-    case "eBay": return p * 0.1325 + 0.3;
-    case "eBay Live": return p * 0.089 + 0.3;
-    case "Whatnot": return p * (0.08 + 0.029) + 0.3;
-    case "Whatnot (AU promo hours)": return p * (0.04 + 0.029) + 0.3;
-    case "Fanatics Collect (PWCC)": return p * 0.06;
-    case "Facebook / local": return 0;
-    default: return null;
-  }
-}
 
 function computeCard(c) {
   const holdingCost = (c.shipMyCards || "").toLowerCase() === "yes" ? 4.5 : 0;
@@ -384,17 +369,9 @@ function App() {
           { id: "home", label: "Home" },
           { id: "portfolio", label: "My Cards" },
           { id: "pokemon", label: "Pokémon" },
-          { id: "sales", label: "My Sales" },
-          { id: "boxbreaks", label: "Box Breaks" },
           { id: "gradecheck", label: "Grade Check (AI)" },
-          { id: "gradingtracker", label: "Grading Tracker" },
           { id: "lotscanner", label: "Lot Scanner (AI)" },
           { id: "targets", label: "Monthly Targets" },
-          { id: "sellplaybook", label: "Selling Playbook" },
-          { id: "taxsummary", label: "Business Summary" },
-          { id: "content", label: "Content Creation" },
-          { id: "buy", label: "Buy Evaluator" },
-          { id: "tips", label: "Tips & Tricks" },
         ].map((t) => (
           <button
             key={t.id}
@@ -421,14 +398,6 @@ function App() {
       {tab === "gradecheck" && <GradeCheckView cards={cards} />}
       {tab === "lotscanner" && <LotScannerView setTargets={setTargets} />}
       {tab === "targets" && <TargetsView targets={targets} setTargets={setTargets} />}
-      {tab === "sales" && <GenericPlaceholder title="My Sales Manager" desc="Track sold and listed cards across all marketplaces." />}
-      {tab === "boxbreaks" && <GenericPlaceholder title="Box Breaks Tracker" desc="Split box costs across teams and evaluate spot margins." />}
-      {tab === "gradingtracker" && <GenericPlaceholder title="Grading Submission Tracker" desc="Monitor cards currently at PSA or SGC with estimated turnaround times." />}
-      {tab === "sellplaybook" && <GenericPlaceholder title="Selling Playbook" desc="Compare real platform fees between eBay, Whatnot, and DCSports87." />}
-      {tab === "taxsummary" && <GenericPlaceholder title="Business & Tax Summary" desc="Export CSV ledgers for total card purchases, sales, and expenses." />}
-      {tab === "content" && <GenericPlaceholder title="Content Creation Studio" desc="Convert your portfolio flips into TikTok, YouTube Shorts, and Reels." />}
-      {tab === "buy" && <GenericPlaceholder title="Buy Evaluator & Gixen Snipe Calculator" desc="Calculate max snipe bids before entering live eBay auctions." />}
-      {tab === "tips" && <GenericPlaceholder title="Tips & Saved Searches" desc="Access pre-filtered eBay search queries for low-pop sports card snipes." />}
     </div>
   );
 }
@@ -532,8 +501,8 @@ Return ONLY a raw JSON object with no markdown formatting containing:
           )}
         </div>
         <div style={{ background: "#14161C", padding: 16, borderRadius: 8, border: "1px solid #2C303B" }}>
-          <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Scan Analysis</h3>
-          {loading && <p style={{ color: "#C9A227" }}>Reading centering, surface, and corners...</p>}
+          <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Scan Results</h3>
+          {loading && <p style={{ color: "#C9A227" }}>Gemini Vision model reading card details...</p>}
           {analysis && (
             <div style={{ fontSize: 14, lineHeight: 1.6 }}>
               <p><strong>Identified Card:</strong> {analysis.cardName}</p>
@@ -569,15 +538,6 @@ function TargetsView({ targets }) {
           <strong>{t.player}</strong> ({t.sport}) — {t.cardToLookFor}
         </div>
       ))}
-    </div>
-  );
-}
-
-function GenericPlaceholder({ title, desc }) {
-  return (
-    <div style={{ marginTop: 24, padding: 20, background: "#191B22", border: "1px solid #2C303B", borderRadius: 10 }}>
-      <h2 style={{ fontFamily: "Oswald, sans-serif", margin: "0 0 10px", color: "#C9A227" }}>{title}</h2>
-      <p style={{ color: "#8B90A0", fontSize: 14 }}>{desc}</p>
     </div>
   );
 }
