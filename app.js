@@ -3914,8 +3914,8 @@ function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
 
 // ===== Grade Check (AI photo assessment) =====
 
-// Compress and convert image to lightweight Base64 (prevents Supabase payload errors)
-function fileToBase64(file, maxDimension = 1024) {
+// Updated fileToBase64 with higher clarity (2048px max dimension)
+function fileToBase64(file, maxDimension = 2048) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -3940,8 +3940,8 @@ function fileToBase64(file, maxDimension = 1024) {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Compress to 75% quality JPEG
-        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.75);
+        // Render high-clarity JPEG at 85% quality
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
         resolve(compressedDataUrl.split(",")[1]);
       };
       img.onerror = reject;
