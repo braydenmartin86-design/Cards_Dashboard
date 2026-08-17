@@ -43,27 +43,24 @@ try {
 // Universal AI Call Proxy
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg") {
   if (!supabaseClient) {
-    throw new Error("Supabase client is not initialized.");
+    throw new Error("Supabase client is not connected.");
   }
 
-  // Ensure clean base64 data without data URL prefixes
   let cleanBase64 = imageBase64;
   if (cleanBase64 && cleanBase64.includes(",")) {
     cleanBase64 = cleanBase64.split(",")[1];
   }
 
-  const payload = {
-    prompt: promptText,
-    imageBase64: cleanBase64,
-    mimeType: mimeType
-  };
-
   const { data, error } = await supabaseClient.functions.invoke("analyze-card", {
-    body: payload
+    body: {
+      prompt: promptText,
+      imageBase64: cleanBase64,
+      mimeType: mimeType
+    }
   });
 
   if (error) {
-    console.error("Supabase Edge Function Error Details:", error);
+    console.error("Supabase Functions Error:", error);
     throw error;
   }
 
