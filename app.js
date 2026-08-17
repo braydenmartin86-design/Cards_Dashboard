@@ -1055,8 +1055,9 @@ function App() {
     if (dataLoaded) storageSet(SAVED_SCANS_STORAGE_KEY, savedScans);
   }, [savedScans, dataLoaded]);
 
-  const isPokemon = tab === "pokemon";
-  const activeCards = isPokemon ? pokemonCards : cards;
+  // Switches dataset automatically based on the selected tab
+const isPokemon = tab === "pokemon";
+const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   const setActiveCards = isPokemon ? setPokemonCards : setCards;
   const computeFn = isPokemon ? computePokemonCard : computeCard;
 
@@ -1360,27 +1361,7 @@ function App() {
         {tab === "taxsummary" && (
           <BusinessSummary cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} />
         )}
-const isPokemon = tab === "pokemon";
 
-// Applies calculations & filtering to Pokemon cards identical to sports cards
-const enrichedPokemonCards = useMemo(() => {
-  return (pokemonCards || []).map((card) => enrichCardData(card));
-}, [pokemonCards]);
-
-const filteredPokemonCards = useMemo(() => {
-  return filterAndSortCards(enrichedPokemonCards, {
-    statusFilter,
-    decisionFilter,
-    sportFilter,
-    locationFilter,
-    sortKey,
-    sortDir,
-  });
-}, [enrichedPokemonCards, statusFilter, decisionFilter, sportFilter, locationFilter, sortKey, sortDir]);
-
-const pokemonTotals = useMemo(() => {
-  return calculateTotals(enrichedPokemonCards);
-}, [enrichedPokemonCards]);
        {(tab === "portfolio" || tab === "pokemon") && (
   <>
     {/* 1. Stat Bar dynamically calculates portfolio vs. pokemon metrics */}
