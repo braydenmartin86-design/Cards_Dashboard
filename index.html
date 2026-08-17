@@ -27,7 +27,14 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<!-- Recharts' UMD build declares react-is and prop-types as external dependencies rather
+     than bundling them — without these loaded first, Recharts' internal code hits undefined
+     references (e.g. "Cannot read properties of undefined (reading 'oneOfType')"). Order
+     matters: both of these must load before Recharts itself. Using Recharts' own officially
+     documented, tested CDN path (unversioned, .min.js) rather than a pinned non-minified one. -->
+<script src="https://unpkg.com/react-is/umd/react-is.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/prop-types/prop-types.min.js" crossorigin></script>
+<script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
