@@ -1,19 +1,30 @@
 // ===== 1. GLOBALS DESTRUCTURING & INITIALIZATION =====
 const { useState, useEffect, useMemo } = React;
 
-const LucideIcons = window.lucide ? window.lucide.icons : {};
-const Plus = LucideIcons.Plus || (() => null);
-const X = LucideIcons.X || (() => null);
-const ChevronRight = LucideIcons.ChevronRight || (() => null);
-const RefreshCw = LucideIcons.RefreshCw || (() => null);
-const Trash2 = LucideIcons.Trash2 || (() => null);
-const TrendingUp = LucideIcons.TrendingUp || (() => null);
-const Target = LucideIcons.Target || (() => null);
-const Gavel = LucideIcons.Gavel || (() => null);
-const BookOpen = LucideIcons.BookOpen || (() => null);
-const Copy = LucideIcons.Copy || (() => null);
-const Check = LucideIcons.Check || (() => null);
+// Safe icon proxy — prevents React from crashing if an icon loads late
+const IconProxy = new Proxy({}, {
+  get: (target, name) => {
+    if (window.lucide && window.lucide.icons && window.lucide.icons[name]) {
+      const IconComp = window.lucide.icons[name];
+      return (props) => React.createElement(IconComp, props);
+    }
+    return () => null;
+  }
+});
 
+const Plus = IconProxy.Plus;
+const X = IconProxy.X;
+const ChevronRight = IconProxy.ChevronRight;
+const RefreshCw = IconProxy.RefreshCw;
+const Trash2 = IconProxy.Trash2;
+const TrendingUp = IconProxy.TrendingUp;
+const Target = IconProxy.Target;
+const Gavel = IconProxy.Gavel;
+const BookOpen = IconProxy.BookOpen;
+const Copy = IconProxy.Copy;
+const Check = IconProxy.Check;
+
+// Safe Recharts fallbacks
 const RC = window.Recharts || {};
 const LineChart = RC.LineChart || (() => null);
 const Line = RC.Line || (() => null);
