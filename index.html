@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="mobile-web-app-capable" content="yes" />
   <title>CardFlip EV Dashboard</title>
 
   <!-- Google Fonts -->
@@ -11,9 +10,21 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
 
-  <!-- Fixed UMD Dependencies -->
-  <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <!-- Unregister any caching Service Workers causing CORS/fetch errors -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (let registration of registrations) {
+          registration.unregister();
+        }
+      });
+    }
+  </script>
+
+  <!-- Fixed-Version UMD CDN Dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+
   <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
   <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js"></script>
   <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
@@ -24,13 +35,13 @@
 <body style="margin: 0; padding: 0; background-color: #14161C;">
   <div id="root"></div>
 
-  <!-- Supabase Credentials (Replace with your actual details) -->
+  <!-- Supabase Credentials -->
   <script>
     window.SUPABASE_URL = "https://your-supabase-url.supabase.co";
     window.SUPABASE_ANON_KEY = "your-supabase-anon-key";
   </script>
 
-  <!-- External App Script -->
-  <script type="text/babel" src="app.js"></script>
+  <!-- App Script (Relative path ensures it loads inside subfolders) -->
+  <script type="text/babel" src="./app.js"></script>
 </body>
 </html>
