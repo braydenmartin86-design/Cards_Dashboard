@@ -3894,6 +3894,7 @@ function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
   );
 }
 
+
 // ===== Grade Check (AI photo assessment) =====
 
 function fileToBase64(file) {
