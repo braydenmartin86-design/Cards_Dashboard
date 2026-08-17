@@ -915,7 +915,7 @@ const DEFAULT_TARGETS = () => SEED_TARGETS.map((t) => ({ ...t, id: crypto.random
 const DEFAULT_CONTENT_GOAL = { count: 1, period: "week" };
 
 
-export default function App() {
+function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [cards, setCards] = useState([]);
   const [pokemonCards, setPokemonCards] = useState([]);
