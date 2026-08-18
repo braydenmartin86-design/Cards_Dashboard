@@ -3753,41 +3753,55 @@ function deleteScan(targetScan) {
           </button>
           {showSavedList && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {savedScans.map((scan) => {
-                const scanTotal = (scan.results || []).reduce((s, c) => s + (Number(c.estimated_value_aud) || 0), 0);
-                return (
-                  <div key={scan.id || scan.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #2C303B", borderRadius: 8, padding: "10px 14px", background: "#191B22" }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{scan.name}</div>
-                      <div style={{ fontSize: 11.5, color: "#6B7180" }}>
-                        {scan.dateSaved} · {(scan.results || []).length} card{(scan.results || []).length === 1 ? "" : "s"} · {fmtMoney(scanTotal)} est. value
-                      </div>
-                      {scan.link && (
-                        <a href={scan.link} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#5C7A99" }} onClick={(e) => e.stopPropagation()}>
-                          Open listing ↗
-                        </a>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => loadScan(scan)}>
-                        View
-                      </button>
-                      <Trash2
-                        size={15}
-                        style={{ cursor: "pointer", color: "#EF4444", alignSelf: "center" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteScan(scan);
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+{savedScans.map((scan) => {
+  const scanTotal = (scan.results || []).reduce((s, c) => s + (Number(c.estimated_value_aud) || 0), 0);
+  return (
+    <div key={scan.id || scan.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #2C303B", borderRadius: 8, padding: "10px 14px", background: "#191B22" }}>
+      <div>
+        <div style={{ fontWeight: 600, fontSize: 13 }}>{scan.name}</div>
+        <div style={{ fontSize: 11.5, color: "#6B7180" }}>
+          {scan.dateSaved} · {(scan.results || []).length} card{(scan.results || []).length === 1 ? "" : "s"} · {fmtMoney(scanTotal)} est. value
         </div>
-      )}
+        {scan.link && (
+          <a href={scan.link} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#5C7A99" }} onClick={(e) => e.stopPropagation()}>
+            Open listing ↗
+          </a>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <button className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => loadScan(scan)}>
+          View
+        </button>
+        <button
+          type="button"
+          title="Delete scan"
+          onClick={(e) => {
+            e.stopPropagation();
+            deleteScan(scan);
+          }}
+          style={{
+            background: "transparent",
+            border: "1px solid #3A2329",
+            borderRadius: 6,
+            color: "#EF4444",
+            cursor: "pointer",
+            padding: "5px 8px",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 4
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+})}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
         {images.map((img, i) => (
