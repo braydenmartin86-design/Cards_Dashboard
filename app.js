@@ -1720,39 +1720,49 @@ const COLUMNS = [
   { key: "timing", label: "Timing", width: "110px", sortable: false }, // <-- ADD THIS LINE
 ];
 // Helper to render compact Seasonal Timing for Sell decisions
+// Renders dynamic Seasonal Timing for Sell decisions (powered by your calendar)
 function renderSeasonalTiming(card) {
-  const decision = card.decision || "";
+  const decision = card.sellDecision || card.decision || "";
   const isSellDecision = ["Sell PSA 10", "Sell PSA 9", "Sell Raw First"].includes(decision);
   
-  const timing = card.seasonalTiming || card.timing || card.seasonal_timing;
-  if (!isSellDecision || !timing) return null;
+  if (!isSellDecision || !card.sport) return null;
 
-  const isPositive = ["good", "peak", "strong"].some((t) => timing.toLowerCase().includes(t));
-  
-  return (
-    <span
-      style={{
-        fontSize: 10,
-        fontWeight: 600,
-        padding: "2px 6px",
-        borderRadius: 4,
-        textTransform: "uppercase",
-        letterSpacing: "0.3px",
-        background: isPositive ? "#1E3A2B" : "#2A2E3D",
-        color: isPositive ? "#4E8B6B" : "#8B90A0",
-        border: `1px solid ${isPositive ? "#2E5940" : "#3A3F50"}`,
-        whiteSpace: "nowrap",
-      }}
-      title={`Seasonal Timing: ${timing}`}
-    >
-      ⏱️ {timing}
-    </span>
-  );
+  if (typeof seasonalSellCheck === "function") {
+    const check = seasonalSellCheck(card.sport);
+    if (check) {
+      const isGood = check.isGoodTiming;
+      
+      return (
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            padding: "2px 6px",
+            borderRadius: 4,
+            textTransform: "uppercase",
+            letterSpacing: "0.3px",
+            background: isGood ? "#1E3A2B" : "#2A2E3D",
+            color: isGood ? "#4E8B6B" : "#8B90A0",
+            border: `1px solid ${isGood ? "#2E5940" : "#3A3F50"}`,
+            whiteSpace: "nowrap",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+          title={`Seasonal Timing (${card.sport}): ${check.monthName} is a ${check.currentAction || "Quiet"} month`}
+        >
+          {isGood ? "✅ Good Timing" : `⏳ ${check.monthName} (${check.currentAction || "Wait"})`}
+        </span>
+      );
+    }
+  }
+
+  return null;
 }
 
 // Helper to render compact Grade Timing for Grade decisions
 function renderGradeTiming(card) {
-  const decision = card.decision || "";
+  const decision = card.sellDecision || card.decision || "";
   const isGradeDecision = ["Grade First", "Grade PSA", "Grade BGS", "Consider Grading"].includes(decision);
 
   const timing = card.gradeTiming || card.grade_timing;
