@@ -116,16 +116,16 @@ async function generateAiMonthlyTargets(cards = [], pokemonCards = []) {
     .join(", ");
 
   const prompt = `
-Generate 6 current market buy/speculative targets for a sports and trading card investor based on their current collection interest (${sportsSummary || "Various sports/Pokémon"}).
+Generate EXACTLY 20 current market buy/speculative targets for a sports and trading card investor based on their current collection interest (${sportsSummary || "Various sports/Pokémon"}).
 
 IMPORTANT SCORING & REASONING RULES:
-1. 'researchScore': Number between 20 and 92. Reserve 88-92 exclusively for premier, top-tier modern grails/blue-chips.
-2. 'reasoning': Must be a detailed, comprehensive 3-part rationale covering:
+1. 'researchScore': Number between 20 and 92. Reserve 88-92 exclusively for premier modern grails/blue-chips.
+2. 'reasoning': Must be a detailed 3-part rationale covering:
    - Primary Catalyst (e.g. print status, out-of-print sealed supply, player performance momentum).
    - Key Risk Factor (e.g. population growth, off-season lull, price volatility).
    - Strategic Entry (e.g. target buy window, raw for grading vs graded spread).
 
-Return ONLY a valid JSON array of objects matching this exact structure:
+Return ONLY a valid JSON array of EXACTLY 20 objects matching this exact structure:
 [
   {
     "player": "Player Name",
