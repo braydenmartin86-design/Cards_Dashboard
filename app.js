@@ -3217,16 +3217,13 @@ function newContentItem(idea) {
   };
 }
 
-// Turns what's already tracked in the app into concrete video/post ideas, so the starting
-// point is never a blank page — every idea below is something already worked out in numbers.
 function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItems) {
   const ideas = [];
-  const allActive = [...cards.map(computeCard), ...pokemonCards.map(computePokemonCard)];
+  const allActive = [...(cards || []).map(computeCard), ...(pokemonCards || []).map(computePokemonCard)];
   const currentMonthIdx = new Date().getMonth();
 
-  // No calendar entry (Pokémon, WNBA, Other) never blocks an idea — only sports actually on
-  // the seasonal calendar get checked against it.
   function calendarSaysNow(sport, wantedAction) {
+    if (typeof seasonActionForMonth !== "function") return true;
     const action = seasonActionForMonth(sport, currentMonthIdx);
     if (action == null) return true;
     return action === wantedAction;
@@ -3253,11 +3250,8 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
       ],
     });
   } else if (actionable.length > 0) {
-    // Flagged to sell, but the calendar says this sport's audience isn't in buying mode right
-    // now — a "why I'm holding" angle is more honest content than pretending it's sell time
-    // when it isn't.
     const c = actionable[0];
-    const currentAction = seasonActionForMonth(c.sport, currentMonthIdx);
+    const currentAction = typeof seasonActionForMonth === "function" ? seasonActionForMonth(c.sport, currentMonthIdx) : null;
     ideas.push({
       title: `Why I'm Holding My ${c.player} ${c.card} (Even Though It's Profitable to Sell)`,
       pillar: "Sell/Flip Update",
@@ -3273,7 +3267,7 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
     });
   }
 
-  const buyNowTargets = [...targets].filter((t) => t.tier === "Buy Now").sort((a, b) => computeConfidence(b) - computeConfidence(a));
+  const buyNowTargets = [...(targets || [])].filter((t) => t.tier === "Buy Now").sort((a, b) => (typeof computeConfidence === "function" ? computeConfidence(b) - computeConfidence(a) : 0));
   const buyNowNow = buyNowTargets.filter((t) => calendarSaysNow(t.sport, "BUY"));
   const bestBuyTarget = buyNowNow[0] || buyNowTargets[0];
   if (bestBuyTarget) {
@@ -3296,7 +3290,7 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
     });
   }
 
-  const budgetTargets = targets.filter((t) => {
+  const budgetTargets = (targets || []).filter((t) => {
     const v = Number(t.targetPriceRaw) || Number(t.targetPriceGraded);
     return v && v <= 50;
   });
@@ -3316,10 +3310,10 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
     });
   }
 
-  const completedBoxes = boxBreaks.filter((b) => b.status === "Completed");
+  const completedBoxes = (boxBreaks || []).filter((b) => b.status === "Completed");
   if (completedBoxes.length > 0) {
     const box = completedBoxes[0];
-    const t = boxTotals(box);
+    const t = typeof boxTotals === "function" ? boxTotals(box) : { cost: 0, revenue: 0, profit: 0 };
     ideas.push({
       title: `Box Break Recap: Was My ${box.name} Worth It?`,
       pillar: "Pack & Box Openings",
@@ -3335,16 +3329,14 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
     });
   }
 
-  // Deliberately aggregated, not a single-flip video — five $3-5 flips read as one solid
-  // number and one solid story instead of five videos that each feel "too small" to post.
-  const recentSold = salesItems.filter((s) => s.status === "Sold");
+  const recentSold = (salesItems || []).filter((s) => s.status === "Sold");
   if (recentSold.length > 0) {
     const totalProfit = recentSold.reduce((s, i) => s + (Number(i.realisedProfit) || 0), 0);
     ideas.push({
       title: "What I Sold This Month (And Why)",
       pillar: "Sell/Flip Update",
       platform: "Multiple",
-      hook: `"I sold ${recentSold.length} cards this month for a total of ${fmtMoney(totalProfit)} profit — here's the breakdown."`,
+      hook: `"I sold ${recentSold.length} cards this month for a total of ${typeof fmtMoney === "function" ? fmtMoney(totalProfit) : "$" + totalProfit} profit — here's the breakdown."`,
       source: `Pulled from My Sales — ${recentSold.length} card${recentSold.length === 1 ? "" : "s"} sold. Aggregating small flips into one total is usually a stronger video than posting each one alone.`,
       outline: [
         `Hook: total realised profit for the month, upfront — say the number, not each flip`,
@@ -3355,7 +3347,6 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
     });
   }
 
-  // Evergreen ideas — always available, good fit for short-form on TikTok/Shorts specifically
   ideas.push({
     title: "Quick Tip: When Is It Actually Worth Grading a Card?",
     pillar: "Grading & Raw Tips",
@@ -3386,30 +3377,99 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
   return ideas.slice(0, 8);
 }
 
+async function generateAiContentIdea(cards = [], targets = []) {
+  const sellCards = (cards || []).filter((c) => ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10"].includes(c.sellDecision));
+  const topProfit = [...(cards || [])].sort((a, b) => (b.expectedListProfit || 0) - (a.expectedListProfit || 0)).slice(0, 3);
+  
+  const prompt = `
+Generate 1 unique, high-engagement short-form video content idea for a sports card collector based on this data:
+- Cards ready for action: ${sellCards.map(c => `${c.player} (${c.sport})`).join(", ") || "Various"}
+- Top profit cards: ${topProfit.map(c => `${c.player} ($${c.expectedListProfit || 0})`).join(", ")}
+- High confidence targets: ${(targets || []).slice(0, 3).map(t => t.player).join(", ")}
+
+Return ONLY a raw JSON object matching this structure:
+{
+  "title": "Headline",
+  "pillar": "Rookie Card Spotlights", 
+  "platform": "YouTube Shorts",
+  "hook": "\\"First 2 seconds quote\\"",
+  "source": "Generated via AI from your portfolio",
+  "outline": ["Hook line", "Context line", "Math line", "Call to action"]
+}
+Pillars allowed: "Pack & Box Openings", "Budget-Friendly Investing", "Rookie Card Spotlights", "Sell/Flip Update", "Grading & Raw Tips", "Behind the Scenes".
+Platforms allowed: "YouTube (long-form)", "YouTube Shorts", "TikTok", "Instagram", "Multiple".
+`;
+
+  try {
+    const rawText = await callGeminiAi(prompt);
+    const cleanJson = rawText.replace(/```json|```/g, "").trim();
+    return JSON.parse(cleanJson);
+  } catch (err) {
+    console.error("AI Idea generation error:", err);
+    return null;
+  }
+}
+
 function countPostedInPeriod(contentPlan, period) {
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - (period === "week" ? 7 : 30));
-  return contentPlan.filter((c) => c.status === "Posted" && c.datePosted && new Date(c.datePosted) >= cutoff).length;
+  return (contentPlan || []).filter((c) => c.status === "Posted" && c.datePosted && new Date(c.datePosted) >= cutoff).length;
 }
 
 function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, contentPlan, setContentPlan, contentGoal, setContentGoal }) {
   const [showAdd, setShowAdd] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const ideas = useMemo(
+  const initialIdeas = useMemo(
     () => generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItems),
     [cards, pokemonCards, targets, boxBreaks, salesItems]
   );
 
-  function addFromIdea(idea) {
-    setContentPlan((prev) => [newContentItem(idea), ...prev]);
+  const [dynamicIdeas, setDynamicIdeas] = useState(initialIdeas);
+
+  useEffect(() => {
+    setDynamicIdeas(initialIdeas);
+  }, [initialIdeas]);
+
+  async function handleRegenerateAll() {
+    setIsGenerating(true);
+    const newIdeas = [];
+    for (let i = 0; i < 4; i++) {
+      const idea = await generateAiContentIdea(cards, targets);
+      if (idea) newIdeas.push(idea);
+    }
+    if (newIdeas.length > 0) {
+      setDynamicIdeas(newIdeas);
+    }
+    setIsGenerating(false);
   }
+
+  async function addFromIdea(idea, index) {
+    setContentPlan((prev) => [newContentItem(idea), ...prev]);
+
+    setDynamicIdeas((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, loading: true } : item))
+    );
+
+    const replacement = await generateAiContentIdea(cards, targets);
+
+    if (replacement) {
+      setDynamicIdeas((prev) =>
+        prev.map((item, i) => (i === index ? replacement : item))
+      );
+    } else {
+      setDynamicIdeas((prev) => prev.filter((_, i) => i !== index));
+    }
+  }
+
   function addItem(item) {
     setContentPlan((prev) => [item, ...prev]);
     setShowAdd(false);
   }
+
   function updateItem(id, updates) {
     setContentPlan((prev) =>
       prev.map((c) => {
@@ -3422,6 +3482,7 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
       })
     );
   }
+
   function deleteItem(id) {
     setContentPlan((prev) => prev.filter((c) => c.id !== id));
     setSelectedId(null);
@@ -3480,7 +3541,7 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 1, background: "#2C303B", border: "1px solid #2C303B", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
         <Stat label="In the pipeline" value={contentPlan.length} />
         <Stat label="Posted" value={postedCount} color="#4E8B6B" />
-        <Stat label="Fresh ideas ready" value={ideas.length} color="#C9A227" />
+        <Stat label="Fresh ideas ready" value={dynamicIdeas.length} color="#C9A227" />
       </div>
 
       <SectionTitle>Format &amp; platform strategy</SectionTitle>
@@ -3504,10 +3565,29 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
         </div>
       </div>
 
-      <SectionTitle>Ideas, pulled from your own data</SectionTitle>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+        <SectionTitle>Ideas, pulled from your own data</SectionTitle>
+        <button
+          className="btnSecondary"
+          onClick={handleRegenerateAll}
+          disabled={isGenerating}
+          style={{
+            fontSize: 12,
+            padding: "6px 14px",
+            background: "#C9A22722",
+            color: "#C9A227",
+            border: "1px solid #C9A22755",
+            cursor: isGenerating ? "wait" : "pointer",
+            fontWeight: 600,
+          }}
+        >
+          {isGenerating ? "✨ Generating..." : "⚡ Re-generate AI Ideas"}
+        </button>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12, marginBottom: 28 }}>
-        {ideas.map((idea, i) => (
-          <div key={i} style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22" }}>
+        {dynamicIdeas.map((idea, i) => (
+          <div key={i} style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", opacity: idea.loading ? 0.5 : 1 }}>
             <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
               <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "#C9A22722", color: "#C9A227" }}>{idea.pillar}</span>
               <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "#5C7A9922", color: "#5C7A99" }}>{idea.platform}</span>
@@ -3519,8 +3599,14 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
               </div>
             )}
             <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 10 }}>{idea.source}</div>
-            <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => addFromIdea(idea)}>
-              <Plus size={12} style={{ marginRight: 4 }} /> Add to plan
+            <button
+              className="btnSecondary"
+              style={{ fontSize: 12, padding: "6px 12px" }}
+              disabled={idea.loading}
+              onClick={() => addFromIdea(idea, i)}
+            >
+              <Plus size={12} style={{ marginRight: 4 }} />
+              {idea.loading ? "Replacing..." : "Add to plan"}
             </button>
           </div>
         ))}
