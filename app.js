@@ -1708,10 +1708,23 @@ const COLUMNS = [
 function CardTable({ cards, onSelect, playerLabel, sortKey, sortDir, onSort }) {
   const gridCols = COLUMNS.map((c) => c.width).join(" ") + " 32px";
 
-  const sorted = useMemo(() => {
+const sorted = useMemo(() => {
     if (!sortKey) return cards;
     const dir = sortDir === "asc" ? 1 : -1;
+
     return [...cards].sort((a, b) => {
+      // 1. Priority / Action Custom Ranking
+      if (sortKey === "sellPriority" || sortKey === "priority" || sortKey === "sellDecision") {
+        const prioA = a.sellPriority ?? 99;
+        const prioB = b.sellPriority ?? 99;
+        if (prioA !== prioB) return (prioA - prioB) * dir;
+
+        const decA = DECISION_SORT_ORDER[a.sellDecision] ?? 99;
+        const decB = DECISION_SORT_ORDER[b.sellDecision] ?? 99;
+        if (decA !== decB) return (decA - decB) * dir;
+      }
+
+      // 2. Generic Sort Fallback for numbers, strings, dates
       let av = a[sortKey];
       let bv = b[sortKey];
       if (av == null && bv == null) return 0;
