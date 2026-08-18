@@ -3386,31 +3386,38 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
   return ideas.slice(0, 8);
 }
 
-async function generateAiContentIdea(cards = [], targets = []) {
+// Universal AI content generator (Supports single replacement or bulk array)
+async function generateAiContentIdea(cards = [], targets = [], count = 1) {
   const sellCards = (cards || []).filter((c) => ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10"].includes(c.sellDecision));
   const topProfit = [...(cards || [])].sort((a, b) => (b.expectedListProfit || 0) - (a.expectedListProfit || 0)).slice(0, 3);
-  
+
   const prompt = `
-Generate 1 unique, high-engagement short-form video content idea for a sports card collector based on this data:
+Generate ${count} unique, high-engagement short-form video content idea(s) for a sports card collector based on this data:
 - Cards ready for action: ${sellCards.map(c => `${c.player} (${c.sport})`).join(", ") || "Various"}
 - Top profit cards: ${topProfit.map(c => `${c.player} ($${c.expectedListProfit || 0})`).join(", ")}
 - High confidence targets: ${(targets || []).slice(0, 3).map(t => t.player).join(", ")}
 
-Return ONLY a raw JSON object matching this structure:
-{
+Return ONLY a raw JSON ${count > 1 ? "ARRAY of objects" : "SINGLE object"} matching this structure:
+${count > 1 ? "[" : ""}{
   "title": "Headline",
   "pillar": "Rookie Card Spotlights", 
   "platform": "YouTube Shorts",
   "hook": "\\"First 2 seconds quote\\"",
   "source": "Generated via AI from your portfolio",
   "outline": ["Hook line", "Context line", "Math line", "Call to action"]
-}
-Pillars allowed: "Pack & Box Openings", "Budget-Friendly Investing", "Rookie Card Spotlights", "Sell/Flip Update", "Grading & Raw Tips", "Behind the Scenes".
-Platforms allowed: "YouTube (long-form)", "YouTube Shorts", "TikTok", "Instagram", "Multiple".
+}${count > 1 ? "]" : ""}
+
+Allowed Pillars: "Pack & Box Openings", "Budget-Friendly Investing", "Rookie Card Spotlights", "Sell/Flip Update", "Grading & Raw Tips", "Behind the Scenes".
+Allowed Platforms: "YouTube (long-form)", "YouTube Shorts", "TikTok", "Instagram", "Multiple".
 `;
 
   try {
     const rawText = await callGeminiAi(prompt);
+
+    if (!rawText || typeof rawText !== "string") {
+      throw new Error("Invalid response string from Gemini Edge Function");
+    }
+
     const cleanJson = rawText.replace(/```json|```/g, "").trim();
     return JSON.parse(cleanJson);
   } catch (err) {
@@ -3443,16 +3450,19 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
     setDynamicIdeas(initialIdeas);
   }, [initialIdeas]);
 
+// Bulk Re-generate Ideas in 1 single API call (Eliminates 503 rate limits)
   async function handleRegenerateAll() {
     setIsGenerating(true);
-    const newIdeas = [];
-    for (let i = 0; i < 4; i++) {
-      const idea = await generateAiContentIdea(cards, targets);
-      if (idea) newIdeas.push(idea);
-    }
-    if (newIdeas.length > 0) {
+    
+    // Request 4 distinct ideas in 1 prompt
+    const newIdeas = await generateAiContentIdea(cards, targets, 4);
+
+    if (newIdeas && Array.isArray(newIdeas) && newIdeas.length > 0) {
       setDynamicIdeas(newIdeas);
+    } else {
+      console.warn("Could not fetch new bulk ideas, keeping active set.");
     }
+    
     setIsGenerating(false);
   }
 
