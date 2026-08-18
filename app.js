@@ -1716,9 +1716,70 @@ const COLUMNS = [
   { key: "rawGGR", label: "Raw GGR", width: "90px" },
   { key: "gradedEV", label: "Graded EV", width: "90px" },
   { key: "expectedListProfit", label: "Exp. Sell Profit", width: "110px" },
-  { key: "sellDecision", label: "Decision", width: "1fr" },
+  { key: "sellDecision", label: "Decision", width: "130px", sortable: true },
+  { key: "timing", label: "Timing", width: "110px", sortable: false }, // <-- ADD THIS LINE
 ];
+// Helper to render compact Seasonal Timing for Sell decisions
+function renderSeasonalTiming(card) {
+  const decision = card.decision || "";
+  const isSellDecision = ["Sell PSA 10", "Sell PSA 9", "Sell Raw First"].includes(decision);
+  
+  const timing = card.seasonalTiming || card.timing || card.seasonal_timing;
+  if (!isSellDecision || !timing) return null;
 
+  const isPositive = ["good", "peak", "strong"].some((t) => timing.toLowerCase().includes(t));
+  
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        padding: "2px 6px",
+        borderRadius: 4,
+        textTransform: "uppercase",
+        letterSpacing: "0.3px",
+        background: isPositive ? "#1E3A2B" : "#2A2E3D",
+        color: isPositive ? "#4E8B6B" : "#8B90A0",
+        border: `1px solid ${isPositive ? "#2E5940" : "#3A3F50"}`,
+        whiteSpace: "nowrap",
+      }}
+      title={`Seasonal Timing: ${timing}`}
+    >
+      ⏱️ {timing}
+    </span>
+  );
+}
+
+// Helper to render compact Grade Timing for Grade decisions
+function renderGradeTiming(card) {
+  const decision = card.decision || "";
+  const isGradeDecision = ["Grade First", "Grade PSA", "Grade BGS", "Consider Grading"].includes(decision);
+
+  const timing = card.gradeTiming || card.grade_timing;
+  if (!isGradeDecision || !timing) return null;
+
+  const isNow = ["now", "good", "optimal"].some((t) => timing.toLowerCase().includes(t));
+
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        padding: "2px 6px",
+        borderRadius: 4,
+        textTransform: "uppercase",
+        letterSpacing: "0.3px",
+        background: isNow ? "#3A2E1E" : "#2A2E3D",
+        color: isNow ? "#C9A227" : "#8B90A0",
+        border: `1px solid ${isNow ? "#59462E" : "#3A3F50"}`,
+        whiteSpace: "nowrap",
+      }}
+      title={`Grade Timing: ${timing}`}
+    >
+      💎 {timing}
+    </span>
+  );
+}
 function CardTable({ cards, onSelect, playerLabel, sortKey, sortDir, onSort }) {
   const gridCols = COLUMNS.map((c) => c.width).join(" ") + " 32px";
 
@@ -1841,7 +1902,81 @@ function CardRow({ card, onClick, gridCols }) {
     </div>
   );
 }
+function CardRow({ card, onClick, gridCols }) {
+  const style = SELL_DECISION_STYLE[card.sellDecision] || SELL_DECISION_STYLE[""];
+  const isTopAction = card.sellPriority === 1; // Sell PSA 9 / Sell PSA 10 — strongest highlight
+  const isRawSell = card.sellDecision === "Sell Raw First"; // still flagged, just quieter than a graded sell
+  const isGradeAction = card.sellPriority >= 3 && card.sellPriority <= 5 && card.sellDecision === "Grade First";
 
+  return (
+    <div
+      onClick={onClick}
+      className="cardRow"
+      style={{
+        display: "grid",
+        gridTemplateColumns: gridCols,
+        padding: "12px 14px",
+        borderTop: "1px solid #24272F",
+        borderLeft: isTopAction ? `4px solid ${style.color}` : isRawSell ? `3px solid ${style.color}80` : isGradeAction ? `4px solid ${style.color}` : "4px solid transparent",
+        background: isTopAction ? `${style.color}14` : isRawSell ? `${style.color}08` : "transparent",
+        cursor: "pointer",
+        alignItems: "center",
+        fontSize: 13,
+      }}
+    >
+      <div>
+        <div style={{ fontWeight: 600 }}>
+          {card.player}
+          {card.rookie && (
+            <span className="mono" style={{ fontSize: 9.5, color: "#C9A227", border: "1px solid #C9A22755", borderRadius: 4, padding: "1px 5px", marginLeft: 6 }}>RC</span>
+          )}
+          {card.sport && <span className="mono" style={{ fontSize: 10, color: "#6B7180", marginLeft: 8 }}>{SPORT_EMOJI[card.sport] || "🎴"} {card.sport}</span>}
+        </div>
+        <div style={{ fontSize: 12, color: "#6B7180" }}>
+          {card.card}{card.cardNum ? ` ${card.cardNum}` : ""}
+          {card.numbered && card.outOf ? ` /${card.outOf}` : ""}
+          {card.location && card.location !== "In Hand" && (
+            <span className="mono" style={{ fontSize: 10, color: (LOCATION_STYLE[card.location] || {}).color || "#8B90A0", marginLeft: 8 }}>
+              📍 {card.location}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{ color: "#A7ADBB" }}>{card.status}{card.grade ? ` · ${card.grade}` : ""}</div>
+      <div>{fmtMoney(card.totalCost)}</div>
+      <div style={{ color: card.rawGGR >= 0 ? "#4E8B6B" : "#B4472E" }}>{card.rawGGR != null ? fmtMoney(card.rawGGR) : "—"}</div>
+      <div style={{ color: card.gradedEV >= 0 ? "#4E8B6B" : "#B4472E" }}>{card.gradedEV != null ? fmtMoney(card.gradedEV) : "—"}</div>
+      <div style={{ color: card.expectedListProfit >= 0 ? "#4E8B6B" : card.expectedListProfit != null ? "#B4472E" : "#5C6270", fontWeight: card.expectedListProfit != null ? 600 : 400 }}>
+        {card.expectedListProfit != null ? fmtMoney(card.expectedListProfit) : "—"}
+      </div>
+      <div>
+        <span
+          className="mono"
+          style={{
+            fontSize: isTopAction ? 11.5 : 10.5,
+            fontWeight: isTopAction ? 700 : 500,
+            padding: isTopAction ? "4px 11px" : "3px 9px",
+            borderRadius: 999,
+            background: isTopAction ? style.color : `${style.color}22`,
+            color: isTopAction ? "#14161C" : style.color,
+          }}
+        >
+          {isTopAction ? "⚡ " : ""}{style.label}
+        </span>
+      </div>
+
+      {/* NEW Timing Indicator Cell */}
+      <div style={{ display: "flex", alignItems: "center" }}>
+        {renderSeasonalTiming(card)}
+        {renderGradeTiming(card)}
+      </div>
+
+      <div style={{ color: "#5C6270", display: "flex", justifyContent: "flex-end" }}>
+        <ChevronRight size={16} />
+      </div>
+    </div>
+  );
+}
 function AddCardModal({ onClose, onSave, playerLabel }) {
   const [form, setForm] = useState({
     player: "",
