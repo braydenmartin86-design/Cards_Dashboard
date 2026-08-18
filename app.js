@@ -1198,32 +1198,37 @@ function App() {
           <BusinessSummary cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} />
         )}
 
-        {(tab === "portfolio" || tab === "pokemon") && (
-          <>
-            <StatBar totals={totals} />
-            <FilterRow
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
-              decisionFilter={decisionFilter}
-              setDecisionFilter={setDecisionFilter}
-              sportFilter={sportFilter}
-              setSportFilter={setSportFilter}
-              locationFilter={locationFilter}
-              setLocationFilter={setLocationFilter}
-              setSortKey={setSortKey}
-              enriched={enriched}
-            />
-            <CardTable
-              cards={filtered}
-              onSelect={setSelected}
-              playerLabel={isPokemon ? "Pokémon / Card Name" : "Player"}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={handleSort}
-              isPokemon={isPokemon}
-            />
-          </>
-        )}
+       {(tab === "portfolio" || tab === "pokemon") && (
+  <>
+    {/* 1. StatBar calculates active tab stats (sports or pokemon) automatically */}
+    <StatBar totals={totals} />
+
+    {/* 2. FilterRow handles filters for the active collection */}
+    <FilterRow
+      statusFilter={statusFilter}
+      setStatusFilter={setStatusFilter}
+      decisionFilter={decisionFilter}
+      setDecisionFilter={setDecisionFilter}
+      sportFilter={sportFilter}
+      setSportFilter={setSportFilter}
+      locationFilter={locationFilter}
+      setLocationFilter={setLocationFilter}
+      setSortKey={setSortKey}
+      enriched={enriched}
+    />
+
+    {/* 3. CardTable displays active items with identical EV & Grade logic */}
+    <CardTable
+      cards={filtered}
+      onSelect={setSelected}
+      playerLabel={isPokemon ? "Pokémon / Card Name" : "Player"}
+      sortKey={sortKey}
+      sortDir={sortDir}
+      onSort={handleSort}
+      isPokemon={isPokemon}
+    />
+  </>
+)}
 
         {tab === "sales" && <MySales items={salesItems} onUpdate={updateCardIn} onDelete={deleteCardIn} />}
         {tab === "boxbreaks" && <BoxBreaks boxBreaks={boxBreaks} setBoxBreaks={setBoxBreaks} />}
