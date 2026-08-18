@@ -112,12 +112,19 @@ const SEED_TARGETS = [{"id": null, "player": "Jackson Chourio", "sport": "MLB", 
 // ===== Formula engine, ported 1:1 from the user's Excel model =====
 async function generateAiMonthlyTargets(cards = [], pokemonCards = []) {
   const sportsSummary = [...(cards || []), ...(pokemonCards || [])]
-    .map(c => `${c.player} (${c.sport})`)
+    .map(c => `${c.player || c.name || "Card"} (${c.sport || "TCG"})`)
     .slice(0, 10)
     .join(", ");
 
   const prompt = `
 Generate 6 current market buy/speculative targets for a sports and trading card investor based on their current collection interest (${sportsSummary || "Various sports/Pokémon"}).
+
+IMPORTANT SCORING & REASONING RULES:
+1. 'researchScore': Number between 20 and 92. Reserve 88-92 exclusively for premier, top-tier modern grails/blue-chips.
+2. 'reasoning': Must be a detailed, comprehensive 3-part rationale covering:
+   - Primary Catalyst (e.g. print status, out-of-print sealed supply, player performance momentum).
+   - Key Risk Factor (e.g. population growth, off-season lull, price volatility).
+   - Strategic Entry (e.g. target buy window, raw for grading vs graded spread).
 
 Return ONLY a valid JSON array of objects matching this exact structure:
 [
@@ -126,9 +133,9 @@ Return ONLY a valid JSON array of objects matching this exact structure:
     "sport": "NBA/NFL/MLB/Soccer/Pokémon",
     "cardToLookFor": "Specific parallel or card set",
     "tier": "Buy Now",
-    "researchScore": 55,
+    "researchScore": 88,
     "performanceTrend": "Improving",
-    "reasoning": "Brief rationale on why to buy or target right now.",
+    "reasoning": "Primary Catalyst: ... Key Risk: ... Strategic Entry: ...",
     "targetPriceRaw": 45,
     "targetPriceGraded": "",
     "status": "Watching"
