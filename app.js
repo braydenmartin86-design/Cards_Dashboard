@@ -1062,41 +1062,30 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   const computeFn = isPokemon ? computePokemonCard : computeCard;
 
 // Enriched calculations for Sports & Pokémon Cards
-const enriched = useMemo(
+  const enriched = useMemo(
     () =>
       cards.map((c) => {
-        const computed = computeFn(c);
+        const computed = computeCard(c);
         const listing = recommendedListing(computed);
         const expectedListProfit = listing ? listing.listPrice * (1 - computed.feesPct) - computed.totalCost : null;
         return { ...computed, expectedListProfit };
       }),
-    [cards, computeFn]
+    [cards]
   );
 
   const enrichedPokemonCards = useMemo(
     () =>
       pokemonCards.map((c) => {
-        const computed = computeFn(c);
+        const computed = computePokemonCard(c);
         const listing = recommendedListing(computed);
         const expectedListProfit = listing ? listing.listPrice * (1 - computed.feesPct) - computed.totalCost : null;
         return { ...computed, expectedListProfit };
       }),
-    [pokemonCards, computeFn]
+    [pokemonCards]
   );
 
-  // Totals calculations
-  const calculateTotals = (list) => {
-    const invested = list.reduce((sum, c) => sum + (c.totalCost || 0), 0);
-    const potentialRaw = list.reduce((sum, c) => sum + (c.rawGGR || 0), 0);
-    return { invested, potentialRaw, count: list.length };
-  };
-
-  const totals = useMemo(() => calculateTotals(enriched), [enriched]);
-  const pokemonTotals = useMemo(() => calculateTotals(enrichedPokemonCards), [enrichedPokemonCards]);
-
+  // Filtered views
   const filtered = useMemo(() => {
-  const filteredPokemonCards = useMemo(() => enrichedPokemonCards.filter((c) => c.status === "Raw" || c.status === "Graded"), [enrichedPokemonCards]);
-    // Sold and Listed cards live in the My Sales tab now — keep this table to active inventory
     let list = enriched.filter((c) => c.status === "Raw" || c.status === "Graded");
     if (statusFilter === "action") {
       list = list.filter((c) =>
@@ -1126,8 +1115,14 @@ const enriched = useMemo(
     }
     return list;
   }, [enriched, statusFilter, decisionFilter, sportFilter, locationFilter, sortKey]);
-  const filteredPokemonCards = useMemo(() => enrichedPokemonCards.filter((c) => c.status === "Raw" || c.status === "Graded"), [enrichedPokemonCards]);
- const totals = useMemo(() => {
+
+  const filteredPokemonCards = useMemo(
+    () => enrichedPokemonCards.filter((c) => c.status === "Raw" || c.status === "Graded"),
+    [enrichedPokemonCards]
+  );
+
+  // Single Totals Declarations
+  const totals = useMemo(() => {
     const qty = (c) => Number(c.quantity) || 1;
     const active = enriched.filter((c) => c.status !== "Sold");
     const invested = active.reduce((s, c) => s + c.totalCost * qty(c), 0);
