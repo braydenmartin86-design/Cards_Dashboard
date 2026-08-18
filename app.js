@@ -1683,12 +1683,11 @@ function FilterRow({ statusFilter, setStatusFilter, decisionFilter, setDecisionF
 }
 
 // Within a tied priority tier, group by decision type before breaking ties on cost —
-// otherwise Sell Raw First and Sell PSA 9/10 (both priority 1) interleave by dollar
-// amount instead of clustering together, which looks like sorting is broken.
+// otherwise decision types interleave by dollar amount instead of clustering together.
 const DECISION_SORT_ORDER = {
-  "Sell Raw First": 0,
-  "Sell PSA 10": 1,
-  "Sell PSA 9": 2,
+  "Sell PSA 10": 0,
+  "Sell PSA 9": 1,
+  "Sell Raw First": 2,
   "Grade First": 3,
   Hold: 4,
   Listed: 5,
