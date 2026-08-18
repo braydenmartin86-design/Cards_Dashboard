@@ -1965,7 +1965,6 @@ function CardRow({ card, onClick, gridCols }) {
         </span>
       </div>
 
-      {/* NEW Timing Indicator Cell */}
       <div style={{ display: "flex", alignItems: "center" }}>
         {renderSeasonalTiming(card)}
         {renderGradeTiming(card)}
