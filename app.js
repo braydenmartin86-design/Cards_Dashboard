@@ -3640,18 +3640,29 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setShowSavedList(false);
   }
 
-function deleteScan(id) {
-    if (!window.confirm("Are you sure you want to delete this saved scan?")) return;
+function deleteScan(targetScan) {
+  const targetId = typeof targetScan === "object" ? targetScan.id : targetScan;
+  const targetName = typeof targetScan === "object" ? targetScan.name : null;
 
-    setSavedScans((prev) => {
-      const updated = prev.filter((s) => s.id !== id);
-      try {
-        localStorage.setItem("lotScans", JSON.stringify(updated));
-      } catch (err) {
-        console.error("Failed to update localStorage", err);
-      }
-      return updated;
+  if (!window.confirm("Are you sure you want to delete this saved scan?")) return;
+
+  setSavedScans((prev) => {
+    const updated = prev.filter((s) => {
+      if (targetId && s.id) return s.id !== targetId;
+      if (targetName && s.name) return s.name !== targetName;
+      return s !== targetScan;
     });
+
+    try {
+      localStorage.setItem("lotScans", JSON.stringify(updated));
+    } catch (err) {
+      console.error("Failed to update localStorage", err);
+    }
+    return updated;
+  });
+
+  if (loadedScanId === targetId) setLoadedScanId(null);
+}
 
     if (loadedScanId === id) setLoadedScanId(null);
   }
