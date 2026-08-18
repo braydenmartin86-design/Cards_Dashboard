@@ -3386,7 +3386,7 @@ function generateContentIdeas(cards, pokemonCards, targets, boxBreaks, salesItem
   return ideas.slice(0, 8);
 }
 
-// Universal AI content generator (Supports single replacement or bulk array)
+// Universal AI content generator (Set default batch to 6)
 async function generateAiContentIdea(cards = [], targets = [], count = 1) {
   const sellCards = (cards || []).filter((c) => ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10"].includes(c.sellDecision));
   const topProfit = [...(cards || [])].sort((a, b) => (b.expectedListProfit || 0) - (a.expectedListProfit || 0)).slice(0, 3);
@@ -3450,12 +3450,12 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
     setDynamicIdeas(initialIdeas);
   }, [initialIdeas]);
 
-// Bulk Re-generate Ideas in 1 single API call (Eliminates 503 rate limits)
+// Bulk Re-generate Ideas - Requests 6 ideas in 1 single API call
   async function handleRegenerateAll() {
     setIsGenerating(true);
     
-    // Request 4 distinct ideas in 1 prompt
-    const newIdeas = await generateAiContentIdea(cards, targets, 4);
+    // Request 6 distinct ideas in 1 prompt
+    const newIdeas = await generateAiContentIdea(cards, targets, 6);
 
     if (newIdeas && Array.isArray(newIdeas) && newIdeas.length > 0) {
       setDynamicIdeas(newIdeas);
