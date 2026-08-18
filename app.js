@@ -1902,10 +1902,62 @@ function CardRow({ card, onClick, gridCols }) {
     </div>
   );
 }
+function CardTable({ cards, onSelect, playerLabel, sortKey, sortDir, onSort }) {
+  const gridCols = COLUMNS.map((c) => c.width).join(" ") + " 32px";
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return cards;
+    const dir = sortDir === "asc" ? 1 : -1;
+
+    return [...cards].sort((a, b) => {
+      if (sortKey === "sellPriority" || sortKey === "priority" || sortKey === "sellDecision") {
+        const prioA = a.sellPriority ?? 99;
+        const prioB = b.sellPriority ?? 99;
+        if (prioA !== prioB) return (prioA - prioB) * dir;
+
+        const decA = DECISION_SORT_ORDER[a.sellDecision] ?? 99;
+        const decB = DECISION_SORT_ORDER[b.sellDecision] ?? 99;
+        if (decA !== decB) return (decA - decB) * dir;
+      }
+
+      let av = a[sortKey];
+      let bv = b[sortKey];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === "string") return av.localeCompare(bv) * dir;
+      return (av - bv) * dir;
+    });
+  }, [cards, sortKey, sortDir]);
+
+  return (
+    <div style={{ marginTop: 18, border: "1px solid #2C303B", borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: gridCols, padding: "10px 14px", background: "#1D2028", fontSize: 11, color: "#8B90A0", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        {COLUMNS.map((c) => (
+          <div
+            key={c.key}
+            onClick={() => onSort(c.key)}
+            style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 3, userSelect: "none" }}
+          >
+            {c.key === "player" ? playerLabel || "Card" : c.label}
+            {sortKey === c.key && <span style={{ color: "#C9A227" }}>{sortDir === "asc" ? "▲" : "▼"}</span>}
+          </div>
+        ))}
+        <div />
+      </div>
+      {sorted.length === 0 ? (
+        <div style={{ padding: "3rem 0", textAlign: "center", color: "#5C6270" }}>No cards match this filter.</div>
+      ) : (
+        sorted.map((c) => <CardRow key={c.id} card={c} onClick={() => onSelect(c.id)} gridCols={gridCols} />)
+      )}
+    </div>
+  );
+}
+
 function CardRow({ card, onClick, gridCols }) {
   const style = SELL_DECISION_STYLE[card.sellDecision] || SELL_DECISION_STYLE[""];
-  const isTopAction = card.sellPriority === 1; // Sell PSA 9 / Sell PSA 10 — strongest highlight
-  const isRawSell = card.sellDecision === "Sell Raw First"; // still flagged, just quieter than a graded sell
+  const isTopAction = card.sellPriority === 1;
+  const isRawSell = card.sellDecision === "Sell Raw First";
   const isGradeAction = card.sellPriority >= 3 && card.sellPriority <= 5 && card.sellDecision === "Grade First";
 
   return (
