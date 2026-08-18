@@ -2060,12 +2060,14 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
     setEdit(true);
   }
 
-  function save() {
+function save() {
     const today = new Date().toISOString().slice(0, 10);
     const newRawAvg = avgOfSales(form.rawSale1, form.rawSale2);
     const newPsa9Avg = avgOfSales(form.psa9Sale1, form.psa9Sale2);
     const newPsa10Avg = avgOfSales(form.psa10Sale1, form.psa10Sale2);
-   onUpdate({
+    
+    // Pass a single unified object containing the id and all updated properties
+    onUpdate({
       ...card,
       ...form,
       id: card.id,
