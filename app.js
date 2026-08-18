@@ -2065,8 +2065,10 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
     const newRawAvg = avgOfSales(form.rawSale1, form.rawSale2);
     const newPsa9Avg = avgOfSales(form.psa9Sale1, form.psa9Sale2);
     const newPsa10Avg = avgOfSales(form.psa10Sale1, form.psa10Sale2);
-    onUpdate(card.id, {
+   onUpdate({
+      ...card,
       ...form,
+      id: card.id,
       paid: Number(form.paid) || 0,
       shipping: Number(form.shipping) || 0,
       rawAvg: newRawAvg,
