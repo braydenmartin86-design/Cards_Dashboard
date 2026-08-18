@@ -110,7 +110,44 @@ const SEED_POKEMON = [{"player": "Arcanine EX", "card": "2023 Scarlet & Violet",
 
 const SEED_TARGETS = [{"id": null, "player": "Jackson Chourio", "sport": "MLB", "cardToLookFor": "2024 Topps Chrome/Bowman base rookie", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Improving", "reasoning": "Elite power/speed combo already producing at the MLB level for Milwaukee. Base rookies remain cheap for the production level.", "targetPriceRaw": 22, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Ausar Thompson", "sport": "NBA", "cardToLookFor": "2023-24 Prizm Silver, PSA 9", "tier": "Buy Now", "researchScore": 52, "performanceTrend": "Improving", "reasoning": "Defensive win shares climbing, PSA 9 Silver copies trading in the low $40s — cheap entry on a legitimate two-way piece.", "targetPriceRaw": "", "targetPriceGraded": 63, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Keyonte George", "sport": "NBA", "cardToLookFor": "2023-24 Optic Purple Shock /149", "tier": "Buy Now", "researchScore": 46, "performanceTrend": "Stable", "reasoning": "Numbered parallel with a stabilizing assist-to-turnover ratio — primary guard role on a rebuilding roster gives him a real usage floor.", "targetPriceRaw": 51, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "GG Jackson II", "sport": "NBA", "cardToLookFor": "2023-24 Donruss Choice Red/Green", "tier": "Speculative", "researchScore": 38, "performanceTrend": "Stable", "reasoning": "One of the youngest high-volume scorers in the league. Cheap parallel, real speculative upside if usage keeps climbing.", "targetPriceRaw": 42, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Tre Johnson", "sport": "NBA", "cardToLookFor": "2025-26 Prizm rookie", "tier": "Speculative", "researchScore": 40, "performanceTrend": "Stable", "reasoning": "Efficient 19.9 PPG freshman season translated into draft buzz. Rookie cards still cheap pre-breakout.", "targetPriceRaw": 45, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Ethan Salas", "sport": "MLB", "cardToLookFor": "Bowman Chrome prospect card", "tier": "Speculative", "researchScore": 32, "performanceTrend": "Stable", "reasoning": "Top catching prospect, still developing at Double A. Cheap lottery-ticket entry on a well-regarded prospect pedigree.", "targetPriceRaw": 15, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Walker Jenkins", "sport": "MLB", "cardToLookFor": "Bowman Draft rookie", "tier": "Speculative", "researchScore": 34, "performanceTrend": "Stable", "reasoning": "Power/speed tools prospect, trades cheap raw. Same profile as Jackson Chourio pre-breakout.", "targetPriceRaw": 20, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Drake Maye", "sport": "NFL", "cardToLookFor": "Opti Chrome insert", "tier": "Buy Now", "researchScore": 44, "performanceTrend": "Stable", "reasoning": "Cheap insert pricing ahead of a full season as starter — training camp buzz historically moves these before kickoff.", "targetPriceRaw": 25, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "AJ Dybantsa", "sport": "NBA", "cardToLookFor": "Bowman U NOW (pre-rookie)", "tier": "Speculative", "researchScore": 32, "performanceTrend": "Stable", "reasoning": "Consensus top prospect for next year's draft class. No real rookie card exists yet — cheap, high-risk early entry.", "targetPriceRaw": 45, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Darryn Peterson", "sport": "NBA", "cardToLookFor": "Bowman U NOW (pre-rookie)", "tier": "Speculative", "researchScore": 27, "performanceTrend": "Stable", "reasoning": "Alongside Dybantsa, one of the two best names in next year's class. Same pre-rookie caveat.", "targetPriceRaw": 35, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Willem Duursma", "sport": "AFL", "cardToLookFor": "2026 Select rookie card", "tier": "Speculative", "researchScore": 28, "performanceTrend": "Improving", "reasoning": "West Coast's No.1 pick in the 2025 AFL Draft, already praised for footy smarts early. Thin dedicated card-market data for AFL.", "targetPriceRaw": 30, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Anthony Edwards", "sport": "NBA", "cardToLookFor": "2020-21 Prizm base rookie, PSA 9", "tier": "Buy Now", "researchScore": 56, "performanceTrend": "Improving", "reasoning": "MVP conversations, All-Star, growing global fanbase. PSA 9 copies sit well under the PSA 10 blue-chip price for similar collector cachet.", "targetPriceRaw": "", "targetPriceGraded": 150, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Justin Herbert", "sport": "NFL", "cardToLookFor": "2020 Prizm rookie, PSA 9", "tier": "Buy Now", "researchScore": 48, "performanceTrend": "Stable", "reasoning": "PSA 9 copies trade $80-120 USD (~$120-180 AUD) versus $300-400 for PSA 10 — same recognizable rookie at a fraction of the premium-grade cost.", "targetPriceRaw": "", "targetPriceGraded": 150, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Nick Daicos", "sport": "AFL", "cardToLookFor": "Select rookie signatures, numbered parallels", "tier": "Buy Now", "researchScore": 55, "performanceTrend": "Stable", "reasoning": "Established, decorated star — one of the safest holds in the AFL market. Thin dedicated AFL card-market data compared to US sports.", "targetPriceRaw": 130, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Konnor Griffin", "sport": "MLB", "cardToLookFor": "2026 Bowman / Topps Chrome first-year cards", "tier": "Speculative", "researchScore": 42, "performanceTrend": "Stable", "reasoning": "Headlines this year's Bowman and Topps Chrome checklists as one of the most sought-after prospects in the product, still in the minors.", "targetPriceRaw": 150, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Carnell Tate", "sport": "NFL", "cardToLookFor": "2026 Prizm / Optic rookie autos", "tier": "Buy Now", "researchScore": 50, "performanceTrend": "Stable", "reasoning": "First WR off the board, landing opposite an ascending young QB. Strong, reliable college production.", "targetPriceRaw": 140, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Jeremiyah Love", "sport": "NFL", "cardToLookFor": "2026 Prizm / Optic rookie autos", "tier": "Buy Now", "researchScore": 36, "performanceTrend": "Stable", "reasoning": "Top RB in the class. RBs carry more bust/workload risk than QBs and WRs — size smaller than the QB/WR targets.", "targetPriceRaw": 130, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Bianca Belair", "sport": "WWE", "cardToLookFor": "2026 Topps Chrome WWE autos", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Improving", "reasoning": "Flagged in June 2026 market coverage as a genuine buying opportunity — trading soft for a multi-time champion, real room to correct upward.", "targetPriceRaw": "", "targetPriceGraded": 130, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Islam Makhachev", "sport": "MMA", "cardToLookFor": "Topps/Panini Select autographed cards", "tier": "Buy Now", "researchScore": 48, "performanceTrend": "Stable", "reasoning": "Reigning lightweight champion, one of the sport's most dominant current fighters — proven titleholder, not speculative.", "targetPriceRaw": "", "targetPriceGraded": 160, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Fernando Mendoza", "sport": "NFL", "cardToLookFor": "2026 Prizm / Donruss Optic rookie autos", "tier": "Buy Now", "researchScore": 62, "performanceTrend": "Stable", "reasoning": "No.1 overall pick with a confirmed starting job. QB is the position with the biggest hobby premium.", "targetPriceRaw": 240, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Cooper Flagg", "sport": "NBA", "cardToLookFor": "2025-26 Prizm / Topps Chrome rookie", "tier": "Buy Now", "researchScore": 50, "performanceTrend": "Improving", "reasoning": "The class's foundational prospect, now in his rookie NBA season. Already priced accordingly — an 'own the blue chip' hold, not a sleeper.", "targetPriceRaw": 260, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Gunther", "sport": "WWE", "cardToLookFor": "2026 Topps Royalty WWE, WrestleMania patch autos", "tier": "Buy Now", "researchScore": 40, "performanceTrend": "Stable", "reasoning": "One of the hottest chases in the product — his 1/1 WrestleMania patch auto sold for over $18,000. Standard autos still land in reach.", "targetPriceRaw": "", "targetPriceGraded": 260, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Jude Bellingham", "sport": "Soccer", "cardToLookFor": "Topps Chrome UCL, Match Attax rookie-era cards", "tier": "Buy Now", "researchScore": 52, "performanceTrend": "Stable", "reasoning": "Established Real Madrid/England star, cited as a benchmark long-term soccer card hold. Steadier than a rising rookie pick.", "targetPriceRaw": 220, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Victor Wembanyama", "sport": "NBA", "cardToLookFor": "Recon Future Legends insert (premium tier, lower entry than base Prizm)", "tier": "Buy Now", "researchScore": 60, "performanceTrend": "Improving", "reasoning": "Insert-tier entry point on a card whose base rookie has already sold privately for $5.11M. Premium tier still carries real collector cachet at a fraction of the cost.", "targetPriceRaw": "", "targetPriceGraded": 300, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Justin Herbert (PSA 10)", "sport": "NFL", "cardToLookFor": "2020 Prizm base rookie, PSA 10", "tier": "Buy Now", "researchScore": 44, "performanceTrend": "Stable", "reasoning": "PSA 10 copies trade $300-400 USD (~$450-600 AUD) — established, recognizable rookie with a long track record as a top-tier arm.", "targetPriceRaw": "", "targetPriceGraded": 480, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Roman Anthony (PSA 9)", "sport": "MLB", "cardToLookFor": "2026 Topps Chrome / Bowman Chrome, PSA 9", "tier": "Buy Now", "researchScore": 48, "performanceTrend": "Improving", "reasoning": "Elite outfield prospect already producing at the MLB level, elite plate discipline. Prices have moved fast — this is more 'own at least one' than a bargain now.", "targetPriceRaw": "", "targetPriceGraded": 380, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Lamine Yamal", "sport": "Soccer", "cardToLookFor": "Topps Match Attax Red Hot / Golden Moment inserts", "tier": "Buy Now", "researchScore": 55, "performanceTrend": "Improving", "reasoning": "Teenage sensation driving current Match Attax pull rates. Global star with the 2026 World Cup as a major demand catalyst for the whole category.", "targetPriceRaw": 350, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Anthony Edwards (PSA 10)", "sport": "NBA", "cardToLookFor": "2020-21 Prizm base rookie, PSA 10", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Improving", "reasoning": "Considered a blue-chip modern hobby card — Prizm brand credibility, MVP-conversation trajectory, growing global fanbase.", "targetPriceRaw": "", "targetPriceGraded": 700, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Lamine Yamal (PSA 10)", "sport": "Soccer", "cardToLookFor": "Base Chrome rookie, PSA 10", "tier": "Buy Now", "researchScore": 53, "performanceTrend": "Improving", "reasoning": "PSA 10 base Chrome copies trading $500-1,500 USD and rising, per current market coverage — World Cup year adds further upside.", "targetPriceRaw": "", "targetPriceGraded": 750, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Umbreon VMAX Alt Art (\"Moonbreon\")", "sport": "Pokémon", "cardToLookFor": "Evolving Skies Umbreon VMAX Alt Art, near-mint raw", "tier": "Buy Now", "researchScore": 62, "performanceTrend": "Stable", "reasoning": "The poster child for modern Pokémon investing — went from ~$200 to $700+ within two years of release. Raw near-mint sits below the PSA 10 premium.", "targetPriceRaw": 650, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Erling Haaland", "sport": "Soccer", "cardToLookFor": "Base rookie, PSA 10", "tier": "Buy Now", "researchScore": 54, "performanceTrend": "Stable", "reasoning": "Incredible scoring record makes his rookies among the most sought-after modern soccer cards. PSA 10 base copies trade $1,000-2,500 USD (~$1,500-3,700 AUD).", "targetPriceRaw": "", "targetPriceGraded": 1600, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Victor Wembanyama (PSA 10)", "sport": "NBA", "cardToLookFor": "2023-24 Prizm base rookie, PSA 10", "tier": "Buy Now", "researchScore": 66, "performanceTrend": "Improving", "reasoning": "Defensive Player of the Year, MVP-level Year 3 numbers. One of his rookie cards sold privately for $5.11M — the base PSA 10 is the safest liquid entry into that same market.", "targetPriceRaw": "", "targetPriceGraded": 900, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Umbreon VMAX Alt Art (\"Moonbreon\") — PSA 10", "sport": "Pokémon", "cardToLookFor": "Evolving Skies Umbreon VMAX Alt Art, PSA 10", "tier": "Buy Now", "researchScore": 60, "performanceTrend": "Stable", "reasoning": "PSA 10 copies average roughly $3,500. Eeveelution demand plus a rotating set keeps supply tightening.", "targetPriceRaw": "", "targetPriceGraded": 5200, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Charizard (Base Set, 1st Edition)", "sport": "Pokémon", "cardToLookFor": "1999 Base Set 1st Edition Charizard, any grade", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Stable", "reasoning": "The blue-chip of the entire hobby, vintage or modern. PSA 10 copies trade near $168,000-$170,000 USD with a $550,000 sale on record — obviously the top of the market, included for completeness.", "targetPriceRaw": "", "targetPriceGraded": 250000, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Conor McGregor", "sport": "MMA", "cardToLookFor": "Topps Chrome UFC rookie-era autos, PSA 10", "tier": "Buy Now", "researchScore": 50, "performanceTrend": "Stable", "reasoning": "Still described as 'the king' of UFC card collector interest — best cards trade in four figures regardless of active fight status. Safest, most liquid MMA card rather than the highest-upside.", "targetPriceRaw": "", "targetPriceGraded": 1800, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}];
 // ===== Formula engine, ported 1:1 from the user's Excel model =====
+async function generateAiMonthlyTargets(cards = [], pokemonCards = []) {
+  const sportsSummary = [...(cards || []), ...(pokemonCards || [])]
+    .map(c => `${c.player} (${c.sport})`)
+    .slice(0, 10)
+    .join(", ");
 
+  const prompt = `
+Generate 6 current market buy/speculative targets for a sports and trading card investor based on their current collection interest (${sportsSummary || "Various sports/Pokémon"}).
+
+Return ONLY a valid JSON array of objects matching this exact structure:
+[
+  {
+    "player": "Player Name",
+    "sport": "NBA/NFL/MLB/Soccer/Pokémon",
+    "cardToLookFor": "Specific parallel or card set",
+    "tier": "Buy Now",
+    "researchScore": 55,
+    "performanceTrend": "Improving",
+    "reasoning": "Brief rationale on why to buy or target right now.",
+    "targetPriceRaw": 45,
+    "targetPriceGraded": "",
+    "status": "Watching"
+  }
+]
+Tiers allowed: "Buy Now", "Speculative".
+Trends allowed: "Improving", "Stable".
+`;
+
+  try {
+    const rawText = await callGeminiAi(prompt);
+    if (!rawText || typeof rawText !== "string") throw new Error("Invalid AI response");
+    const cleanJson = rawText.replace(/```json|```/g, "").trim();
+    return JSON.parse(cleanJson);
+  } catch (err) {
+    console.error("Failed to generate AI targets:", err);
+    return null;
+  }
+}
 // PSA-via-Australia (local shop, e.g. The Hobby) prices by declared card value in USD,
 // not a flat fee. Tiers below are the standard card-only tier (not vintage/faster-service/
 // jumbo/autograph sub-tiers — those run higher, adjust manually if your card falls there).
@@ -2569,13 +2606,14 @@ function newTarget() {
   };
 }
 
-function MonthlyTargets({ targets, setTargets }) {
+function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
   const [showAdd, setShowAdd] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [justMerged, setJustMerged] = useState(null);
   const [tierFilter, setTierFilter] = useState("all");
   const [priceRangeFilter, setPriceRangeFilter] = useState("all");
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   function addTarget(t) {
     setTargets((prev) => [t, ...prev]);
@@ -2589,60 +2627,29 @@ function MonthlyTargets({ targets, setTargets }) {
     setSelectedId(null);
   }
 
-  function loadNewSuggestions() {
+  // AI-powered Refresh from Research
+  async function loadNewSuggestions() {
+    setIsRefreshing(true);
     const today = new Date().toISOString().slice(0, 10);
-    const byName = new Map(targets.map((t) => [t.player.trim().toLowerCase(), t]));
-    let updatedCount = 0;
-    let addedCount = 0;
+    const aiTargets = await generateAiMonthlyTargets(cards, pokemonCards);
 
-    // If a specific price range is selected, only add/update targets whose researched price
-    // falls in that range — leaves everything else on the list untouched. "All prices" or
-    // "No price set" pulls from the full research set as before.
-    const scoped =
-      priceRangeFilter === "all" || priceRangeFilter === "unpriced"
-        ? SEED_TARGETS
-        : SEED_TARGETS.filter((s) => getPriceRange(getTargetPrice(s))?.key === priceRangeFilter);
-
-    // Refresh anything already on the list that matches a researched target — pulls in the
-    // latest research baseline, reasoning, and card info without touching status or your own
-    // price targets, and resets the decay clock. Anything not in the research set (your own
-    // custom adds) is left alone.
-    const refreshed = targets.map((t) => {
-      const match = scoped.find((s) => s.player.trim().toLowerCase() === t.player.trim().toLowerCase());
-      if (!match) return t;
-      const changed =
-        t.researchScore !== match.researchScore ||
-        t.performanceTrend !== match.performanceTrend ||
-        t.reasoning !== match.reasoning ||
-        t.cardToLookFor !== match.cardToLookFor ||
-        t.tier !== match.tier;
-      if (!changed) return t;
-      updatedCount++;
-      return {
+    if (aiTargets && Array.isArray(aiTargets) && aiTargets.length > 0) {
+      const formatted = aiTargets.map((t) => ({
         ...t,
-        researchScore: match.researchScore,
-        performanceTrend: match.performanceTrend,
-        reasoning: match.reasoning,
-        cardToLookFor: match.cardToLookFor,
-        tier: match.tier,
-        sport: match.sport,
+        id: crypto.randomUUID(),
+        monthAdded: today,
         lastRefreshed: today,
-      };
-    });
-
-    const toAdd = scoped.filter((s) => !byName.has(s.player.trim().toLowerCase())).map((s) => ({
-      ...s,
-      id: crypto.randomUUID(),
-      monthAdded: today,
-      lastRefreshed: today,
-    }));
-    addedCount = toAdd.length;
-
-    setTargets([...toAdd, ...refreshed]);
-    setJustMerged({ added: addedCount, updated: updatedCount });
+      }));
+      setTargets(formatted);
+      setJustMerged({ added: formatted.length, updated: 0 });
+    } else {
+      alert("Could not fetch fresh research from AI right now. Please try again.");
+    }
+    setIsRefreshing(false);
     setTimeout(() => setJustMerged(null), 4000);
   }
 
+  // Fixed Hard Reset pointing directly to SEED_TARGETS state reset
   function hardReset() {
     const today = new Date().toISOString().slice(0, 10);
     setTargets(SEED_TARGETS.map((t) => ({ ...t, id: crypto.randomUUID(), monthAdded: today, lastRefreshed: today })));
@@ -2651,16 +2658,15 @@ function MonthlyTargets({ targets, setTargets }) {
     setTimeout(() => setJustMerged(null), 4000);
   }
 
-  const watching = targets.filter((t) => t.status === "Watching").length;
-  const bought = targets.filter((t) => t.status === "Bought").length;
-  const selected = selectedId ? targets.find((t) => t.id === selectedId) : null;
-  const avgConfidence = targets.length
-    ? Math.round(targets.reduce((s, t) => s + computeConfidence(t), 0) / targets.length)
+  const watching = (targets || []).filter((t) => t.status === "Watching").length;
+  const bought = (targets || []).filter((t) => t.status === "Bought").length;
+  const selected = selectedId ? (targets || []).find((t) => t.id === selectedId) : null;
+  const avgConfidence = (targets || []).length
+    ? Math.round((targets || []).reduce((s, t) => s + computeConfidence(t), 0) / targets.length)
     : null;
 
-  // Most-confident-first, tier + price range filters applied on top
   const visible = useMemo(() => {
-    let list = targets;
+    let list = targets || [];
     if (tierFilter !== "all") list = list.filter((t) => t.tier === tierFilter);
     if (priceRangeFilter === "unpriced") {
       list = list.filter((t) => getTargetPrice(t) == null);
@@ -2675,7 +2681,7 @@ function MonthlyTargets({ targets, setTargets }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 1, background: "#2C303B", border: "1px solid #2C303B", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
         <Stat label="Watching" value={watching} color="#5C7A99" />
         <Stat label="Bought" value={bought} color="#4E8B6B" />
-        <Stat label="Total on list" value={targets.length} />
+        <Stat label="Total on list" value={(targets || []).length} />
         <Stat label="Avg confidence" value={avgConfidence != null ? avgConfidence : "—"} color={avgConfidence != null ? confidenceColor(avgConfidence) : undefined} />
       </div>
 
@@ -2683,7 +2689,6 @@ function MonthlyTargets({ targets, setTargets }) {
         A running watchlist of players/cards worth researching for future investment — not a buy signal on its own. The hobby moves fast; treat anything more than a month or two old as a starting point to re-check, not current pricing.
         <span style={{ color: "#C9A227" }}> "Buy Now"</span> = already rostered/debuted with a real rookie card out.
         <span style={{ color: "#C9A227" }}> "Speculative"</span> = pre-rookie or not yet drafted — cheaper entry, real risk it doesn't pan out.
-        <span style={{ color: "#EDEAE1" }}> Score</span> is calculated, not set by hand — a research baseline that decays the longer it goes without a refresh, slowed way down for players still trending up (↗ Improving) and sped up for anyone trending down (↘ Declining), so a still-elite player doesn't get penalized just for going unrefreshed. Sorted highest first.
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
@@ -2709,20 +2714,13 @@ function MonthlyTargets({ targets, setTargets }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {justMerged != null && (
-            <span style={{ fontSize: 12, color: justMerged.added > 0 || justMerged.updated > 0 ? "#4E8B6B" : "#6B7180" }}>
-              {justMerged.added === 0 && justMerged.updated === 0
-                ? "Already up to date"
-                : [
-                    justMerged.added > 0 ? `Added ${justMerged.added}` : null,
-                    justMerged.updated > 0 ? `updated ${justMerged.updated}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
+            <span style={{ fontSize: 12, color: "#4E8B6B" }}>
+              Successfully refreshed targets from research
             </span>
           )}
-          <button className="btnSecondary" onClick={loadNewSuggestions}>
+          <button className="btnSecondary" onClick={loadNewSuggestions} disabled={isRefreshing}>
             <RefreshCw size={14} style={{ marginRight: 6 }} />
-            Refresh from research{priceRangeFilter !== "all" && priceRangeFilter !== "unpriced" ? ` (${PRICE_RANGES.find((r) => r.key === priceRangeFilter)?.label})` : ""}
+            {isRefreshing ? "✨ Analyzing Market..." : "Refresh from research"}
           </button>
           {!confirmingReset ? (
             <button className="btnSecondary" onClick={() => setConfirmingReset(true)} style={{ color: "#B4472E" }}>
@@ -2730,7 +2728,7 @@ function MonthlyTargets({ targets, setTargets }) {
             </button>
           ) : (
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12, color: "#B4472E" }}>Discards custom targets & notes — sure?</span>
+              <span style={{ fontSize: 12, color: "#B4472E" }}>Discard custom targets — sure?</span>
               <button className="btnSecondary" onClick={hardReset} style={{ color: "#B4472E", fontWeight: 700 }}>
                 Yes, reset
               </button>
@@ -2747,7 +2745,7 @@ function MonthlyTargets({ targets, setTargets }) {
 
       {visible.length === 0 ? (
         <div style={{ padding: "3rem 0", textAlign: "center", color: "#5C6270", border: "1px solid #2C303B", borderRadius: 10 }}>
-          {targets.length === 0 ? "No targets yet." : "No targets match this filter."}
+          {(targets || []).length === 0 ? "No targets yet." : "No targets match this filter."}
         </div>
       ) : (
         <div style={{ border: "1px solid #2C303B", borderRadius: 10, overflow: "hidden" }}>
@@ -2902,9 +2900,6 @@ function TargetModal({ onClose, onSave }) {
               <option>Speculative</option>
             </select>
           </Field>
-          <div style={{ fontSize: 11, color: "#6B7180" }}>
-            No score to set — it starts at a neutral baseline for the tier you picked and only moves if it gets researched (via Refresh from research) or left to age.
-          </div>
           <Field label="Why">
             <input value={form.reasoning} onChange={(e) => setForm({ ...form, reasoning: e.target.value })} placeholder="Draft capital, landing spot, production…" />
           </Field>
@@ -2916,6 +2911,76 @@ function TargetModal({ onClose, onSave }) {
             Add to watchlist
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function TargetDetailModal({ target, onUpdate, onDelete, onClose }) {
+  const tierStyle = TARGET_TIER_STYLE[target.tier] || TARGET_TIER_STYLE["Buy Now"];
+  const score = computeConfidence(target);
+  const confColor = confidenceColor(score);
+  const age = monthsSince(target.lastRefreshed || target.monthAdded);
+  const trendMult = TREND_DECAY_MULTIPLIER[target.performanceTrend] ?? 1;
+  const decay = Math.min(CONFIDENCE_MAX_DECAY, Math.max(0, (age - CONFIDENCE_GRACE_MONTHS) * CONFIDENCE_DECAY_PER_MONTH * trendMult));
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalBox" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+          <div>
+            <div style={{ fontSize: 12, color: "#8B90A0" }}>{SPORT_EMOJI[target.sport] || "🎴"} {target.sport} · added {target.monthAdded}</div>
+            <h2 className="oswald" style={{ margin: "2px 0 0", fontSize: 21 }}>{target.player}</h2>
+          </div>
+          <X size={20} style={{ cursor: "pointer", color: "#8B90A0" }} onClick={onClose} />
+        </div>
+
+        <div style={{ display: "flex", gap: 8, margin: "8px 0 10px" }}>
+          <span className="mono" style={{ display: "inline-block", fontSize: 11, padding: "3px 10px", borderRadius: 999, background: `${tierStyle.color}22`, color: tierStyle.color }}>
+            {target.tier}
+          </span>
+          <span className="mono" style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: `${confColor}22`, color: confColor, border: `1px solid ${confColor}55` }}>
+            Score: {score}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label="Status">
+            <select value={target.status} onChange={(e) => onUpdate(target.id, { status: e.target.value })}>
+              {TARGET_STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
+            </select>
+          </Field>
+          <Field label="Tier">
+            <select value={target.tier} onChange={(e) => onUpdate(target.id, { tier: e.target.value })}>
+              <option>Buy Now</option>
+              <option>Speculative</option>
+            </select>
+          </Field>
+          <Field label="Performance trend">
+            <select value={target.performanceTrend || "Stable"} onChange={(e) => onUpdate(target.id, { performanceTrend: e.target.value })}>
+              <option>Improving</option>
+              <option>Stable</option>
+              <option>Declining</option>
+            </select>
+          </Field>
+          <Field label="Card to look for">
+            <input value={target.cardToLookFor} onChange={(e) => onUpdate(target.id, { cardToLookFor: e.target.value })} />
+          </Field>
+          <Field label="Why">
+            <input value={target.reasoning} onChange={(e) => onUpdate(target.id, { reasoning: e.target.value })} />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Target price (raw)"><input type="number" step="0.01" value={target.targetPriceRaw ?? ""} onChange={(e) => onUpdate(target.id, { targetPriceRaw: e.target.value })} /></Field>
+            <Field label="Target price (graded)"><input type="number" step="0.01" value={target.targetPriceGraded ?? ""} onChange={(e) => onUpdate(target.id, { targetPriceGraded: e.target.value })} /></Field>
+          </div>
+
+          <button
+            onClick={() => { onDelete(target.id); onClose(); }}
+            style={{ background: "transparent", border: "1px solid #4a2a24", color: "#B4472E", borderRadius: 8, padding: "9px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}
+          >
+            <Trash2 size={14} /> Remove
+          </button>
+        </div>
       </div>
     </div>
   );
