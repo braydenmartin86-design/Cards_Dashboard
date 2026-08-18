@@ -39,7 +39,33 @@ try {
 } catch (e) {
   console.warn("Supabase init fallback:", e);
 }
+// 1. Helper function for AI Content Generation
+async function generateContentIdeasFromPortfolio(cards, currentIdeasCount = 4) {
+  const sellNowCards = cards.filter(c => ["Sell PSA 10", "Sell PSA 9", "Sell Raw First"].includes(c.sellDecision));
+  const topProfits = [...cards].sort((a, b) => (b.expectedListProfit || 0) - (a.expectedListProfit || 0)).slice(0, 5);
+  
+  const prompt = `
+Generate ${currentIdeasCount} short, high-engagement social media content ideas for a sports card trader based on this portfolio data:
+- Cards ready to sell now: ${sellNowCards.map(c => `${c.player} (${c.sport})`).join(", ") || "Various"}
+- High profit cards: ${topProfits.map(c => `${c.player} (Est Profit: $${c.expectedListProfit})`).join(", ")}
 
+Return ONLY a valid JSON array of objects with keys: "id" (unique string), "title", "angle", "suggestedCard".
+`;
+
+  try {
+    const response = await callGeminiAi(prompt);
+    const cleanJson = response.replace(/```json|```/g, "").trim();
+    return JSON.parse(cleanJson);
+  } catch (err) {
+    console.error("Failed to generate ideas:", err);
+    return null;
+  }
+}
+
+// 2. Component that consumes the helper function above
+function ContentCreationTab({ cards, contentPlan, setContentPlan }) {
+  // ... rest of ContentCreationTab code ...
+}
 // Universal AI Call Proxy
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg") {
   if (!supabaseClient) {
