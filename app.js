@@ -2400,3 +2400,7 @@ function newContentItem(idea) {
     dateAdded: new Date().toISOString().slice(0, 10),
   };
 }
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  ReactDOM.render(React.createElement(App), rootElement);
+}
