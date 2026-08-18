@@ -2038,11 +2038,109 @@ function SearchCopyBlock({ card }) {
   );
 }
 
-function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel }) {
-  const [edit, setEdit] = useState(false);
-  const [form, setForm] = useState(card);
+function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player" }) {
+  const [editing, setEditing] = useState(false);
+  const [formData, setFormData] = useState({ ...card });
 
-  useEffect(() => setForm(card), [card.id]);
+  useEffect(() => setFormData(card), [card.id]);
+
+  const isPkmn = card.sport === "Pokémon" || playerLabel.includes("Pokémon");
+  const computed = isPkmn ? computePokemonCard(card) : computeCard(card);
+  const listing = recommendedListing(computed);
+
+  const handleSave = () => {
+    onUpdate(formData);
+    setEditing(false);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
+      <div style={{ background: "#1a1d24", borderRadius: 12, border: "1px solid #2d323e", width: "100%", maxWidth: 700, maxHeight: "90vh", overflowY: "auto", padding: 24, color: "#fff" }}>
+        
+        {/* Header Section */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+          <div>
+            <span style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#8b949e", letterSpacing: 1 }}>
+              {isPkmn ? "Pokémon Card Details" : "Sports Card Details"}
+            </span>
+            <h2 style={{ fontSize: 22, fontWeight: 700, margin: "4px 0 0 0" }}>
+              {card.player || card.name || "Unnamed Card"} {card.card ? `— ${card.card}` : ""}
+            </h2>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setEditing(!editing)} style={{ background: "#2d323e", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 6, cursor: "pointer" }}>
+              {editing ? "Cancel" : "Edit"}
+            </button>
+            <button onClick={onClose} style={{ background: "transparent", color: "#8b949e", border: "none", fontSize: 20, cursor: "pointer" }}>
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Recommended Listing AI Box */}
+        {listing && (
+          <div style={{ background: "linear-gradient(135deg, rgba(56,139,253,0.15), rgba(46,160,67,0.15))", border: "1px solid #388bfd", borderRadius: 8, padding: 16, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#58a6ff", marginBottom: 6 }}>
+              💡 RECOMMENDED LISTING & METHOD
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, color: "#8b949e" }}>Suggested List Price</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#3fb950" }}>
+                  ${listing.listPrice ? listing.listPrice.toFixed(2) : "N/A"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#8b949e" }}>Suggested Action</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>
+                  {computed.sellDecision || "Hold / Monitor"}
+                </div>
+              </div>
+            </div>
+            {listing.reasoning && (
+              <div style={{ fontSize: 12, color: "#c9d1d9", marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                {listing.reasoning}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Card Details / Financial Breakdown Grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
+          <div style={{ background: "#0d1117", padding: 12, borderRadius: 6 }}>
+            <div style={{ fontSize: 11, color: "#8b949e" }}>Total Cost</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>${(computed.totalCost || 0).toFixed(2)}</div>
+          </div>
+          <div style={{ background: "#0d1117", padding: 12, borderRadius: 6 }}>
+            <div style={{ fontSize: 11, color: "#8b949e" }}>Raw Market Avg</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{computed.rawAvg ? `$${computed.rawAvg.toFixed(2)}` : "—"}</div>
+          </div>
+          <div style={{ background: "#0d1117", padding: 12, borderRadius: 6 }}>
+            <div style={{ fontSize: 11, color: "#8b949e" }}>PSA 9 Avg</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{computed.psa9Avg ? `$${computed.psa9Avg.toFixed(2)}` : "—"}</div>
+          </div>
+          <div style={{ background: "#0d1117", padding: 12, borderRadius: 6 }}>
+            <div style={{ fontSize: 11, color: "#8b949e" }}>PSA 10 Avg</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{computed.psa10Avg ? `$${computed.psa10Avg.toFixed(2)}` : "—"}</div>
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24, paddingTop: 16, borderTop: "1px solid #2d323e" }}>
+          <button onClick={() => onDelete(card.id)} style={{ background: "#da3633", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+            Delete Card
+          </button>
+          {editing && (
+            <button onClick={handleSave} style={{ background: "#238636", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+              Save Changes
+            </button>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
 
   function startEdit() {
     setForm({
