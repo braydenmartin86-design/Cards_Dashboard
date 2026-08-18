@@ -2039,119 +2039,14 @@ function SearchCopyBlock({ card }) {
 }
 
 function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player" }) {
-  const [editing, setEditing] = useState(false);
-  const [formData, setFormData] = useState({ ...card });
+  const [edit, setEdit] = useState(false);
+  const [form, setForm] = useState(card);
 
-  useEffect(() => {
-    setFormData({ ...card });
-  }, [card.id]);
+  useEffect(() => setForm(card), [card.id]);
 
   const isPkmn = card.sport === "Pokémon" || playerLabel.includes("Pokémon");
   const computed = isPkmn ? computePokemonCard(card) : computeCard(card);
-  const listing = recommendedListing(computed);
-  const timingCheck = !isPkmn && listing ? seasonalSellCheck(card.sport) : null;
 
-  const handleSave = () => {
-    onUpdate(formData);
-    setEditing(false);
-  };
-
-  return (
-    <div className="modalOverlay" onClick={onClose}>
-      <div className="modalBox" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-        
-        {/* Header Section */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-          <div>
-            <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#8b949e", letterSpacing: 1 }}>
-              {isPkmn ? "Pokémon Card Details" : "Sports Card Details"}
-            </span>
-            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "2px 0 0 0", color: "#fff" }}>
-              {card.player || card.name || "Unnamed Card"} {card.card ? `— ${card.card}` : ""}
-            </h2>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setEditing(!editing)} style={{ background: "#2d323e", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>
-              {editing ? "Cancel" : "Edit"}
-            </button>
-            <button onClick={onClose} style={{ background: "transparent", color: "#8b949e", border: "none", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>
-              ✕
-            </button>
-          </div>
-        </div>
-
-        {/* Quick Search & Copy Block */}
-        <SearchCopyBlock card={card} />
-
-        {/* Recommended Listing AI Box */}
-        {listing && (
-          <div style={{ background: "linear-gradient(135deg, rgba(56,139,253,0.15), rgba(46,160,67,0.15))", border: "1px solid #388bfd", borderRadius: 8, padding: 14, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#58a6ff", marginBottom: 6 }}>
-              💡 RECOMMENDED LISTING & METHOD
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 11, color: "#8b949e" }}>Suggested List Price</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#3fb950" }}>
-                  ${listing.listPrice ? listing.listPrice.toFixed(2) : "N/A"}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: "#8b949e" }}>Suggested Action</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
-                  {computed.sellDecision || "Hold / Monitor"}
-                </div>
-              </div>
-            </div>
-            {listing.reasoning && (
-              <div style={{ fontSize: 12, color: "#c9d1d9", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-                {listing.reasoning}
-              </div>
-            )}
-            {timingCheck && (
-              <div style={{ fontSize: 11, color: "#e3b341", marginTop: 6 }}>
-                ⏳ {timingCheck}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Financial Metrics Overview */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginBottom: 16 }}>
-          <div style={{ background: "#0d1117", padding: 10, borderRadius: 6 }}>
-            <div style={{ fontSize: 10, color: "#8b949e" }}>Total Cost</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>${(computed.totalCost || 0).toFixed(2)}</div>
-          </div>
-          <div style={{ background: "#0d1117", padding: 10, borderRadius: 6 }}>
-            <div style={{ fontSize: 10, color: "#8b949e" }}>Raw Avg</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{computed.rawAvg ? `$${computed.rawAvg.toFixed(2)}` : "—"}</div>
-          </div>
-          <div style={{ background: "#0d1117", padding: 10, borderRadius: 6 }}>
-            <div style={{ fontSize: 10, color: "#8b949e" }}>PSA 9 Avg</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{computed.psa9Avg ? `$${computed.psa9Avg.toFixed(2)}` : "—"}</div>
-          </div>
-          <div style={{ background: "#0d1117", padding: 10, borderRadius: 6 }}>
-            <div style={{ fontSize: 10, color: "#8b949e" }}>PSA 10 Avg</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{computed.psa10Avg ? `$${computed.psa10Avg.toFixed(2)}` : "—"}</div>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, paddingTop: 14, borderTop: "1px solid #2d323e" }}>
-          <button onClick={() => onDelete(card.id)} style={{ background: "#da3633", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-            Delete Card
-          </button>
-          {editing && (
-            <button onClick={handleSave} style={{ background: "#238636", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-              Save Changes
-            </button>
-          )}
-        </div>
-
-      </div>
-    </div>
-  );
-}
   function startEdit() {
     setForm({
       ...card,
@@ -2187,10 +2082,10 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
     setEdit(false);
   }
 
-  const style = SELL_DECISION_STYLE[card.sellDecision] || SELL_DECISION_STYLE[""];
-  const listing = ["Sell Raw First", "Sell PSA 9", "Sell PSA 10"].includes(card.sellDecision) ? recommendedListing(card) : null;
-  const sellMethod = listing ? suggestedSellingMethod(card, listing) : null;
-  const timingCheck = listing ? seasonalSellCheck(card.sport) : null;
+  const style = SELL_DECISION_STYLE[computed.sellDecision] || SELL_DECISION_STYLE[""];
+  const listing = recommendedListing(computed);
+  const sellMethod = listing ? suggestedSellingMethod(computed, listing) : null;
+  const timingCheck = !isPkmn && listing ? seasonalSellCheck(card.sport) : null;
 
   return (
     <div className="modalOverlay" onClick={onClose}>
@@ -2203,7 +2098,7 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
               {card.numbered && card.outOf ? ` /${card.outOf}` : ""}
             </div>
             <h2 className="oswald" style={{ margin: "2px 0 0", fontSize: 21 }}>
-              {card.player}
+              {card.player || card.name || "Unnamed Card"}
               {card.rookie && (
                 <span className="mono" style={{ fontSize: 11, color: "#C9A227", border: "1px solid #C9A22755", borderRadius: 4, padding: "1px 6px", marginLeft: 8, verticalAlign: "middle" }}>
                   RC
@@ -2216,7 +2111,7 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 12px" }}>
           <span className="mono" style={{ display: "inline-block", fontSize: 11, padding: "3px 10px", borderRadius: 999, background: `${style.color}22`, color: style.color }}>
-            {style.label} · priority {card.sellPriority}
+            {style.label} · priority {computed.sellPriority}
           </span>
           {card.location && (
             <span className="mono" style={{ display: "inline-block", fontSize: 11, padding: "3px 10px", borderRadius: 999, background: `${(LOCATION_STYLE[card.location] || {}).color || "#8B90A0"}22`, color: (LOCATION_STYLE[card.location] || {}).color || "#8B90A0" }}>
@@ -2225,7 +2120,7 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
           )}
         </div>
 
-        {card.location && card.location !== "In Hand" && ["Sell Raw First", "Sell PSA 9", "Sell PSA 10"].includes(card.sellDecision) && (
+        {card.location && card.location !== "In Hand" && ["Sell Raw First", "Sell PSA 9", "Sell PSA 10"].includes(computed.sellDecision) && (
           <div style={{ fontSize: 12, color: "#C9A227", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
             ⚠️ Time to sell, but this card isn't in hand — list it through {card.location} instead of shipping it yourself.
           </div>
@@ -2292,15 +2187,15 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
             <SectionTitle>Cost basis</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
               <MiniStat label="Paid" value={fmtMoney(card.paid)} />
-              <MiniStat label="Shipping + holding" value={fmtMoney(card.shipping + card.holdingCost)} />
-              <MiniStat label="Total cost" value={fmtMoney(card.totalCost)} />
+              <MiniStat label="Shipping + holding" value={fmtMoney((card.shipping || 0) + (card.holdingCost || 0))} />
+              <MiniStat label="Total cost" value={fmtMoney(computed.totalCost)} />
             </div>
 
             <SectionTitle>Market values (60d avg)</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
-              <MiniStat label="Raw" value={card.rawAvg != null ? fmtMoney(card.rawAvg) : "—"} />
-              <MiniStat label="PSA 9" value={card.psa9Avg != null ? fmtMoney(card.psa9Avg) : "—"} />
-              <MiniStat label="PSA 10" value={card.psa10Avg != null ? fmtMoney(card.psa10Avg) : "—"} />
+              <MiniStat label="Raw" value={computed.rawAvg != null ? fmtMoney(computed.rawAvg) : "—"} />
+              <MiniStat label="PSA 9" value={computed.psa9Avg != null ? fmtMoney(computed.psa9Avg) : "—"} />
+              <MiniStat label="PSA 10" value={computed.psa10Avg != null ? fmtMoney(computed.psa10Avg) : "—"} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
               <TrendSparkline history={card.rawHistory} color="#5C7A99" />
@@ -2310,99 +2205,21 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
 
             <SectionTitle>Profitability (GGR = gross gain after cost)</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <MiniStat label="Raw GGR" value={card.rawGGR != null ? fmtMoney(card.rawGGR) : "—"} color={card.rawGGR >= 0 ? "#4E8B6B" : "#B4472E"} />
-              <MiniStat label="PSA 9 GGR" value={card.psa9GGR != null ? fmtMoney(card.psa9GGR) : "—"} color={card.psa9GGR >= 0 ? "#4E8B6B" : "#B4472E"} />
-              <MiniStat label="PSA 10 GGR" value={card.psa10GGR != null ? fmtMoney(card.psa10GGR) : "—"} color={card.psa10GGR >= 0 ? "#4E8B6B" : "#B4472E"} />
+              <MiniStat label="Raw GGR" value={computed.rawGGR != null ? fmtMoney(computed.rawGGR) : "—"} color={computed.rawGGR >= 0 ? "#4E8B6B" : "#B4472E"} />
+              <MiniStat label="PSA 9 GGR" value={computed.psa9GGR != null ? fmtMoney(computed.psa9GGR) : "—"} color={computed.psa9GGR >= 0 ? "#4E8B6B" : "#B4472E"} />
+              <MiniStat label="PSA 10 GGR" value={computed.psa10GGR != null ? fmtMoney(computed.psa10GGR) : "—"} color={computed.psa10GGR >= 0 ? "#4E8B6B" : "#B4472E"} />
             </div>
-            {card.psa10Avg == null && card.psa9Avg != null && (
+            {computed.psa10Avg == null && computed.psa9Avg != null && (
               <div style={{ fontSize: 10.5, color: "#C9A227", marginBottom: 8 }}>
                 ⚠️ No PSA 10 comp on record — figures above assume it's worth at least the PSA 9 price, not $0. If pop is genuinely low/zero, a real PSA 10 could be worth meaningfully more than shown.
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <MiniStat label="Graded EV (prob-weighted)" value={card.gradedEV != null ? fmtMoney(card.gradedEV) : "—"} color={card.gradedEV >= 0 ? "#4E8B6B" : "#B4472E"} emphasis />
-              <MiniStat label="Grade call" value={card.gradeCall} color={card.gradeCall === "YES" ? "#4E8B6B" : card.gradeCall === "HIGH RISK" ? "#C9A227" : "#8B90A0"} emphasis />
-            </div>
-            {card.gradeAnalysis ? (
-              <div style={{ fontSize: 11, color: "#8B6FD6", marginBottom: 16 }}>
-                📸 Using a saved photo grade check (PSA {card.gradeAnalysis.predictedGradeLow}–{card.gradeAnalysis.predictedGradeHigh}, {card.gradeAnalysis.confidence} confidence) instead of the flat 35%/45% default.
-              </div>
-            ) : card.setGemRate !== "" && card.setGemRate != null ? (
-              <div style={{ fontSize: 11, color: "#5C7A99", marginBottom: 16 }}>
-                📊 Using GemRate's {Number(card.setGemRate)}% set gem rate as the PSA 10 base rate instead of the flat 35% default — this is set-wide, not specific to this copy's condition. Run a photo check for a more precise number.
-              </div>
-            ) : (
-              <div style={{ marginBottom: 16 }} />
-            )}
-
-            {card.sellDecision === "Grade First" && (
-              <div style={{ border: "1px solid #8B6FD655", borderRadius: 8, padding: "12px 14px", marginBottom: 16, background: "#8B6FD60f" }}>
-                <div style={{ fontSize: 11, color: "#8B6FD6", textTransform: "uppercase", marginBottom: 8, fontWeight: 700 }}>Is this actually worth grading?</div>
-                <div style={{ fontSize: 12.5, color: "#C6CAD4", lineHeight: 1.8 }}>
-                  Grading this card costs <b>{fmtMoney(card.gradingCostValue)}</b> ({card.gradingService || "no service selected"}), already included in the numbers below.
-                  {card.psa10GGR != null && (
-                    <> Come back <b>PSA 10</b> and you'd clear <b style={{ color: card.psa10GGR >= 0 ? "#4E8B6B" : "#B4472E" }}>{fmtMoney(card.psa10GGR)}</b> profit.</>
-                  )}
-                  {card.psa9GGR != null && (
-                    <> Come back <b>PSA 9</b> and it's <b style={{ color: card.psa9GGR >= 0 ? "#4E8B6B" : "#B4472E" }}>{fmtMoney(card.psa9GGR)}</b>.</>
-                  )}
-                  {card.rawGGR != null && (
-                    <> Selling it raw right now, with no grading risk at all, nets <b style={{ color: card.rawGGR >= 0 ? "#4E8B6B" : "#B4472E" }}>{fmtMoney(card.rawGGR)}</b>.</>
-                  )}
-                </div>
-                <div style={{ fontSize: 12, color: "#8B90A0", marginTop: 10, lineHeight: 1.6 }}>
-                  {card.gradeCall === "YES" && "The math clears the bar cleanly: PSA 10 profit is $20+, PSA 9 doesn't lose money, and the probability-weighted expected value beats just selling raw. This is the strongest kind of Grade First call — genuinely worth the wait and the fee."}
-                  {card.gradeCall === "HIGH RISK" && "This only clears the bar because a PSA 10 pays well enough to offset a PSA 9 loss on average — but PSA 9 alone is a real loss (down to -$10). If you don't trust this specific copy to grade Gem Mint, selling raw is the safer call even though the model says grade."}
-                  {card.gradeCall === "NO" && "Worth double-checking this one — the model flagged Grade First based on Graded EV beating Raw GGR, but the Grade? call itself came back NO, meaning it doesn't clear the stricter PSA 10 ≥ $20 / PSA 9 ≥ $0 bar. Thin margins here; a slightly worse actual grade than expected could turn this into a loss."}
-                </div>
-              </div>
-            )}
-
-            <SectionTitle>Break-even sale prices</SectionTitle>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
-              <MiniStat label="Raw BE" value={fmtMoney(card.rawBE)} />
-              <MiniStat label="PSA 9 BE" value={fmtMoney(card.psa9BE)} />
-              <MiniStat label="PSA 10 BE" value={fmtMoney(card.psa10BE)} />
+              <MiniStat label="Graded EV (prob-weighted)" value={computed.gradedEV != null ? fmtMoney(computed.gradedEV) : "—"} color={computed.gradedEV >= 0 ? "#4E8B6B" : "#B4472E"} emphasis />
+              <MiniStat label="Grade call" value={computed.gradeCall} color={computed.gradeCall === "YES" ? "#4E8B6B" : computed.gradeCall === "HIGH RISK" ? "#C9A227" : "#8B90A0"} emphasis />
             </div>
 
-            {card.status === "Sold" && (
-              <>
-                <SectionTitle>Sale result</SectionTitle>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-                  <MiniStat label="Net sale" value={fmtMoney(card.netSale)} />
-                  <MiniStat label="Realised profit" value={fmtMoney(card.realisedProfit)} color={card.realisedProfit >= 0 ? "#4E8B6B" : "#B4472E"} emphasis />
-                </div>
-
-                <SectionTitle>Sold vs projected</SectionTitle>
-                {card.projectedNetSell != null ? (
-                  <>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-                      <MiniStat label="Projected net sell" value={fmtMoney(card.projectedNetSell)} />
-                      <MiniStat label="Actual net sale" value={fmtMoney(card.netSale)} />
-                      <MiniStat
-                        label="Variance"
-                        value={`${card.saleVariance >= 0 ? "+" : ""}${fmtMoney(card.saleVariance)}`}
-                        color={card.saleVariance >= 0 ? "#4E8B6B" : "#B4472E"}
-                        emphasis
-                      />
-                    </div>
-                    <div style={{ fontSize: 12, color: "#8B90A0", marginBottom: 16 }}>
-                      Sold {card.saleVariancePct >= 0 ? "above" : "below"} your recorded market average by{" "}
-                      <span style={{ color: card.saleVariancePct >= 0 ? "#4E8B6B" : "#B4472E", fontWeight: 600 }}>
-                        {fmtPct(Math.abs(card.saleVariancePct))}
-                      </span>
-                      . {card.saleVariancePct < -0.1 ? "Worth checking if your 60-day averages are running optimistic." : ""}
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ fontSize: 12, color: "#5C6270", marginBottom: 16 }}>
-                    No market average was recorded before this card sold, so there's nothing to compare against.
-                  </div>
-                )}
-              </>
-            )}
-
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button className="btnSecondary" onClick={startEdit}>Edit values</button>
               <button
                 onClick={() => onDelete(card.id)}
