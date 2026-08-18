@@ -3641,31 +3641,32 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   }
 
 function deleteScan(targetScan) {
-  const targetId = typeof targetScan === "object" ? targetScan.id : targetScan;
-  const targetName = typeof targetScan === "object" ? targetScan.name : null;
+    const targetId = typeof targetScan === "object" ? targetScan.id : targetScan;
+    const targetName = typeof targetScan === "object" ? targetScan.name : null;
 
-  if (!window.confirm("Are you sure you want to delete this saved scan?")) return;
+    if (!window.confirm("Are you sure you want to delete this saved scan?")) return;
 
-  setSavedScans((prev) => {
-    const updated = prev.filter((s) => {
-      if (targetId && s.id) return s.id !== targetId;
-      if (targetName && s.name) return s.name !== targetName;
-      return s !== targetScan;
+    setSavedScans((prev) => {
+      const updated = prev.filter((s) => {
+        if (targetId && s.id) return s.id !== targetId;
+        if (targetName && s.name) return s.name !== targetName;
+        return s !== targetScan;
+      });
+
+      try {
+        localStorage.setItem("lotScans", JSON.stringify(updated));
+      } catch (err) {
+        console.error("Failed to update localStorage", err);
+      }
+      return updated;
     });
 
-    try {
-      localStorage.setItem("lotScans", JSON.stringify(updated));
-    } catch (err) {
-      console.error("Failed to update localStorage", err);
-    }
-    return updated;
-  });
-
-  if (loadedScanId === targetId) setLoadedScanId(null);
-}
-
-    if (loadedScanId === id) setLoadedScanId(null);
+    if (loadedScanId === targetId) setLoadedScanId(null);
   }
+
+  const totalGrossValue = useMemo(() => (results || []).reduce((s, c) => s + (Number(c.estimated_value_aud) || 0), 0), [results]);
+  const potentialProfit = lotCost !== "" ? totalGrossValue - Number(lotCost) - (Number(lotShipping) || 0) : null;
+  
   async function handleFiles(fileList) {
     const files = Array.from(fileList).slice(0, 4 - images.length);
     for (const file of files) {
