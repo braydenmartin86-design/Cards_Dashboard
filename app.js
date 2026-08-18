@@ -3640,11 +3640,21 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setShowSavedList(false);
   }
 
-  function deleteScan(id) {
-    setSavedScans((prev) => prev.filter((s) => s.id !== id));
+function deleteScan(id) {
+    if (!window.confirm("Are you sure you want to delete this saved scan?")) return;
+
+    setSavedScans((prev) => {
+      const updated = prev.filter((s) => s.id !== id);
+      try {
+        localStorage.setItem("lotScans", JSON.stringify(updated));
+      } catch (err) {
+        console.error("Failed to update localStorage", err);
+      }
+      return updated;
+    });
+
     if (loadedScanId === id) setLoadedScanId(null);
   }
-
   async function handleFiles(fileList) {
     const files = Array.from(fileList).slice(0, 4 - images.length);
     for (const file of files) {
