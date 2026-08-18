@@ -10,6 +10,7 @@ const IconProxy = new Proxy({}, {
     return () => null;
   }
 });
+
 const Plus = IconProxy.Plus;
 const X = IconProxy.X;
 const ChevronRight = IconProxy.ChevronRight;
