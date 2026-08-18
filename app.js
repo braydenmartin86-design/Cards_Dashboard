@@ -1198,12 +1198,9 @@ function App() {
           <BusinessSummary cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} />
         )}
 
-       {(tab === "portfolio" || tab === "pokemon") && (
+{(tab === "portfolio" || tab === "pokemon") && (
   <>
-    {/* 1. StatBar calculates active tab stats (sports or pokemon) automatically */}
     <StatBar totals={totals} />
-
-    {/* 2. FilterRow handles filters for the active collection */}
     <FilterRow
       statusFilter={statusFilter}
       setStatusFilter={setStatusFilter}
@@ -1216,8 +1213,6 @@ function App() {
       setSortKey={setSortKey}
       enriched={enriched}
     />
-
-    {/* 3. CardTable displays active items with identical EV & Grade logic */}
     <CardTable
       cards={filtered}
       onSelect={setSelected}
