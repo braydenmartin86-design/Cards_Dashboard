@@ -435,17 +435,15 @@ function computePokemonCard(c) {
     else sellDecision = "Hold";
   }
 
-  let sellPriority = 6;
-  if (sellDecision === "Sell PSA 9" || sellDecision === "Sell PSA 10") sellPriority = 1;
+ let sellPriority = 6;
+  if (sellDecision === "Sell PSA 10" || sellDecision === "Sell PSA 9") sellPriority = 1;
   else if (sellDecision === "Sell Raw First") sellPriority = 2;
-  else if (sellDecision === "Grade First" && gradeCall === "YES") sellPriority = 3;
-  else if (sellDecision === "Grade First" && gradeCall === "HIGH RISK") sellPriority = 4;
-  else if (sellDecision === "Hold" || sellDecision === "") sellPriority = 6;
-  else if (status === "Listed") sellPriority = 7;
-  else if (status === "Sold") sellPriority = 8;
-  else if (status === "At Grading") sellPriority = 7.5;
+  else if (sellDecision === "Grade First") sellPriority = 3;
+  else if (sellDecision === "Hold" || sellDecision === "") sellPriority = 4;
+  else if (status === "At Grading") sellPriority = 5;
+  else if (status === "Listed") sellPriority = 6;
+  else if (status === "Sold") sellPriority = 7;
   else sellPriority = 6;
-
   const rawBE = totalCost / (1 - fees);
   const psa9BE = (totalCost + gCost) / (1 - fees);
   const psa10BE = (totalCost + gCost) / (1 - fees);
