@@ -2395,4 +2395,13 @@ const CONTENT_STATUS_COLOR = { Idea: "#5C7A99", Scripted: "#C9A227", Filmed: "#8
 
 function newContentItem(idea) {
   return {
-    idI seem to be encountering an error. Can I try something else for you?
+    id: crypto.randomUUID(),
+    title: idea?.title || "",
+    platform: idea?.platform || "YouTube (long-form)",
+    pillar: idea?.pillar || "Budget-Friendly Investing",
+    status: "Idea",
+    hook: idea?.hook || "",
+    notes: idea?.outline ? idea.outline.join("\n") : "",
+    dateAdded: new Date().toISOString().slice(0, 10),
+  };
+}
