@@ -1447,12 +1447,41 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
       {showAdd && (
         <AddCardModal onClose={() => setShowAdd(false)} onSave={addCard} playerLabel={isPokemon ? "Pokémon" : "Player"} />
       )}
-      {selectedCard && (
-        <DetailModal card={selectedCard} onClose={() => setSelected(null)} onUpdate={updateCard} onDelete={deleteCard} playerLabel={isPokemon ? "Pokémon" : "Player"} />
-      )}
-    </div>
-  );
-}
+      {/* Compute selectedCard dynamically from enriched list so both Sports & Pokemon cards open with full metrics */}
+  {(() => {
+    const activeEnriched = isPokemon ? enrichedPokemonCards : enriched;
+    const selectedCard = activeEnriched.find((c) => c.id === selected) || cards.find((c) => c.id === selected) || pokemonCards.find((c) => c.id === selected);
+    
+    if (!selectedCard) return null;
+
+    const handleUpdate = (updatedCard) => {
+      if (isPokemon || pokemonCards.some((c) => c.id === updatedCard.id)) {
+        setPokemonCards((prev) => prev.map((c) => (c.id === updatedCard.id ? updatedCard : c)));
+      } else {
+        setCards((prev) => prev.map((c) => (c.id === updatedCard.id ? updatedCard : c)));
+      }
+      setSelected(null);
+    };
+
+    const handleDelete = (idToDelete) => {
+      if (isPokemon || pokemonCards.some((c) => c.id === idToDelete)) {
+        setPokemonCards((prev) => prev.filter((c) => c.id !== idToDelete));
+      } else {
+        setCards((prev) => prev.filter((c) => c.id !== idToDelete));
+      }
+      setSelected(null);
+    };
+
+    return (
+      <DetailModal
+        card={selectedCard}
+        onClose={() => setSelected(null)}
+        onUpdate={handleUpdate}
+        onDelete={handleDelete}
+        playerLabel={isPokemon ? "Pokémon / Card Name" : "Player"}
+      />
+    );
+  })()}
 
 function Header({ tab, setTab, onAdd, onExport, onImport, backupStatus }) {
   return (
