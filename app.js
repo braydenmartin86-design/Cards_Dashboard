@@ -1,4 +1,4 @@
-//const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo } = React;
 
 // Safe icon proxy for browser CDN
 const IconProxy = new Proxy({}, {
