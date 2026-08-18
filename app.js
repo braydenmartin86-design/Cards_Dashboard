@@ -1061,7 +1061,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   const setActiveCards = isPokemon ? setPokemonCards : setCards;
   const computeFn = isPokemon ? computePokemonCard : computeCard;
 
- // 1. Enriched calculations for Sports Cards & Pokémon Cards
+// Enriched calculations for Sports & Pokémon Cards
   const enriched = useMemo(
     () =>
       cards.map((c) => {
@@ -1084,25 +1084,11 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     [pokemonCards, computeFn]
   );
 
-  // 2. Filter logic for both portfolios
-  const filterFn = (list) =>
-    list.filter((c) => {
-      if (statusFilter !== "all" && c.status !== statusFilter) return false;
-      if (decisionFilter !== "all" && c.sellDecision !== decisionFilter) return false;
-      if (sportFilter !== "all" && c.sport !== sportFilter) return false;
-      if (locationFilter !== "all" && c.location !== locationFilter) return false;
-      return true;
-    });
-
-  const filtered = useMemo(() => filterFn(enriched), [enriched, statusFilter, decisionFilter, sportFilter, locationFilter]);
-  const filteredPokemonCards = useMemo(() => filterFn(enrichedPokemonCards), [enrichedPokemonCards, statusFilter, decisionFilter, sportFilter, locationFilter]);
-
-  // 3. Totals calculation helper
+  // Totals calculations
   const calculateTotals = (list) => {
     const invested = list.reduce((sum, c) => sum + (c.totalCost || 0), 0);
     const potentialRaw = list.reduce((sum, c) => sum + (c.rawGGR || 0), 0);
-    const count = list.length;
-    return { invested, potentialRaw, count };
+    return { invested, potentialRaw, count: list.length };
   };
 
   const totals = useMemo(() => calculateTotals(enriched), [enriched]);
