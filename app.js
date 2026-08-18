@@ -1,8 +1,4 @@
-// Extract React hooks directly from window.React
-const React = window.React;
-const useState = React.useState;
-const useEffect = React.useEffect;
-const useMemo = React.useMemo;
+const { useState, useEffect, useMemo } = React;
 
 // Safe icon proxy for browser CDN
 const IconProxy = new Proxy({}, {
@@ -13,7 +9,6 @@ const IconProxy = new Proxy({}, {
     }
     return () => null;
   }
-});
 });
 const Plus = IconProxy.Plus;
 const X = IconProxy.X;
