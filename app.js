@@ -2760,161 +2760,160 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
   );
 }
 
-function cleanCardHint(text) {
-  if (!text) return "";
-  return text.split(/[—(,]/)[0].trim();
-}
+function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [justMerged, setJustMerged] = useState(null);
+  const [tierFilter, setTierFilter] = useState("all");
+  const [priceRangeFilter, setPriceRangeFilter] = useState("all");
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-function TargetRow({ t, onClick }) {
-  const tierStyle = TARGET_TIER_STYLE[t.tier] || TARGET_TIER_STYLE["Buy Now"];
-  const statusColor = t.status === "Bought" ? "#4E8B6B" : t.status === "Passed" ? "#5C6270" : "#5C7A99";
-  const score = computeConfidence(t);
-  const confColor = confidenceColor(score);
-  const [copyState, setCopyState] = useState("idle");
-  const priceRange = getPriceRange(getTargetPrice(t));
-
-  const searchText = [t.player.replace(/["\u201c\u201d]/g, "").trim(), cleanCardHint(t.cardToLookFor)].filter(Boolean).join(" ");
-  const ebayUrl = `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(searchText)}`;
-
-  async function copy(e) {
-    e.stopPropagation();
-    const ok = await copyToClipboard(searchText);
-    setCopyState(ok ? "copied" : "failed");
-    setTimeout(() => setCopyState("idle"), 2000);
+  function addTarget(t) {
+    setTargets((prev) => [t, ...prev]);
+    setShowAdd(false);
+  }
+  function updateTarget(id, updates) {
+    setTargets((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+  }
+  function deleteTarget(id) {
+    setTargets((prev) => prev.filter((t) => t.id !== id));
+    setSelectedId(null);
   }
 
+  // AI-powered Refresh from Research
+  async function loadNewSuggestions() {
+    setIsRefreshing(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const aiTargets = await generateAiMonthlyTargets(cards, pokemonCards);
+
+    if (aiTargets && Array.isArray(aiTargets) && aiTargets.length > 0) {
+      const formatted = aiTargets.map((t) => ({
+        ...t,
+        id: crypto.randomUUID(),
+        monthAdded: today,
+        lastRefreshed: today,
+      }));
+      setTargets(formatted);
+      setJustMerged({ added: formatted.length, updated: 0 });
+    } else {
+      alert("Could not fetch fresh research from AI right now. Please try again.");
+    }
+    setIsRefreshing(false);
+    setTimeout(() => setJustMerged(null), 4000);
+  }
+
+  // Reset list directly to SEED_TARGETS
+  function hardReset() {
+    const today = new Date().toISOString().slice(0, 10);
+    setTargets(SEED_TARGETS.map((t) => ({ ...t, id: crypto.randomUUID(), monthAdded: today, lastRefreshed: today })));
+    setJustMerged({ added: SEED_TARGETS.length, updated: 0 });
+    setConfirmingReset(false);
+    setTimeout(() => setJustMerged(null), 4000);
+  }
+
+  const watching = (targets || []).filter((t) => t.status === "Watching").length;
+  const bought = (targets || []).filter((t) => t.status === "Bought").length;
+  const selected = selectedId ? (targets || []).find((t) => t.id === selectedId) : null;
+  const avgConfidence = (targets || []).length
+    ? Math.round((targets || []).reduce((s, t) => s + computeConfidence(t), 0) / targets.length)
+    : null;
+
+  const visible = useMemo(() => {
+    let list = targets || [];
+    if (tierFilter !== "all") list = list.filter((t) => t.tier === tierFilter);
+    if (priceRangeFilter === "unpriced") {
+      list = list.filter((t) => getTargetPrice(t) == null);
+    } else if (priceRangeFilter !== "all") {
+      list = list.filter((t) => getPriceRange(getTargetPrice(t))?.key === priceRangeFilter);
+    }
+    return [...list].sort((a, b) => computeConfidence(b) - computeConfidence(a));
+  }, [targets, tierFilter, priceRangeFilter]);
+
   return (
-    <div
-      onClick={onClick}
-      className="cardRow"
-      style={{ padding: "14px 16px", borderTop: "1px solid #24272F", borderLeft: `4px solid ${confColor}`, cursor: "pointer", fontSize: 13 }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div
-            title="Confidence score — how likely this makes you money"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 44,
-              height: 44,
-              borderRadius: 10,
-              background: `${confColor}1f`,
-              border: `1.5px solid ${confColor}`,
-              flexShrink: 0,
-            }}
-          >
-            <span className="oswald" style={{ fontSize: 17, fontWeight: 700, color: confColor, lineHeight: 1 }}>
-              {score}
-            </span>
-            <span className="mono" style={{ fontSize: 7.5, color: confColor, letterSpacing: "0.04em" }}>SCORE</span>
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 1, background: "#2C303B", border: "1px solid #2C303B", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+        <Stat label="Watching" value={watching} color="#5C7A99" />
+        <Stat label="Bought" value={bought} color="#4E8B6B" />
+        <Stat label="Total on list" value={(targets || []).length} />
+        <Stat label="Avg confidence" value={avgConfidence != null ? avgConfidence : "—"} color={avgConfidence != null ? confidenceColor(avgConfidence) : undefined} />
+      </div>
+
+      <div style={{ fontSize: 12, color: "#8B90A0", marginBottom: 16, lineHeight: 1.6 }}>
+        A running watchlist of players/cards worth researching for future investment — not a buy signal on its own. The hobby moves fast; treat anything more than a month or two old as a starting point to re-check, not current pricing.
+        <span style={{ color: "#C9A227" }}> "Buy Now"</span> = already rostered/debuted with a real rookie card out.
+        <span style={{ color: "#C9A227" }}> "Speculative"</span> = pre-rookie or not yet drafted — cheaper entry, real risk it doesn't pan out.
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div>
+            <label style={{ display: "block", marginBottom: 4 }}>Tier</label>
+            <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} style={{ width: "auto", minWidth: 160 }}>
+              <option value="all">All tiers</option>
+              <option value="Buy Now">Buy Now</option>
+              <option value="Speculative">Speculative</option>
+            </select>
           </div>
           <div>
-            <span className="oswald" style={{ fontWeight: 600, fontSize: 15 }}>{t.player}</span>
-            <span className="mono" style={{ fontSize: 10, color: "#6B7180", marginLeft: 8 }}>{SPORT_EMOJI[t.sport] || "🎴"} {t.sport}</span>
-            {t.performanceTrend && (
-              <span className="mono" style={{ fontSize: 10, color: TREND_STYLE[t.performanceTrend]?.color || "#6B7180", marginLeft: 8 }}>
-                {TREND_STYLE[t.performanceTrend]?.icon} {t.performanceTrend}
-              </span>
-            )}
+            <label style={{ display: "block", marginBottom: 4 }}>Price range</label>
+            <select value={priceRangeFilter} onChange={(e) => setPriceRangeFilter(e.target.value)} style={{ width: "auto", minWidth: 160 }}>
+              <option value="all">All prices</option>
+              {PRICE_RANGES.map((r) => (
+                <option key={r.key} value={r.key}>{r.label}</option>
+              ))}
+              <option value="unpriced">No price set</option>
+            </select>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-          {priceRange && (
-            <span className="mono" style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 999, background: "#5C7A9922", color: "#5C7A99" }}>
-              {priceRange.label}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {justMerged != null && (
+            <span style={{ fontSize: 12, color: "#4E8B6B" }}>
+              Successfully refreshed targets from research
             </span>
           )}
-          <span className="mono" style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 999, background: `${tierStyle.color}22`, color: tierStyle.color }}>
-            {t.tier}
-          </span>
-          <span className="mono" style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 999, background: `${statusColor}22`, color: statusColor }}>
-            {t.status}
-          </span>
-          <ChevronRight size={14} style={{ color: "#5C6270" }} />
+          <button className="btnSecondary" onClick={loadNewSuggestions} disabled={isRefreshing}>
+            <RefreshCw size={14} style={{ marginRight: 6 }} />
+            {isRefreshing ? "✨ Analyzing Market..." : "Refresh from research"}
+          </button>
+          {!confirmingReset ? (
+            <button className="btnSecondary" onClick={() => setConfirmingReset(true)} style={{ color: "#B4472E" }}>
+              Reset list
+            </button>
+          ) : (
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "#B4472E" }}>Discard custom targets — sure?</span>
+              <button className="btnSecondary" onClick={hardReset} style={{ color: "#B4472E", fontWeight: 700 }}>
+                Yes, reset
+              </button>
+              <button className="btnSecondary" onClick={() => setConfirmingReset(false)}>
+                Cancel
+              </button>
+            </span>
+          )}
+          <button className="btnPrimary" onClick={() => setShowAdd(true)}>
+            <Plus size={16} /> Add target
+          </button>
         </div>
       </div>
-      {t.cardToLookFor && (
-        <div style={{ fontSize: 11.5, color: "#8B90A0", marginBottom: 4 }}>{t.cardToLookFor}</div>
+
+      {visible.length === 0 ? (
+        <div style={{ padding: "3rem 0", textAlign: "center", color: "#5C6270", border: "1px solid #2C303B", borderRadius: 10 }}>
+          {(targets || []).length === 0 ? "No targets yet." : "No targets match this filter."}
+        </div>
+      ) : (
+        <div style={{ border: "1px solid #2C303B", borderRadius: 10, overflow: "hidden" }}>
+          {visible.map((t) => (
+            <TargetRow key={t.id} t={t} onClick={() => setSelectedId(t.id)} />
+          ))}
+        </div>
       )}
-      <div style={{ color: "#C6CAD4", fontSize: 12.5, lineHeight: 1.6, marginBottom: 10 }}>{t.reasoning}</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button className="btnSecondary" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, padding: "5px 10px" }} onClick={copy}>
-          {copyState === "copied" ? <Check size={12} /> : <Copy size={12} />} {copyState === "copied" ? "Copied" : "Copy search"}
-        </button>
-        <a
-          href={ebayUrl}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="btnSecondary"
-          style={{ display: "flex", alignItems: "center", fontSize: 11.5, padding: "5px 10px", textDecoration: "none" }}
-        >
-          Search eBay
-        </a>
-        {copyState === "failed" && <span style={{ fontSize: 11, color: "#B4472E" }}>Couldn't auto-copy — try again</span>}
-      </div>
+
+      {showAdd && <TargetModal onClose={() => setShowAdd(false)} onSave={addTarget} />}
+      {selected && <TargetDetailModal target={selected} onUpdate={updateTarget} onDelete={deleteTarget} onClose={() => setSelectedId(null)} />}
     </div>
   );
 }
-
-function TargetModal({ onClose, onSave }) {
-  const [form, setForm] = useState(newTarget());
-
-  function submit(e) {
-    e.preventDefault();
-    if (!form.player.trim()) return;
-    const today = new Date().toISOString().slice(0, 10);
-    onSave({
-      ...form,
-      researchScore: form.tier === "Buy Now" ? 45 : 25,
-      monthAdded: today,
-      lastRefreshed: today,
-    });
-  }
-
-  return (
-    <div className="modalOverlay" onClick={onClose}>
-      <div className="modalBox" onClick={(e) => e.stopPropagation()}>
-        <ModalHeader title="Add a target" onClose={onClose} />
-        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10 }}>
-            <Field label="Player">
-              <input value={form.player} onChange={(e) => setForm({ ...form, player: e.target.value })} required />
-            </Field>
-            <Field label="Sport">
-              <select value={form.sport} onChange={(e) => setForm({ ...form, sport: e.target.value })}>
-                {SPORT_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </Field>
-          </div>
-          <Field label="Card to look for">
-            <input value={form.cardToLookFor} onChange={(e) => setForm({ ...form, cardToLookFor: e.target.value })} placeholder="e.g. 2026 Prizm rookie autos" />
-          </Field>
-          <Field label="Tier">
-            <select value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })}>
-              <option>Buy Now</option>
-              <option>Speculative</option>
-            </select>
-          </Field>
-          <Field label="Why">
-            <input value={form.reasoning} onChange={(e) => setForm({ ...form, reasoning: e.target.value })} placeholder="Draft capital, landing spot, production…" />
-          </Field>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Target price (raw)"><input type="number" step="0.01" value={form.targetPriceRaw} onChange={(e) => setForm({ ...form, targetPriceRaw: e.target.value })} /></Field>
-            <Field label="Target price (graded)"><input type="number" step="0.01" value={form.targetPriceGraded} onChange={(e) => setForm({ ...form, targetPriceGraded: e.target.value })} /></Field>
-          </div>
-          <button className="btnPrimary" type="submit" style={{ justifyContent: "center", marginTop: 6 }}>
-            Add to watchlist
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 function TargetDetailModal({ target, onUpdate, onDelete, onClose }) {
   const tierStyle = TARGET_TIER_STYLE[target.tier] || TARGET_TIER_STYLE["Buy Now"];
   const score = computeConfidence(target);
