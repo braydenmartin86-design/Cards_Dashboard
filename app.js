@@ -3664,9 +3664,6 @@ function deleteScan(targetScan) {
     if (loadedScanId === targetId) setLoadedScanId(null);
   }
 
-  const totalGrossValue = useMemo(() => (results || []).reduce((s, c) => s + (Number(c.estimated_value_aud) || 0), 0), [results]);
-  const potentialProfit = lotCost !== "" ? totalGrossValue - Number(lotCost) - (Number(lotShipping) || 0) : null;
-  
   async function handleFiles(fileList) {
     const files = Array.from(fileList).slice(0, 4 - images.length);
     for (const file of files) {
@@ -3674,6 +3671,7 @@ function deleteScan(targetScan) {
       setImages((prev) => [...prev, { name: file.name, base64, mediaType: file.type || "image/jpeg", previewUrl: URL.createObjectURL(file) }]);
     }
   }
+
   function removeImage(i) {
     setImages((prev) => prev.filter((_, idx) => idx !== i));
   }
@@ -3692,7 +3690,7 @@ function deleteScan(targetScan) {
         ...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } })),
         { type: "text", text: LOT_SCANNER_PROMPT },
       ];
-     const firstImage = images[0];
+      const firstImage = images[0];
       const parsed = await callGeminiAi(LOT_SCANNER_PROMPT, firstImage.base64, firstImage.mediaType);
       if (!Array.isArray(parsed)) throw new Error("Unexpected response shape");
       setResults(parsed);
@@ -3758,7 +3756,7 @@ function deleteScan(targetScan) {
               {savedScans.map((scan) => {
                 const scanTotal = (scan.results || []).reduce((s, c) => s + (Number(c.estimated_value_aud) || 0), 0);
                 return (
-                  <div key={scan.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #2C303B", borderRadius: 8, padding: "10px 14px", background: "#191B22" }}>
+                  <div key={scan.id || scan.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #2C303B", borderRadius: 8, padding: "10px 14px", background: "#191B22" }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13 }}>{scan.name}</div>
                       <div style={{ fontSize: 11.5, color: "#6B7180" }}>
@@ -3774,7 +3772,14 @@ function deleteScan(targetScan) {
                       <button className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => loadScan(scan)}>
                         View
                       </button>
-                      <Trash2 size={15} style={{ cursor: "pointer", color: "#6B7180", alignSelf: "center" }} onClick={() => deleteScan(scan.id)} />
+                      <Trash2
+                        size={15}
+                        style={{ cursor: "pointer", color: "#EF4444", alignSelf: "center" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteScan(scan);
+                        }}
+                      />
                     </div>
                   </div>
                 );
