@@ -1062,7 +1062,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   const computeFn = isPokemon ? computePokemonCard : computeCard;
 
 // Enriched calculations for Sports & Pokémon Cards
-  const enriched = useMemo(
+const enriched = useMemo(
     () =>
       cards.map((c) => {
         const computed = computeFn(c);
@@ -1126,6 +1126,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     }
     return list;
   }, [enriched, statusFilter, decisionFilter, sportFilter, locationFilter, sortKey]);
+  const filteredPokemonCards = useMemo(() => enrichedPokemonCards.filter((c) => c.status === "Raw" || c.status === "Graded"), [enrichedPokemonCards]);
 
   const totals = useMemo(() => {
     const qty = (c) => Number(c.quantity) || 1;
@@ -1141,6 +1142,14 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     const overallROI = totalInvested > 0 ? (potentialRaw + realised) / totalInvested : null;
     return { invested, potentialRaw, realised, actionable, count: active.length, overallROI };
   }, [enriched]);
+  const pokemonTotals = useMemo(() => {
+    const qty = (c) => Number(c.quantity) || 1;
+    const active = enrichedPokemonCards.filter((c) => c.status !== "Sold");
+    const invested = active.reduce((s, c) => s + c.totalCost * qty(c), 0);
+    const potentialRaw = active.reduce((s, c) => s + (c.rawGGR || 0) * qty(c), 0);
+    const count = active.reduce((s, c) => s + qty(c), 0);
+    return { invested, potentialRaw, count };
+  }, [enrichedPokemonCards]);
 
   function addCard(card) {
     setActiveCards((prev) => [{ id: crypto.randomUUID(), ...card }, ...prev]);
