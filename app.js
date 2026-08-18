@@ -2618,9 +2618,11 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
     setTargets((prev) => [t, ...prev]);
     setShowAdd(false);
   }
+
   function updateTarget(id, updates) {
     setTargets((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
   }
+
   function deleteTarget(id) {
     setTargets((prev) => prev.filter((t) => t.id !== id));
     setSelectedId(null);
