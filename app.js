@@ -2759,28 +2759,6 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
     </div>
   );
 }
-
-function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [selectedId, setSelectedId] = useState(null);
-  const [justMerged, setJustMerged] = useState(null);
-  const [tierFilter, setTierFilter] = useState("all");
-  const [priceRangeFilter, setPriceRangeFilter] = useState("all");
-  const [confirmingReset, setConfirmingReset] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  function addTarget(t) {
-    setTargets((prev) => [t, ...prev]);
-    setShowAdd(false);
-  }
-  function updateTarget(id, updates) {
-    setTargets((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
-  }
-  function deleteTarget(id) {
-    setTargets((prev) => prev.filter((t) => t.id !== id));
-    setSelectedId(null);
-  }
-
   // AI-powered Refresh from Research
   async function loadNewSuggestions() {
     setIsRefreshing(true);
