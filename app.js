@@ -1,10 +1,8 @@
-const { useState, useEffect, useMemo } = React;
-
-// Safely unpack React hooks directly from window.React
-const ReactObj = window.React || {};
-const useState = ReactObj.useState || (() => [null, () => {}]);
-const useEffect = ReactObj.useEffect || (() => {});
-const useMemo = ReactObj.useMemo || ((fn) => fn());
+// Extract React hooks directly from window.React
+const React = window.React;
+const useState = React.useState;
+const useEffect = React.useEffect;
+const useMemo = React.useMemo;
 
 // Safe icon proxy for browser CDN
 const IconProxy = new Proxy({}, {
@@ -15,6 +13,7 @@ const IconProxy = new Proxy({}, {
     }
     return () => null;
   }
+});
 });
 const Plus = IconProxy.Plus;
 const X = IconProxy.X;
