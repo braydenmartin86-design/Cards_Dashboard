@@ -2080,6 +2080,9 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
           </div>
         </div>
 
+        {/* Quick Search & Copy Block */}
+        <SearchCopyBlock card={card} />
+
         {/* Recommended Listing AI Box */}
         {listing && (
           <div style={{ background: "linear-gradient(135deg, rgba(56,139,253,0.15), rgba(46,160,67,0.15))", border: "1px solid #388bfd", borderRadius: 8, padding: 14, marginBottom: 16 }}>
@@ -2113,7 +2116,7 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
           </div>
         )}
 
-        {/* Financial Metrics */}
+        {/* Financial Metrics Overview */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginBottom: 16 }}>
           <div style={{ background: "#0d1117", padding: 10, borderRadius: 6 }}>
             <div style={{ fontSize: 10, color: "#8b949e" }}>Total Cost</div>
