@@ -1071,16 +1071,30 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     [cards]
   );
 
-  const enrichedPokemonCards = useMemo(
-    () =>
-      pokemonCards.map((c) => {
-        const computed = computePokemonCard(c);
-        const listing = recommendedListing(computed);
-        const expectedListProfit = listing ? listing.listPrice * (1 - computed.feesPct) - computed.totalCost : null;
-        return { ...computed, expectedListProfit };
-      }),
-    [pokemonCards]
-  );
+  const enrichedPokemonCards = useMemo(() => {
+    return pokemonCards
+      .map((card) => {
+        const computed = computePokemonCard(card);
+        return {
+          ...card,
+          ...computed,
+        };
+      })
+      .sort((a, b) => {
+        // 1. Main priority tier (1 = PSA 10/9, 2 = Raw, 3 = Grade First...)
+        const prioA = a.sellPriority ?? 99;
+        const prioB = b.sellPriority ?? 99;
+        if (prioA !== prioB) return prioA - prioB;
+
+        // 2. Tie-breaker grouping ("Sell PSA 10" -> "Sell PSA 9" -> "Sell Raw First")
+        const decA = DECISION_SORT_ORDER[a.sellDecision] ?? 99;
+        const decB = DECISION_SORT_ORDER[b.sellDecision] ?? 99;
+        if (decA !== decB) return decA - decB;
+
+        // 3. Dollar value tie-breaker
+        return (b.totalCost || 0) - (a.totalCost || 0);
+      });
+  }, [pokemonCards]);
 
   // Filtered views
   const filtered = useMemo(() => {
