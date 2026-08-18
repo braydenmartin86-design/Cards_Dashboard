@@ -1061,19 +1061,52 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   const setActiveCards = isPokemon ? setPokemonCards : setCards;
   const computeFn = isPokemon ? computePokemonCard : computeCard;
 
-  // Expected profit if sold at the recommended listing price — only meaningful for cards
-  // actually flagged to sell, using the same markup-over-average logic as the detail view's
-  // Recommended Listing box, net of fees, so it's a real "what you'd actually pocket" figure.
+ // 1. Enriched calculations for Sports Cards & Pokémon Cards
   const enriched = useMemo(
     () =>
-      activeCards.map((c) => {
+      cards.map((c) => {
         const computed = computeFn(c);
         const listing = recommendedListing(computed);
         const expectedListProfit = listing ? listing.listPrice * (1 - computed.feesPct) - computed.totalCost : null;
         return { ...computed, expectedListProfit };
       }),
-    [activeCards, computeFn]
+    [cards, computeFn]
   );
+
+  const enrichedPokemonCards = useMemo(
+    () =>
+      pokemonCards.map((c) => {
+        const computed = computeFn(c);
+        const listing = recommendedListing(computed);
+        const expectedListProfit = listing ? listing.listPrice * (1 - computed.feesPct) - computed.totalCost : null;
+        return { ...computed, expectedListProfit };
+      }),
+    [pokemonCards, computeFn]
+  );
+
+  // 2. Filter logic for both portfolios
+  const filterFn = (list) =>
+    list.filter((c) => {
+      if (statusFilter !== "all" && c.status !== statusFilter) return false;
+      if (decisionFilter !== "all" && c.sellDecision !== decisionFilter) return false;
+      if (sportFilter !== "all" && c.sport !== sportFilter) return false;
+      if (locationFilter !== "all" && c.location !== locationFilter) return false;
+      return true;
+    });
+
+  const filtered = useMemo(() => filterFn(enriched), [enriched, statusFilter, decisionFilter, sportFilter, locationFilter]);
+  const filteredPokemonCards = useMemo(() => filterFn(enrichedPokemonCards), [enrichedPokemonCards, statusFilter, decisionFilter, sportFilter, locationFilter]);
+
+  // 3. Totals calculation helper
+  const calculateTotals = (list) => {
+    const invested = list.reduce((sum, c) => sum + (c.totalCost || 0), 0);
+    const potentialRaw = list.reduce((sum, c) => sum + (c.rawGGR || 0), 0);
+    const count = list.length;
+    return { invested, potentialRaw, count };
+  };
+
+  const totals = useMemo(() => calculateTotals(enriched), [enriched]);
+  const pokemonTotals = useMemo(() => calculateTotals(enrichedPokemonCards), [enrichedPokemonCards]);
 
   const filtered = useMemo(() => {
     // Sold and Listed cards live in the My Sales tab now — keep this table to active inventory
