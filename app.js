@@ -1095,6 +1095,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   const pokemonTotals = useMemo(() => calculateTotals(enrichedPokemonCards), [enrichedPokemonCards]);
 
   const filtered = useMemo(() => {
+  const filteredPokemonCards = useMemo(() => enrichedPokemonCards.filter((c) => c.status === "Raw" || c.status === "Graded"), [enrichedPokemonCards]);
     // Sold and Listed cards live in the My Sales tab now — keep this table to active inventory
     let list = enriched.filter((c) => c.status === "Raw" || c.status === "Graded");
     if (statusFilter === "action") {
