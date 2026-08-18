@@ -2648,7 +2648,7 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
     setTimeout(() => setJustMerged(null), 4000);
   }
 
-  // Hard Reset resetting directly to SEED_TARGETS
+  // Reset list directly to SEED_TARGETS
   function hardReset() {
     const today = new Date().toISOString().slice(0, 10);
     setTargets(SEED_TARGETS.map((t) => ({ ...t, id: crypto.randomUUID(), monthAdded: today, lastRefreshed: today })));
