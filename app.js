@@ -1127,21 +1127,15 @@ const enriched = useMemo(
     return list;
   }, [enriched, statusFilter, decisionFilter, sportFilter, locationFilter, sortKey]);
   const filteredPokemonCards = useMemo(() => enrichedPokemonCards.filter((c) => c.status === "Raw" || c.status === "Graded"), [enrichedPokemonCards]);
-
-  const totals = useMemo(() => {
+ const totals = useMemo(() => {
     const qty = (c) => Number(c.quantity) || 1;
     const active = enriched.filter((c) => c.status !== "Sold");
     const invested = active.reduce((s, c) => s + c.totalCost * qty(c), 0);
-    const potentialRaw = active.reduce((s, c) => s + (c.rawGGR ?? 0) * qty(c), 0);
-    const realised = enriched.filter((c) => c.status === "Sold").reduce((s, c) => s + (c.realisedProfit ?? 0) * qty(c), 0);
-    const soldCost = enriched.filter((c) => c.status === "Sold").reduce((s, c) => s + c.totalCost * qty(c), 0);
-    const actionable = enriched.filter((c) =>
-      ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10"].includes(c.sellDecision)
-    ).length;
-    const totalInvested = invested + soldCost;
-    const overallROI = totalInvested > 0 ? (potentialRaw + realised) / totalInvested : null;
-    return { invested, potentialRaw, realised, actionable, count: active.length, overallROI };
+    const potentialRaw = active.reduce((s, c) => s + (c.rawGGR || 0) * qty(c), 0);
+    const count = active.reduce((s, c) => s + qty(c), 0);
+    return { invested, potentialRaw, count };
   }, [enriched]);
+
   const pokemonTotals = useMemo(() => {
     const qty = (c) => Number(c.quantity) || 1;
     const active = enrichedPokemonCards.filter((c) => c.status !== "Sold");
