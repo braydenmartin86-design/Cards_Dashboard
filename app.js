@@ -1721,7 +1721,7 @@ const COLUMNS = [
 ];
 // Helper to render compact Seasonal Timing for Sell decisions
 // Renders dynamic Seasonal Timing for Sell decisions (powered by your calendar)
-// Renders Timing ONLY when it matches the recommended action (Good Timing for Sells, Grade month for Grading)
+// Single Seasonal Timing declaration (Sells)
 function renderSeasonalTiming(card) {
   const decision = card.sellDecision || card.decision || "";
   const isSellDecision = ["Sell PSA 10", "Sell PSA 9", "Sell Raw First"].includes(decision);
@@ -1730,7 +1730,6 @@ function renderSeasonalTiming(card) {
 
   const check = seasonalSellCheck(card.sport);
   
-  // Only render if it's currently a SELL window ("Good Timing")
   if (check && check.isGoodTiming) {
     return (
       <span
@@ -1759,6 +1758,7 @@ function renderSeasonalTiming(card) {
   return null;
 }
 
+// Single Grade Timing declaration (Grading)
 function renderGradeTiming(card) {
   const decision = card.sellDecision || card.decision || "";
   const isGradeDecision = ["Grade First", "Grade PSA", "Grade BGS", "Consider Grading"].includes(decision);
@@ -1767,7 +1767,6 @@ function renderGradeTiming(card) {
 
   const check = seasonalSellCheck(card.sport);
 
-  // Only render if current calendar month action is 'GRADE'
   if (check && check.currentAction === "GRADE") {
     return (
       <span
@@ -1794,37 +1793,6 @@ function renderGradeTiming(card) {
   }
 
   return null;
-}
-
-// Helper to render compact Grade Timing for Grade decisions
-function renderGradeTiming(card) {
-  const decision = card.sellDecision || card.decision || "";
-  const isGradeDecision = ["Grade First", "Grade PSA", "Grade BGS", "Consider Grading"].includes(decision);
-
-  const timing = card.gradeTiming || card.grade_timing;
-  if (!isGradeDecision || !timing) return null;
-
-  const isNow = ["now", "good", "optimal"].some((t) => timing.toLowerCase().includes(t));
-
-  return (
-    <span
-      style={{
-        fontSize: 10,
-        fontWeight: 600,
-        padding: "2px 6px",
-        borderRadius: 4,
-        textTransform: "uppercase",
-        letterSpacing: "0.3px",
-        background: isNow ? "#3A2E1E" : "#2A2E3D",
-        color: isNow ? "#C9A227" : "#8B90A0",
-        border: `1px solid ${isNow ? "#59462E" : "#3A3F50"}`,
-        whiteSpace: "nowrap",
-      }}
-      title={`Grade Timing: ${timing}`}
-    >
-      💎 {timing}
-    </span>
-  );
 }
 function CardTable({ cards, onSelect, playerLabel, sortKey, sortDir, onSort }) {
   const gridCols = COLUMNS.map((c) => c.width).join(" ") + " 32px";
