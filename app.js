@@ -254,7 +254,6 @@ function estimateSellingFee(method, price) {
 
 function computeCard(c) {
   const holdingCost = (c.shipMyCards || "").toLowerCase() === "yes" ? 4.5 : 0;
-  const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + (c.gradingCostPaid || 0);
   const fees = c.feesPct || 0.13;
   const grade = (c.grade || "").toLowerCase();
   const status = c.status;
@@ -269,16 +268,30 @@ function computeCard(c) {
   const netPsa9Sell = psa9 * (1 - fees);
   const netPsa10Sell = psa10 * (1 - fees);
 
-  const declaredValue = Math.max(psa9, psa10);
-  const gCost = status === "Graded" ? 0 : (gradingCost(c.gradingService, declaredValue) || 0);
+  // 1. Calculate the automatic grading fee based on your selected service
+  const declaredValue = Math.max(psa9, psa10, raw);
+  const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
+
+  // 2. Inject grading fee into Total Cost if it was actually sent to be graded!
+  // Uses manual 'gradingCostPaid' if entered, otherwise auto-applies the service fee.
+  const appliedGradingCost = Number(c.gradingCostPaid) > 0 
+    ? Number(c.gradingCostPaid) 
+    : ((status === "At Grading" || status === "Graded") && c.gradingService !== "None" 
+        ? autoGradingCost 
+        : 0);
+
+  const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + appliedGradingCost;
+
+  // 3. For projections (GGR/EV) on RAW cards, this is the fee you *will* pay
+  const futureGCost = status === "Raw" && c.gradingService !== "None" ? autoGradingCost : 0;
 
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
 
   const psa9Eligible = isActive && (status === "Raw" || PSA9_GRADES.includes(grade));
-  const psa9GGR = psa9Eligible ? netPsa9Sell - totalCost - gCost : null;
+  const psa9GGR = psa9Eligible ? netPsa9Sell - totalCost - futureGCost : null;
 
   const psa10Eligible = isActive && (status === "Raw" || PSA10_GRADES.includes(grade));
-  const psa10GGR = psa10Eligible ? netPsa10Sell - totalCost - gCost : null;
+  const psa10GGR = psa10Eligible ? netPsa10Sell - totalCost - futureGCost : null;
 
   let gradedEV = null;
   if (isActive && status !== "Graded") {
@@ -287,15 +300,15 @@ function computeCard(c) {
     if (analysis) {
       const belowValue = raw ?? 0;
       const expectedRevenue = psa10 * (1 - fees) * analysis.psa10Prob + psa9 * (1 - fees) * analysis.psa9Prob + belowValue * (1 - fees) * analysis.belowProb;
-      gradedEV = expectedRevenue - totalCost - gCost;
+      gradedEV = expectedRevenue - totalCost - futureGCost;
     } else if (gemRate != null) {
       const p10 = gemRate;
       const p9 = Math.min(1 - p10, 0.5);
-      gradedEV = p10 * (netPsa10Sell - totalCost - gCost) + p9 * (netPsa9Sell - totalCost - gCost);
+      gradedEV = p10 * (netPsa10Sell - totalCost - futureGCost) + p9 * (netPsa9Sell - totalCost - futureGCost);
     } else {
       const p10Prob = c.psa10Prob ?? 0.35;
       const p9Prob = c.psa9Prob ?? 0.45;
-      gradedEV = p10Prob * (netPsa10Sell - totalCost - gCost) + p9Prob * (netPsa9Sell - totalCost - gCost);
+      gradedEV = p10Prob * (netPsa10Sell - totalCost - futureGCost) + p9Prob * (netPsa9Sell - totalCost - futureGCost);
     }
   }
 
@@ -306,7 +319,7 @@ function computeCard(c) {
     gradeWorthIt = "HIGH RISK";
   }
 
-// Sell Decision (AC)
+  // Sell Decision (AC)
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -317,9 +330,6 @@ function computeCard(c) {
   } else if (status === "At Grading") {
     sellDecision = "At Grading";
   } else if (status === "Graded") {
-    // For already-graded cards (both self-graded & bought graded):
-    // PSA 10 requires strong $20+ net profit target
-    // PSA 9 requires break-even ($0+ GGR) to liquidate active inventory rather than hold
     if (grade === "psa 10" && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
     else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
@@ -338,10 +348,8 @@ function computeCard(c) {
     }
   }
 
-  // Grade? (AB)
   const gradeCall = status !== "Raw" || sellDecision === "Sell Raw First" ? "NO" : gradeWorthIt;
 
-  // Sell Priority (AD)
   let sellPriority = 9;
   if (sellDecision === "") sellPriority = 9;
   else if (sellDecision === "Sell PSA 9" || sellDecision === "Sell PSA 10") sellPriority = 1;
@@ -356,8 +364,8 @@ function computeCard(c) {
   else sellPriority = 9;
 
   const rawBE = totalCost / (1 - fees);
-  const psa9BE = (totalCost + gCost) / (1 - fees);
-  const psa10BE = (totalCost + gCost) / (1 - fees);
+  const psa9BE = (totalCost + futureGCost) / (1 - fees);
+  const psa10BE = (totalCost + futureGCost) / (1 - fees);
 
   const hasActualFees = c.actualFeesPaid != null && c.actualFeesPaid !== "";
   const netSale =
@@ -377,7 +385,6 @@ function computeCard(c) {
 
   let gradingTurnaroundDays = null, gradingDaysElapsed = null, gradingProgressPct = null;
   if (status === "At Grading" && c.gradingSentDate) {
-    const declaredValue = Math.max(psa9, psa10, raw);
     gradingTurnaroundDays = estimateGradingTurnaroundDays(c.gradingService, declaredValue);
     const sent = new Date(c.gradingSentDate);
     const now = new Date();
@@ -395,7 +402,7 @@ function computeCard(c) {
     netRawSell,
     netPsa9Sell,
     netPsa10Sell,
-    gradingCostValue: gCost,
+    gradingCostValue: status === "Graded" ? 0 : autoGradingCost,
     rawGGR,
     psa9GGR,
     psa10GGR,
@@ -417,7 +424,6 @@ function computeCard(c) {
 // Pokemon sheet decision engine
 function computePokemonCard(c) {
   const holdingCost = (c.shipMyCards || "").toLowerCase() === "yes" ? 4.5 : 0;
-  const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + (c.gradingCostPaid || 0);
   const fees = c.feesPct || 0.13;
   const status = c.status;
   const isActive = status === "Raw" || status === "Graded";
@@ -430,12 +436,25 @@ function computePokemonCard(c) {
   const netPsa9Sell = psa9 * (1 - fees);
   const netPsa10Sell = psa10 * (1 - fees);
 
-  const declaredValue = Math.max(psa9, psa10);
-  const gCost = status === "Graded" ? 0 : (gradingCost(c.gradingService, declaredValue) || 0);
+  // 1. Calculate auto grading fee
+  const declaredValue = Math.max(psa9, psa10, raw);
+  const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
+
+  // 2. Inject grading fee into Total Cost
+  const appliedGradingCost = Number(c.gradingCostPaid) > 0 
+    ? Number(c.gradingCostPaid) 
+    : ((status === "At Grading" || status === "Graded") && c.gradingService !== "None" 
+        ? autoGradingCost 
+        : 0);
+
+  const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + appliedGradingCost;
+
+  // 3. For projections on RAW cards
+  const futureGCost = status === "Raw" && c.gradingService !== "None" ? autoGradingCost : 0;
 
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
-  const psa9GGR = isActive ? netPsa9Sell - totalCost - gCost : null;
-  const psa10GGR = isActive ? netPsa10Sell - totalCost - gCost : null;
+  const psa9GGR = isActive ? netPsa9Sell - totalCost - futureGCost : null;
+  const psa10GGR = isActive ? netPsa10Sell - totalCost - futureGCost : null;
 
   let gradedEV = null;
   if (isActive && status !== "Graded") {
@@ -444,15 +463,15 @@ function computePokemonCard(c) {
     if (analysis) {
       const belowValue = raw ?? 0;
       const expectedRevenue = psa10 * (1 - fees) * analysis.psa10Prob + psa9 * (1 - fees) * analysis.psa9Prob + belowValue * (1 - fees) * analysis.belowProb;
-      gradedEV = expectedRevenue - totalCost - gCost;
+      gradedEV = expectedRevenue - totalCost - futureGCost;
     } else if (gemRate != null) {
       const p10 = gemRate;
       const p9 = Math.min(1 - p10, 0.5);
-      gradedEV = p10 * (netPsa10Sell - totalCost - gCost) + p9 * (netPsa9Sell - totalCost - gCost);
+      gradedEV = p10 * (netPsa10Sell - totalCost - futureGCost) + p9 * (netPsa9Sell - totalCost - futureGCost);
     } else {
       const p10Prob = c.psa10Prob ?? 0.35;
       const p9Prob = c.psa9Prob ?? 0.45;
-      gradedEV = p10Prob * (netPsa10Sell - totalCost - gCost) + p9Prob * (netPsa9Sell - totalCost - gCost);
+      gradedEV = p10Prob * (netPsa10Sell - totalCost - futureGCost) + p9Prob * (netPsa9Sell - totalCost - futureGCost);
     }
   }
 
@@ -503,8 +522,8 @@ function computePokemonCard(c) {
   else sellPriority = 6;
 
   const rawBE = totalCost / (1 - fees);
-  const psa9BE = (totalCost + gCost) / (1 - fees);
-  const psa10BE = (totalCost + gCost) / (1 - fees);
+  const psa9BE = (totalCost + futureGCost) / (1 - fees);
+  const psa10BE = (totalCost + futureGCost) / (1 - fees);
 
   const hasActualFees = c.actualFeesPaid != null && c.actualFeesPaid !== "";
   const netSale =
@@ -525,8 +544,7 @@ function computePokemonCard(c) {
 
   let gradingTurnaroundDays = null, gradingDaysElapsed = null, gradingProgressPct = null;
   if (status === "At Grading" && c.gradingSentDate) {
-    const declaredForTurnaround = Math.max(psa9, psa10, raw);
-    gradingTurnaroundDays = estimateGradingTurnaroundDays(c.gradingService, declaredForTurnaround);
+    gradingTurnaroundDays = estimateGradingTurnaroundDays(c.gradingService, declaredValue);
     const sent = new Date(c.gradingSentDate);
     const now = new Date();
     gradingDaysElapsed = Math.max(0, Math.round((now - sent) / 86400000));
@@ -543,7 +561,7 @@ function computePokemonCard(c) {
     netRawSell,
     netPsa9Sell,
     netPsa10Sell,
-    gradingCostValue: gCost,
+    gradingCostValue: status === "Graded" ? 0 : autoGradingCost,
     rawGGR,
     psa9GGR,
     psa10GGR,
@@ -561,17 +579,6 @@ function computePokemonCard(c) {
     saleVariancePct,
   };
 }
-
-const SELL_DECISION_STYLE = {
-  "Sell Raw First": { color: "#C9A227", label: "Sell Raw First" },
-  "Grade First": { color: "#8B6FD6", label: "Grade First" },
-  "Sell PSA 10": { color: "#4E8BC9", label: "Sell PSA 10" },
-  "Sell PSA 9": { color: "#4E8BC9", label: "Sell PSA 9" },
-  Hold: { color: "#5C7A99", label: "Hold" },
-  Listed: { color: "#2FA89A", label: "Listed" },
-  Sold: { color: "#4E8B6B", label: "Sold" },
-  "": { color: "#4A4F5C", label: "—" },
-};
 // ===== Buy Evaluator engine =====
 
 // ===== Buy Evaluator engine =====
