@@ -751,10 +751,22 @@ function fmtPct(n) {
 
 
 
+// Global constants & styling dictionaries
 const STATUS_OPTIONS = ["Raw", "At Grading", "Graded", "Listed", "Sold"];
 const GRADE_OPTIONS = ["PSA 9", "PSA 10", "SGC 9", "SGC 10", "BGS 9", "BGS 9.5", "BGS 10"];
 const GRADING_SERVICE_OPTIONS = ["PSA via Australia", "PSA via ShipMyCards", "SGC via Australia", "None"];
 const SPORT_OPTIONS = ["NFL", "NBA", "WNBA", "MLB", "AFL", "Soccer", "MMA", "WWE", "Pokémon", "Other"];
+
+const SELL_DECISION_STYLE = {
+  "Sell Raw First": { color: "#C9A227", label: "Sell Raw First" },
+  "Grade First": { color: "#8B6FD6", label: "Grade First" },
+  "Sell PSA 10": { color: "#4E8BC9", label: "Sell PSA 10" },
+  "Sell PSA 9": { color: "#4E8BC9", label: "Sell PSA 9" },
+  Hold: { color: "#5C7A99", label: "Hold" },
+  Listed: { color: "#2FA89A", label: "Listed" },
+  Sold: { color: "#4E8B6B", label: "Sold" },
+  "": { color: "#4A4F5C", label: "—" },
+};
 
 // Team rosters for Box Breaks — pre-filled so you're not typing 32 team names every time.
 // Editable per spot in case of trades/relocations/name changes.
