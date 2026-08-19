@@ -317,7 +317,7 @@ function computeCard(c) {
     }
   }
 
-// 1. Grade Worth It Evaluation ($20+ net PSA 10 profit floor)
+// 1. Strict Grade Worth It Bar ($20+ NET PSA 10 profit)
   let gradeWorthIt = "NO";
   if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
     gradeWorthIt = "YES";
@@ -340,19 +340,17 @@ function computeCard(c) {
     else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
-    // RAW CARDS DECISION TREE
+    // RAW CARDS
     const minRoiThreshold = 0.20;
     const minDollarProfit = 3.00;
 
     const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
     const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
 
-    // Must pass gradeWorthIt AND clear $20 PSA 10 profit
-    const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? 0) >= 20 && (psa10GGR ?? -Infinity) > (rawGGR ?? -Infinity);
+    // Hard check: MUST have $20+ PSA 10 profit AND pass gradeWorthIt
+    const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? 0) >= 20;
 
-    if (sellRawFirst && (rawGGR ?? 0) >= (psa10GGR ?? 0)) {
-      sellDecision = "Sell Raw First";
-    } else if (gradeFirst) {
+    if (gradeFirst && (psa10GGR ?? 0) > (rawGGR ?? -Infinity)) {
       sellDecision = "Grade First";
     } else if (sellRawFirst) {
       sellDecision = "Sell Raw First";
