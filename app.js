@@ -342,26 +342,28 @@ function computeCard(c) {
     if (grade === "psa 10" && psa10GGR >= 20) sellDecision = "Sell PSA 10";
     else if (PSA9_GRADES.includes(grade) && psa9GGR >= 5) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
-  } else {
-    // Raw — Grade First now requires the SAME bar as a YES/HIGH RISK Grade? call, plus still
-    // needing to beat the raw sell price outright.
+ } else {
+    // Raw — Grade First requires a valid grade call and better return than raw
     const gradeFirst = gradeWorthIt !== "NO" && psa10GGR > rawGGR;
     if (gradeFirst) {
       sellDecision = "Grade First";
     } else {
-      // Enforce a strict 20% ROI threshold (0.20) for selling Raw cards
+      // 1. Minimum 20% ROI threshold
       const minRoiThreshold = 0.20;
       
-      // Calculate net ROI based on raw GGR (Gain Gross Return) over total cost basis
+      // 2. Minimum net dollar profit floor (e.g., $3.00 profit)
+      // Any card making less than $3.00 isn't worth selling individually
+      const minDollarProfit = 3.00; 
+
+      // Calculate net ROI
       const rawRoi = totalCost > 0 ? rawGGR / totalCost : 0;
-      
-      // Must generate positive profit AND clear at least 20% ROI
-      const sellRawFirst = rawGGR > 0 && rawRoi >= minRoiThreshold;
-      
+
+      // Must make at least $3.00 profit AND clear 20% ROI
+      const sellRawFirst = rawGGR >= minDollarProfit && rawRoi >= minRoiThreshold;
+
       sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
     }
   }
-
   // Grade? (AB) — reads the same gradeWorthIt bar computed above, so it can never disagree
   // with a "Grade First" sell decision again.
   const gradeCall = status !== "Raw" || sellDecision === "Sell Raw First" ? "NO" : gradeWorthIt;
