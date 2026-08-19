@@ -512,6 +512,10 @@ function computePokemonCard(c) {
     gradeWorthIt = "HIGH RISK"; // Demotes low gem rate cards (<25%) to HIGH RISK
   }
 
+// 1. Define gradeCall
+  const gradeCall = status === "Raw" ? gradeWorthIt : "";
+
+  // 2. Sell Decision Tree
   let sellDecision = "";
   if (status === "Sold") {
     sellDecision = "Sold";
@@ -544,20 +548,19 @@ function computePokemonCard(c) {
     }
   }
 
- // Detailed priority mapping to properly place HIGH RISK below YES
+  // 3. Priority Mapping (Reads gradeCall safely now)
   let sellPriority = 9;
   if (sellDecision === "") sellPriority = 9;
   else if (sellDecision === "Sell PSA 9" || sellDecision === "Sell PSA 10") sellPriority = 1;
   else if (sellDecision === "Sell Raw First") sellPriority = 2;
-  else if (gradeCall === "YES" && sellDecision === "Grade First") sellPriority = 3;       // 👈 Top Grade First
-  else if (gradeCall === "HIGH RISK" && sellDecision === "Grade First") sellPriority = 4; // 👈 High Risk directly below
+  else if (gradeCall === "YES" && sellDecision === "Grade First") sellPriority = 3;
+  else if (gradeCall === "HIGH RISK" && sellDecision === "Grade First") sellPriority = 4;
   else if (gradeCall === "NO" && sellDecision === "Grade First") sellPriority = 5;
   else if (sellDecision === "Hold") sellPriority = 6;
   else if (sellDecision === "Listed") sellPriority = 7;
   else if (sellDecision === "Sold") sellPriority = 8;
   else if (status === "At Grading") sellPriority = 6.5;
   else sellPriority = 9;
-
   const rawBE = totalCost / (1 - fees);
   const psa9BE = (totalCost + futureGCost) / (1 - fees);
   const psa10BE = (totalCost + futureGCost) / (1 - fees);
