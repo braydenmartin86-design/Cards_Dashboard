@@ -1931,10 +1931,17 @@ function CardTable({ cards, onSelect, playerLabel, sortKey, sortDir, onSort }) {
 }
 
 function CardRow({ card, onClick, gridCols }) {
-  const style = SELL_DECISION_STYLE[card.sellDecision] || SELL_DECISION_STYLE[""];
-  const isTopAction = card.sellPriority === 1;
-  const isRawSell = card.sellDecision === "Sell Raw First";
-  const isGradeAction = card.sellPriority >= 3 && card.sellPriority <= 5 && card.sellDecision === "Grade First";
+  // 1. Force live evaluation through engine based on sport
+  const computed = card.sport === "Pokémon" ? computePokemonCard(card) : computeCard(card);
+  const decision = computed.sellDecision;
+  const style = SELL_DECISION_STYLE[decision] || SELL_DECISION_STYLE[""];
+
+  const isTopAction = computed.sellPriority === 1;
+  const isRawSell = decision === "Sell Raw First";
+  const isGradeAction = computed.sellPriority >= 3 && computed.sellPriority <= 5 && decision === "Grade First";
+  
+  // 2. High Risk Check
+  const isHighRisk = decision === "Grade First" && computed.gradeCall === "HIGH RISK";
 
   return (
     <div
@@ -1971,13 +1978,15 @@ function CardRow({ card, onClick, gridCols }) {
         </div>
       </div>
       <div style={{ color: "#A7ADBB" }}>{card.status}{card.grade ? ` · ${card.grade}` : ""}</div>
-      <div>{fmtMoney(card.totalCost)}</div>
-      <div style={{ color: card.rawGGR >= 0 ? "#4E8B6B" : "#B4472E" }}>{card.rawGGR != null ? fmtMoney(card.rawGGR) : "—"}</div>
-      <div style={{ color: card.gradedEV >= 0 ? "#4E8B6B" : "#B4472E" }}>{card.gradedEV != null ? fmtMoney(card.gradedEV) : "—"}</div>
+      <div>{fmtMoney(computed.totalCost)}</div>
+      <div style={{ color: computed.rawGGR >= 0 ? "#4E8B6B" : "#B4472E" }}>{computed.rawGGR != null ? fmtMoney(computed.rawGGR) : "—"}</div>
+      <div style={{ color: computed.gradedEV >= 0 ? "#4E8B6B" : "#B4472E" }}>{computed.gradedEV != null ? fmtMoney(computed.gradedEV) : "—"}</div>
       <div style={{ color: card.expectedListProfit >= 0 ? "#4E8B6B" : card.expectedListProfit != null ? "#B4472E" : "#5C6270", fontWeight: card.expectedListProfit != null ? 600 : 400 }}>
         {card.expectedListProfit != null ? fmtMoney(card.expectedListProfit) : "—"}
       </div>
-      <div>
+
+      {/* Decision Badge + High Risk Warning */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span
           className="mono"
           style={{
@@ -1991,6 +2000,15 @@ function CardRow({ card, onClick, gridCols }) {
         >
           {isTopAction ? "⚡ " : ""}{style.label}
         </span>
+
+        {isHighRisk && (
+          <span
+            title="High Risk: PSA 10 profit is positive, but a PSA 9 or lower results in a loss."
+            style={{ fontSize: 13, cursor: "help" }}
+          >
+            ⚠️
+          </span>
+        )}
       </div>
 
       <div style={{ display: "flex", alignItems: "center" }}>
