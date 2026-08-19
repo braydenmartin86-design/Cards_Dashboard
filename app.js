@@ -306,6 +306,7 @@ function computeCard(c) {
     gradeWorthIt = "HIGH RISK";
   }
 
+  // Sell Decision (AC)
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -334,26 +335,10 @@ function computeCard(c) {
     }
   }
 
-  return {
-    ...c,
-    holdingCost,
-    totalCost,
-    rawGGR,
-    psa9GGR,
-    psa10GGR,
-    gradedEV,
-    gradeWorthIt,
-    sellDecision,
-  };
-}
-  // Grade? (AB) — reads the same gradeWorthIt bar computed above, so it can never disagree
-  // with a "Grade First" sell decision again.
+  // Grade? (AB)
   const gradeCall = status !== "Raw" || sellDecision === "Sell Raw First" ? "NO" : gradeWorthIt;
 
-  // Sell Priority (AD) — cards ready to sell right now always come first, and a graded sale
-  // (a known, liquid, fungible quantity — real cert lookup, real recent comps) ranks above a
-  // raw sale (real condition variance a buyer can't fully verify from photos) since it's the
-  // more certain, faster-to-close win.
+  // Sell Priority (AD)
   let sellPriority = 9;
   if (sellDecision === "") sellPriority = 9;
   else if (sellDecision === "Sell PSA 9" || sellDecision === "Sell PSA 10") sellPriority = 1;
@@ -371,10 +356,6 @@ function computeCard(c) {
   const psa9BE = (totalCost + gCost) / (1 - fees);
   const psa10BE = (totalCost + gCost) / (1 - fees);
 
-  // Once actually sold, use the real fees/consignment shipping paid if logged — the generic
-  // Fees % assumption (built for eBay-style flat percentages) is wrong for DCSports87's tiered
-  // payouts, Fanatics Collect's Buy Now/auction split, or Whatnot's commission. Falls back to
-  // the Fees % estimate only when no actual figures have been entered.
   const hasActualFees = c.actualFeesPaid != null && c.actualFeesPaid !== "";
   const netSale =
     c.actualSellPrice != null
@@ -391,7 +372,6 @@ function computeCard(c) {
   const saleVariance = netSale != null && projectedNetSell != null ? netSale - projectedNetSell : null;
   const saleVariancePct = saleVariance != null && projectedNetSell > 0 ? saleVariance / projectedNetSell : null;
 
-  // Grading Tracker progress bar inputs — only meaningful while a card is actually away.
   let gradingTurnaroundDays = null, gradingDaysElapsed = null, gradingProgressPct = null;
   if (status === "At Grading" && c.gradingSentDate) {
     const declaredValue = Math.max(psa9, psa10, raw);
@@ -431,21 +411,16 @@ function computeCard(c) {
   };
 }
 
-// Pokemon sheet uses a simpler decision engine than the main Own sheet
+// Pokemon sheet decision engine
 function computePokemonCard(c) {
   const holdingCost = (c.shipMyCards || "").toLowerCase() === "yes" ? 4.5 : 0;
-  const totalCost = c.paid + c.shipping + holdingCost + (c.gradingCostPaid || 0);
-  const fees = c.feesPct;
+  const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + (c.gradingCostPaid || 0);
+  const fees = c.feesPct || 0.13;
   const status = c.status;
   const isActive = status === "Raw" || status === "Graded";
 
   const raw = c.rawAvg ?? 0;
   const psa9 = c.psa9Avg ?? 0;
-  // No PSA 10 comp on record (often because none exist yet — a genuinely low/zero population)
-  // is NOT the same as "PSA 10 sells for $0." Defaulting to zero was treating a rare, likely
-  // more valuable grade as worthless, which killed the grade call on exactly the cards where
-  // an unpopulated PSA 10 would probably be worth the most. Floor it at the PSA 9 price instead
-  // — a PSA 10 should never realistically sell for less than a 9 of the same card.
   const psa10 = c.psa10Avg ?? c.psa9Avg ?? 0;
 
   const netRawSell = raw * (1 - fees);
@@ -453,11 +428,12 @@ function computePokemonCard(c) {
   const netPsa10Sell = psa10 * (1 - fees);
 
   const declaredValue = Math.max(psa9, psa10);
-  const gCost = gradingCost(c.gradingService, declaredValue);
+  const gCost = status === "Graded" ? 0 : (gradingCost(c.gradingService, declaredValue) || 0);
 
-  const rawGGR = isActive ? (status === "Graded" ? null : raw - totalCost) : null;
-  const psa9GGR = isActive ? psa9 * (1 - fees) - totalCost - gCost : null;
-  const psa10GGR = isActive ? psa10 * (1 - fees) - totalCost - gCost : null;
+  // Raw GGR deducts seller fees correctly
+  const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
+  const psa9GGR = isActive ? netPsa9Sell - totalCost - gCost : null;
+  const psa10GGR = isActive ? netPsa10Sell - totalCost - gCost : null;
 
   let gradedEV = null;
   if (isActive && status !== "Graded") {
@@ -470,14 +446,14 @@ function computePokemonCard(c) {
     } else if (gemRate != null) {
       const p10 = gemRate;
       const p9 = Math.min(1 - p10, 0.5);
-      gradedEV = p10 * (psa10 * (1 - fees) - totalCost - gCost) + p9 * (psa9 * (1 - fees) - totalCost - gCost);
+      gradedEV = p10 * (netPsa10Sell - totalCost - gCost) + p9 * (netPsa9Sell - totalCost - gCost);
     } else {
-      gradedEV = c.psa10Prob * (psa10 * (1 - fees) - totalCost - gCost) + c.psa9Prob * (psa9 * (1 - fees) - totalCost - gCost);
+      const p10Prob = c.psa10Prob ?? 0.35;
+      const p9Prob = c.psa9Prob ?? 0.45;
+      gradedEV = p10Prob * (netPsa10Sell - totalCost - gCost) + p9Prob * (netPsa9Sell - totalCost - gCost);
     }
   }
 
-  // Same fix as the main engine: compute the grade-worth-it bar once, use it for both the
-  // sell decision and the Grade? call so they can't contradict each other.
   let gradeWorthIt = "NO";
   if (psa10GGR >= 40 && psa9GGR < 0 && psa9GGR >= -20) gradeWorthIt = "HIGH RISK";
   else if (psa10GGR >= 20 && psa9GGR >= 0) gradeWorthIt = "YES";
@@ -497,13 +473,25 @@ function computePokemonCard(c) {
     else if (PSA9_GRADES.includes(pkmnGradeCheck) && psa9GGR >= 5) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
-    const best = Math.max(psa9GGR, psa10GGR);
-    if (rawGGR > 0 && rawGGR >= best) sellDecision = "Sell Raw First";
-    else if (gradeWorthIt !== "NO" && best > 0 && best > rawGGR) sellDecision = "Grade First";
-    else sellDecision = "Hold";
+    // Pokémon Raw thresholds: Enforce $3.00 profit AND 20% ROI floor
+    const minRoiThreshold = 0.20;
+    const minDollarProfit = 3.00;
+
+    const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
+    const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
+
+    const bestGraded = Math.max(psa9GGR ?? -Infinity, psa10GGR ?? -Infinity);
+
+    if (sellRawFirst && (rawGGR ?? 0) >= bestGraded) {
+      sellDecision = "Sell Raw First";
+    } else if (gradeWorthIt !== "NO" && bestGraded > 0 && bestGraded > (rawGGR ?? -Infinity)) {
+      sellDecision = "Grade First";
+    } else {
+      sellDecision = "Hold";
+    }
   }
 
- let sellPriority = 6;
+  let sellPriority = 6;
   if (sellDecision === "Sell PSA 10" || sellDecision === "Sell PSA 9") sellPriority = 1;
   else if (sellDecision === "Sell Raw First") sellPriority = 2;
   else if (sellDecision === "Grade First") sellPriority = 3;
@@ -512,6 +500,7 @@ function computePokemonCard(c) {
   else if (status === "Listed") sellPriority = 6;
   else if (status === "Sold") sellPriority = 7;
   else sellPriority = 6;
+
   const rawBE = totalCost / (1 - fees);
   const psa9BE = (totalCost + gCost) / (1 - fees);
   const psa10BE = (totalCost + gCost) / (1 - fees);
@@ -582,7 +571,6 @@ const SELL_DECISION_STYLE = {
   Sold: { color: "#4E8B6B", label: "Sold" },
   "": { color: "#4A4F5C", label: "—" },
 };
-
 // ===== Buy Evaluator engine =====
 
 // ===== Buy Evaluator engine =====
