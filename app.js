@@ -171,14 +171,15 @@ function tieredPsaAuCost(declaredValueAUD) {
   return 2199;
 }
 
-function gradingCost(service, declaredValueAUD) {
-  if (!service) return 0;
-  const s = service.toLowerCase();
-  // Accept both current and pre-rename labels — cards saved before the rename are still
-  // holding the old strings in browser storage and would otherwise silently price at $0.
-  if (s === "psa via australia" || s === "psa via aus") return tieredPsaAuCost(declaredValueAUD);
-  if (s === "psa via shipmycards" || s === "psa via usa") return 38.9;
-  if (s === "sgc via australia" || s === "sgc via aus") return 39.95;
+function gradingCost(service, declaredValue = 0) {
+  if (!service || service === "None" || service === "Bought Graded") return 0;
+  
+  if (service === "PSA via Australia") {
+    return declaredValue > 500 ? 45 : 22; // Example tiering
+  }
+  if (service === "PSA via ShipMyCards") return 25;
+  if (service === "SGC via Australia") return 20;
+  
   return 0;
 }
 
@@ -272,18 +273,22 @@ function computeCard(c) {
   const declaredValue = Math.max(psa9, psa10, raw);
   const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
 
-  // 2. Inject grading fee into Total Cost if it was actually sent to be graded!
-  // Uses manual 'gradingCostPaid' if entered, otherwise auto-applies the service fee.
+  // 2. Identify if you sent this to be graded yourself
+  const isSelfGraded = [
+    "PSA via Australia", 
+    "PSA via ShipMyCards", 
+    "SGC via Australia"
+  ].includes(c.gradingService);
+
+  // 3. Inject grading fee into Total Cost only if self-graded (or manually overridden)
   const appliedGradingCost = Number(c.gradingCostPaid) > 0 
     ? Number(c.gradingCostPaid) 
-    : ((status === "At Grading" || status === "Graded") && c.gradingService !== "None" 
-        ? autoGradingCost 
-        : 0);
+    : (isSelfGraded && (status === "At Grading" || status === "Graded") ? autoGradingCost : 0);
 
   const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + appliedGradingCost;
 
-  // 3. For projections (GGR/EV) on RAW cards, this is the fee you *will* pay
-  const futureGCost = status === "Raw" && c.gradingService !== "None" ? autoGradingCost : 0;
+  // 4. For projections (GGR/EV) on RAW cards, this is the fee you *will* pay
+  const futureGCost = status === "Raw" && isSelfGraded ? autoGradingCost : 0;
 
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
 
@@ -754,7 +759,13 @@ function fmtPct(n) {
 // Global constants & styling dictionaries
 const STATUS_OPTIONS = ["Raw", "At Grading", "Graded", "Listed", "Sold"];
 const GRADE_OPTIONS = ["PSA 9", "PSA 10", "SGC 9", "SGC 10", "BGS 9", "BGS 9.5", "BGS 10"];
-const GRADING_SERVICE_OPTIONS = ["PSA via Australia", "PSA via ShipMyCards", "SGC via Australia", "None"];
+const GRADING_SERVICE_OPTIONS = [
+  "PSA via Australia", 
+  "PSA via ShipMyCards", 
+  "SGC via Australia", 
+  "Bought Graded", 
+  "None"
+];
 const SPORT_OPTIONS = ["NFL", "NBA", "WNBA", "MLB", "AFL", "Soccer", "MMA", "WWE", "Pokémon", "Other"];
 
 const SELL_DECISION_STYLE = {
