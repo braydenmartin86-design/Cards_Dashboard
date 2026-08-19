@@ -306,7 +306,7 @@ function computeCard(c) {
     gradeWorthIt = "HIGH RISK";
   }
 
-  // Sell Decision (AC)
+// Sell Decision (AC)
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -317,8 +317,11 @@ function computeCard(c) {
   } else if (status === "At Grading") {
     sellDecision = "At Grading";
   } else if (status === "Graded") {
-    if (grade === "psa 10" && psa10GGR >= 20) sellDecision = "Sell PSA 10";
-    else if (PSA9_GRADES.includes(grade) && psa9GGR >= 5) sellDecision = "Sell PSA 9";
+    // For already-graded cards (both self-graded & bought graded):
+    // PSA 10 requires strong $20+ net profit target
+    // PSA 9 requires break-even ($0+ GGR) to liquidate active inventory rather than hold
+    if (grade === "psa 10" && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
+    else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
     const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? -Infinity) > (rawGGR ?? -Infinity);
@@ -430,7 +433,6 @@ function computePokemonCard(c) {
   const declaredValue = Math.max(psa9, psa10);
   const gCost = status === "Graded" ? 0 : (gradingCost(c.gradingService, declaredValue) || 0);
 
-  // Raw GGR deducts seller fees correctly
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
   const psa9GGR = isActive ? netPsa9Sell - totalCost - gCost : null;
   const psa10GGR = isActive ? netPsa10Sell - totalCost - gCost : null;
@@ -469,11 +471,10 @@ function computePokemonCard(c) {
     sellDecision = "At Grading";
   } else if (status === "Graded") {
     const pkmnGradeCheck = (c.grade || "").toLowerCase();
-    if (PSA10_GRADES.includes(pkmnGradeCheck) && psa10GGR >= 20) sellDecision = "Sell PSA 10";
-    else if (PSA9_GRADES.includes(pkmnGradeCheck) && psa9GGR >= 5) sellDecision = "Sell PSA 9";
+    if (PSA10_GRADES.includes(pkmnGradeCheck) && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
+    else if (PSA9_GRADES.includes(pkmnGradeCheck) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
-    // Pokémon Raw thresholds: Enforce $3.00 profit AND 20% ROI floor
     const minRoiThreshold = 0.20;
     const minDollarProfit = 3.00;
 
