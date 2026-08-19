@@ -6017,6 +6017,39 @@ Identify: player (athlete/character name), sport (one of NFL, NBA, WNBA, MLB, AF
 Respond with ONLY valid JSON, no markdown fences, no commentary, in exactly this shape:
 {"player":"","sport":"","cardNum":"","card":"","rookie":false,"numbered":false,"outOf":null,"bidders":null,"watchers":null,"currentBidAUD":null,"originalCurrency":"","shippingAUD":null,"confidence":"Low"|"Medium"|"High","notes":"anything ambiguous, missing, or converted from another currency"}`;
 
+// Quick local regex parser to handle basic copy-pastes instantly without hitting AI limits
+function parseListingLocally(text) {
+  if (!text) return null;
+
+  const priceMatch = text.match(/(?:AU|US|EUR|GBP)?\s*\$\s*([\d,]+(?:\.\d{2})?)/i);
+  const bidsMatch = text.match(/(\d+)\s*bids?/i);
+  const watchersMatch = text.match(/(\d+)\s*watchers?/i);
+  const shippingMatch = text.match(/\+\s*\$?\s*([\d,]+(?:\.\d{2})?)\s*shipping/i);
+  const gradeMatch = text.match(/\b(PSA|BGS|SGC|CGC)\s*(10|[1-9](?:\.5)?)\b/i);
+
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const title = lines[0] || text;
+
+  if (!priceMatch && !title) return null;
+
+  return {
+    player: title,
+    sport: "NFL", // Default fallback
+    cardNum: "",
+    card: title,
+    rookie: /\b(RC|Rookie)\b/i.test(text),
+    numbered: /\/\d+/.test(text),
+    outOf: text.match(/\/(\d+)/)?.[1] ? parseInt(text.match(/\/(\d+)/)[1], 10) : null,
+    bidders: bidsMatch ? parseInt(bidsMatch[1], 10) : null,
+    watchers: watchersMatch ? parseInt(watchersMatch[1], 10) : null,
+    currentBidAUD: priceMatch ? parseFloat(priceMatch[1].replace(",", "")) : null,
+    originalCurrency: text.includes("US") ? "USD" : "AUD",
+    shippingAUD: shippingMatch ? parseFloat(shippingMatch[1].replace(",", "")) : 0,
+    confidence: "Medium",
+    notes: "Extracted via instant local parser",
+  };
+}
+
 function ListingPasteExtractor({ onExtracted }) {
   const [expanded, setExpanded] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -6029,14 +6062,44 @@ function ListingPasteExtractor({ onExtracted }) {
     setExtracting(true);
     setError(null);
     setResult(null);
+
+    // Step 1: Try local regex parsing first (Instant & bypasses API limits)
+    const localParsed = parseListingLocally(pasteText);
+    if (localParsed && localParsed.currentBidAUD !== null) {
+      setResult(localParsed);
+      onExtracted(localParsed);
+      setExtracting(false);
+      return;
+    }
+
+    // Step 2: Fall back to AI extraction if text is unstructured
     try {
-     const promptText = `${LISTING_EXTRACT_PROMPT}\n\nPasted listing:\n${pasteText}`;
-      const parsed = await callGeminiAi(promptText);
-      setResult(parsed);
-      onExtracted(parsed);
+      const promptText = `${LISTING_EXTRACT_PROMPT}\n\nPasted listing:\n${pasteText}`;
+      const rawResponse = await callGeminiAi(promptText);
+
+      let parsed = null;
+      if (typeof rawResponse === "object" && rawResponse !== null) {
+        parsed = rawResponse;
+      } else if (typeof rawResponse === "string") {
+        const cleanJson = rawResponse.replace(/```json|```/g, "").trim();
+        parsed = JSON.parse(cleanJson);
+      }
+
+      if (parsed && typeof parsed === "object") {
+        setResult(parsed);
+        onExtracted(parsed);
+      } else {
+        throw new Error("Could not parse JSON structure");
+      }
     } catch (e) {
-      console.error(e);
-      setError("Couldn't parse that — try pasting more of the listing text (title, price, bids/watchers, shipping), or just fill the fields in manually below.");
+      console.error("Listing extract failed:", e);
+      // Fallback: If AI fails (e.g. 429 Rate Limit), force whatever local data we grabbed
+      if (localParsed) {
+        setResult(localParsed);
+        onExtracted(localParsed);
+      } else {
+        setError("Couldn't parse that automatically. Please fill in the fields manually below.");
+      }
     } finally {
       setExtracting(false);
     }
@@ -6054,13 +6117,13 @@ function ListingPasteExtractor({ onExtracted }) {
     <div style={{ border: "1px solid #2C303B", borderRadius: 8, padding: "12px 14px", background: "#14161C" }}>
       <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 6 }}>Paste listing details</div>
       <div style={{ fontSize: 11.5, color: "#6B7180", marginBottom: 8 }}>
-        On the eBay listing, select and copy the title, price, bid/watcher counts, and shipping cost, then paste that block here. This app can't fetch the link itself — no backend, and browsers block that kind of cross-site request.
+        On the eBay listing, select and copy the title, price, bid/watcher counts, and shipping cost, then paste that block here.
       </div>
       <textarea
         value={pasteText}
         onChange={(e) => setPasteText(e.target.value)}
         rows={5}
-        placeholder="e.g. 2020-21 Panini Prizm Anthony Edwards Silver RC #258&#10;US $179.00 · 4 bids · 12 watchers&#10;+ $8.50 shipping"
+        placeholder="e.g. 2023 Panini Prizm Ausar Thompson #178 Prizms Blue Seismic /99 RC PSA 10&#10;AU $42.47&#10;9 bids"
         style={{ background: "#0F1015", border: "1px solid #333844", color: "#EDEAE1", borderRadius: 6, padding: "9px 11px", fontSize: 13, fontFamily: "'Inter', sans-serif", width: "100%", resize: "vertical", marginBottom: 10 }}
       />
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -6074,182 +6137,12 @@ function ListingPasteExtractor({ onExtracted }) {
       {error && <div style={{ fontSize: 11.5, color: "#B4472E", marginTop: 8 }}>{error}</div>}
       {result && (
         <div style={{ fontSize: 11.5, color: "#4E8B6B", marginTop: 10 }}>
-          Filled in below — {result.confidence.toLowerCase()} confidence. {result.notes && <span style={{ color: "#C9A227" }}>{result.notes}</span>}
+          Filled in below — {(result.confidence || "Medium").toLowerCase()} confidence. {result.notes && <span style={{ color: "#C9A227" }}> ({result.notes})</span>}
         </div>
       )}
     </div>
   );
 }
-
-function BuyModal({ onClose, onSave }) {
-  const [form, setForm] = useState(newBuyTarget());
-
-  const preview = useMemo(() => {
-    return computeBuy({
-      ...form,
-      bidders: Number(form.bidders) || 0,
-      watchers: Number(form.watchers) || 0,
-      shipping: Number(form.shipping) || 0,
-      currentBid: Number(form.currentBid) || 0,
-      maxBudget: Number(form.maxBudget) || 0,
-    });
-  }, [form]);
-
-  function submit(e) {
-    if (e && e.preventDefault) e.preventDefault();
-    onSave({
-      ...form,
-      player: form.player.trim() || "Unnamed card",
-      bidders: Number(form.bidders) || 0,
-      watchers: Number(form.watchers) || 0,
-      shipping: Number(form.shipping) || 0,
-      currentBid: form.currentBid === "" ? "" : Number(form.currentBid),
-      maxBudget: Number(form.maxBudget) || 0,
-      quantity: Number(form.quantity) || 1,
-      outOf: form.numbered && form.outOf !== "" ? Number(form.outOf) : null,
-    });
-  }
-
-  return (
-    <div className="modalOverlay" onClick={onClose}>
-      <div className="modalBox" onClick={(e) => e.stopPropagation()}>
-        <ModalHeader title="New auction target" onClose={onClose} />
-        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <ListingPasteExtractor
-            onExtracted={(parsed) =>
-              setForm((f) => ({
-                ...f,
-                player: parsed.player || f.player,
-                sport: SPORT_OPTIONS.includes(parsed.sport) ? parsed.sport : f.sport,
-                cardNum: parsed.cardNum || f.cardNum,
-                card: parsed.card || f.card,
-                rookie: parsed.rookie ?? f.rookie,
-                numbered: parsed.numbered ?? f.numbered,
-                outOf: parsed.outOf ?? f.outOf,
-                bidders: parsed.bidders ?? f.bidders,
-                watchers: parsed.watchers ?? f.watchers,
-                currentBid: parsed.currentBidAUD ?? f.currentBid,
-                shipping: parsed.shippingAUD ?? f.shipping,
-              }))
-            }
-          />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10 }}>
-            <Field label="Player">
-              <input value={form.player} onChange={(e) => setForm({ ...form, player: e.target.value })} placeholder="e.g. Nick Daicos" />
-            </Field>
-            <Field label="Card #">
-              <input value={form.cardNum} onChange={(e) => setForm({ ...form, cardNum: e.target.value })} />
-            </Field>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10 }}>
-            <Field label="Card / set">
-              <input value={form.card} onChange={(e) => setForm({ ...form, card: e.target.value })} />
-            </Field>
-            <Field label="Category">
-              <select value={form.sport} onChange={(e) => setForm({ ...form, sport: e.target.value, isPokemonInsert: e.target.value === "Pokémon" })}>
-                {SPORT_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </Field>
-          </div>
-          <RookieNumberedFields form={form} setForm={setForm} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Bidders"><input type="number" value={form.bidders} onChange={(e) => setForm({ ...form, bidders: e.target.value })} /></Field>
-            <Field label="Watchers"><input type="number" value={form.watchers} onChange={(e) => setForm({ ...form, watchers: e.target.value })} /></Field>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Raw or Graded">
-              <select
-                value={form.rawGraded}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  // Already-graded cards have no grading cost to add — force it to None so the
-                  // math doesn't double up a fee that isn't actually coming.
-                  setForm({ ...form, rawGraded: val, gradingService: val === "Graded" ? "None" : "PSA via Australia" });
-                }}
-              >
-                <option>Raw</option>
-                <option>Graded</option>
-              </select>
-            </Field>
-            <Field label="Grade Level (if graded)">
-              <select value={form.psaLevel} onChange={(e) => setForm({ ...form, psaLevel: e.target.value })}>
-                <option value="">—</option>
-                {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
-              </select>
-            </Field>
-          </div>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#A7ADBB" }}>
-            <input type="checkbox" checked={form.isPokemonInsert} onChange={(e) => setForm({ ...form, isPokemonInsert: e.target.checked })} style={{ width: "auto" }} />
-            Pokémon / insert (caps your budget at $25)
-          </label>
-          <div style={{ fontSize: 11.5, color: "#6B7180", marginTop: -6, marginBottom: -2 }}>
-            Recent sales — up to 2 each, average used automatically. Fill in whichever tiers you have comps for.
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-            <TierPriceInput label="Raw" sale1={form.rawSale1} sale2={form.rawSale2} onChange1={(v) => setForm({ ...form, rawSale1: v })} onChange2={(v) => setForm({ ...form, rawSale2: v })} />
-            <TierPriceInput label="PSA 9" sale1={form.psa9Sale1} sale2={form.psa9Sale2} onChange1={(v) => setForm({ ...form, psa9Sale1: v })} onChange2={(v) => setForm({ ...form, psa9Sale2: v })} />
-            <TierPriceInput label="PSA 10" sale1={form.psa10Sale1} sale2={form.psa10Sale2} onChange1={(v) => setForm({ ...form, psa10Sale1: v })} onChange2={(v) => setForm({ ...form, psa10Sale2: v })} />
-          </div>
-          {form.rawGraded === "Raw" ? (
-            <Field label="Grading service (if you grade it after buying)">
-              <select value={form.gradingService} onChange={(e) => setForm({ ...form, gradingService: e.target.value })}>
-                {GRADING_SERVICE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
-              </select>
-            </Field>
-          ) : (
-            <div style={{ fontSize: 11.5, color: "#6B7180" }}>
-              Already graded — no grading service or fee applies, set to None automatically.
-            </div>
-          )}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Shipping"><input type="number" step="0.01" value={form.shipping} onChange={(e) => setForm({ ...form, shipping: e.target.value })} /></Field>
-            <Field label="Use ShipMyCards?">
-              <select value={form.shipMyCards} onChange={(e) => setForm({ ...form, shipMyCards: e.target.value })}>
-                <option value="None">No</option>
-                <option value="ShipMyCards">Yes</option>
-              </select>
-            </Field>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Current bid (optional)"><input type="number" step="0.01" value={form.currentBid} onChange={(e) => setForm({ ...form, currentBid: e.target.value })} /></Field>
-            <Field label="Max budget for this card"><input type="number" step="0.01" value={form.maxBudget} onChange={(e) => setForm({ ...form, maxBudget: e.target.value })} /></Field>
-          </div>
-
-          <div style={{ border: "1px solid #C9A22755", borderRadius: 8, padding: "12px 14px", background: "#14161C" }}>
-            <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 8 }}>Calculated live</div>
-            {preview.marketPrice > 0 ? (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                  <MiniStat label="Max snipe bid (ceiling)" value={fmtMoney(preview.maxSnipeBid)} color="#C9A227" emphasis />
-                  <MiniStat label="Decision" value={preview.decision || "—"} color={preview.decision === "BUY" ? "#4E8B6B" : "#B4472E"} emphasis />
-                </div>
-                {form.rawGraded === "Raw" && (preview.rawGGRBuy != null || preview.gradedEVBuy != null) && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                    <MiniStat label="Potential Raw GGR" value={preview.rawGGRBuy != null ? fmtMoney(preview.rawGGRBuy) : "—"} color={preview.rawGGRBuy >= 0 ? "#4E8B6B" : "#B4472E"} />
-                    <MiniStat label="Potential Grading EV" value={preview.gradedEVBuy != null ? fmtMoney(preview.gradedEVBuy) : "—"} color={preview.gradedEVBuy >= 0 ? "#4E8B6B" : "#B4472E"} />
-                  </div>
-                )}
-                <div style={{ fontSize: 11.5, color: "#6B7180" }}>
-                  {form.currentBid
-                    ? `Based on your current bid of ${fmtMoney(Number(form.currentBid))} — est. profit ${fmtMoney(preview.estProfit)}, ROI ${fmtPct(preview.roiPct)}.`
-                    : "Add a current bid to see profit/ROI at that price — otherwise this assumes you pay the full ceiling."}
-                  {form.rawGraded === "Raw" && (preview.rawGGRBuy != null || preview.gradedEVBuy != null) && " Grading EV already includes the selected grading service's fee."}
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: 12, color: "#6B7180" }}>Enter a last eBay or 130 Point sale price to see your max bid.</div>
-            )}
-          </div>
-
-          <button type="button" className="btnPrimary" onClick={submit} style={{ justifyContent: "center", marginTop: 6 }}>
-            Add target
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 // ===== Tips & Tricks =====
 
 const SEARCH_LIBRARY = [
