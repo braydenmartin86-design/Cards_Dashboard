@@ -269,29 +269,28 @@ function computeCard(c) {
   const netPsa9Sell = psa9 * (1 - fees);
   const netPsa10Sell = psa10 * (1 - fees);
 
-  // 1. Calculate the automatic grading fee based on your selected service
+  // 1. Calculate auto grading fee
   const declaredValue = Math.max(psa9, psa10, raw);
   const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
 
-  // 2. Identify if you sent this to be graded yourself
+  // 2. Identify self-submission services
   const isSelfGraded = [
     "PSA via Australia", 
     "PSA via ShipMyCards", 
     "SGC via Australia"
   ].includes(c.gradingService);
 
-  // 3. Inject grading fee into Total Cost only if self-graded (or manually overridden)
+  // 3. Inject grading fee into Total Cost only if self-graded (Bought Graded / None = $0)
   const appliedGradingCost = Number(c.gradingCostPaid) > 0 
     ? Number(c.gradingCostPaid) 
     : (isSelfGraded && (status === "At Grading" || status === "Graded") ? autoGradingCost : 0);
 
   const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + appliedGradingCost;
 
-  // 4. For projections (GGR/EV) on RAW cards, this is the fee you *will* pay
+  // 4. Future grading cost for raw projections
   const futureGCost = status === "Raw" && isSelfGraded ? autoGradingCost : 0;
 
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
-
   const psa9Eligible = isActive && (status === "Raw" || PSA9_GRADES.includes(grade));
   const psa9GGR = psa9Eligible ? netPsa9Sell - totalCost - futureGCost : null;
 
@@ -317,7 +316,7 @@ function computeCard(c) {
     }
   }
 
-// 1. Strict Grade Worth It Bar ($20+ NET PSA 10 profit)
+  // 5. Grade Worth It Bar ($20+ Net PSA 10 Profit Floor)
   let gradeWorthIt = "NO";
   if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
     gradeWorthIt = "YES";
@@ -325,7 +324,7 @@ function computeCard(c) {
     gradeWorthIt = "HIGH RISK";
   }
 
-  // 2. Sell Decision Engine
+  // 6. Sell Decision Engine
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -347,10 +346,12 @@ function computeCard(c) {
     const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
     const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
 
-    // Hard check: MUST have $20+ PSA 10 profit AND pass gradeWorthIt
+    // Hard Lock: MUST pass gradeWorthIt AND clear $20 net PSA 10 profit
     const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? 0) >= 20;
 
-    if (gradeFirst && (psa10GGR ?? 0) > (rawGGR ?? -Infinity)) {
+    if (sellRawFirst && (rawGGR ?? 0) >= (psa10GGR ?? 0)) {
+      sellDecision = "Sell Raw First";
+    } else if (gradeFirst && (psa10GGR ?? 0) > (rawGGR ?? -Infinity)) {
       sellDecision = "Grade First";
     } else if (sellRawFirst) {
       sellDecision = "Sell Raw First";
@@ -447,21 +448,21 @@ function computePokemonCard(c) {
   const netPsa9Sell = psa9 * (1 - fees);
   const netPsa10Sell = psa10 * (1 - fees);
 
-  // 1. Calculate auto grading fee
   const declaredValue = Math.max(psa9, psa10, raw);
   const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
 
-  // 2. Inject grading fee into Total Cost
+  const isSelfGraded = [
+    "PSA via Australia", 
+    "PSA via ShipMyCards", 
+    "SGC via Australia"
+  ].includes(c.gradingService);
+
   const appliedGradingCost = Number(c.gradingCostPaid) > 0 
     ? Number(c.gradingCostPaid) 
-    : ((status === "At Grading" || status === "Graded") && c.gradingService !== "None" 
-        ? autoGradingCost 
-        : 0);
+    : (isSelfGraded && (status === "At Grading" || status === "Graded") ? autoGradingCost : 0);
 
   const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + appliedGradingCost;
-
-  // 3. For projections on RAW cards
-  const futureGCost = status === "Raw" && c.gradingService !== "None" ? autoGradingCost : 0;
+  const futureGCost = status === "Raw" && isSelfGraded ? autoGradingCost : 0;
 
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
   const psa9GGR = isActive ? netPsa9Sell - totalCost - futureGCost : null;
@@ -487,8 +488,8 @@ function computePokemonCard(c) {
   }
 
   let gradeWorthIt = "NO";
-  if (psa10GGR >= 40 && psa9GGR < 0 && psa9GGR >= -20) gradeWorthIt = "HIGH RISK";
-  else if (psa10GGR >= 20 && psa9GGR >= 0) gradeWorthIt = "YES";
+  if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= 0) gradeWorthIt = "YES";
+  else if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= -20) gradeWorthIt = "HIGH RISK";
 
   const gradeCall = status === "Raw" ? gradeWorthIt : "";
 
@@ -511,12 +512,14 @@ function computePokemonCard(c) {
     const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
     const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
 
-    const bestGraded = Math.max(psa9GGR ?? -Infinity, psa10GGR ?? -Infinity);
+    const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? 0) >= 20;
 
-    if (sellRawFirst && (rawGGR ?? 0) >= bestGraded) {
+    if (sellRawFirst && (rawGGR ?? 0) >= (psa10GGR ?? 0)) {
       sellDecision = "Sell Raw First";
-    } else if (gradeWorthIt !== "NO" && bestGraded > 0 && bestGraded > (rawGGR ?? -Infinity)) {
+    } else if (gradeFirst && (psa10GGR ?? 0) > (rawGGR ?? -Infinity)) {
       sellDecision = "Grade First";
+    } else if (sellRawFirst) {
+      sellDecision = "Sell Raw First";
     } else {
       sellDecision = "Hold";
     }
