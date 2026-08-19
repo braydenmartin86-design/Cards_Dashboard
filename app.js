@@ -328,7 +328,7 @@ function computeCard(c) {
   if (psa10GGR >= 20 && psa9GGR >= 0 && gradedEV >= rawGGR) gradeWorthIt = "YES";
   else if (psa10GGR >= 20 && psa9GGR >= -10 && psa9GGR < 0 && gradedEV >= rawGGR) gradeWorthIt = "HIGH RISK";
 
-  // Sell Decision (AC)
+// Sell Decision (AC)
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -349,9 +349,15 @@ function computeCard(c) {
     if (gradeFirst) {
       sellDecision = "Grade First";
     } else {
-      const threshAbs = totalCost <= 30 ? Math.max(5, totalCost * 0.15) : Math.max(20, totalCost * 0.2);
-      const threshPct = totalCost <= 30 ? 0.15 : 0.2;
-      const sellRawFirst = rawGGR >= threshAbs || (totalCost > 0 && rawGGR / totalCost >= threshPct);
+      // Enforce a strict 20% ROI threshold (0.20) for selling Raw cards
+      const minRoiThreshold = 0.20;
+      
+      // Calculate net ROI based on raw GGR (Gain Gross Return) over total cost basis
+      const rawRoi = totalCost > 0 ? rawGGR / totalCost : 0;
+      
+      // Must generate positive profit AND clear at least 20% ROI
+      const sellRawFirst = rawGGR > 0 && rawRoi >= minRoiThreshold;
+      
       sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
     }
   }
