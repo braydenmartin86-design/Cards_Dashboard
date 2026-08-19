@@ -258,7 +258,7 @@ function computeCard(c) {
   const fees = c.feesPct || 0.13;
   const grade = (c.grade || "").toLowerCase();
   const status = c.status;
-
+console.log("Cade Cunningham Decision:", computeCard(c).sellDecision)
   const isActive = status === "Raw" || status === "Graded";
 
   const raw = c.rawAvg ?? 0;
