@@ -317,14 +317,15 @@ function computeCard(c) {
     }
   }
 
- // Tighten the bar: require $30+ net profit on PSA 10 instead of $20
-let gradeWorthIt = "NO";
-if ((psa10GGR ?? 0) >= 30 && (psa9GGR ?? 0) >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
-  gradeWorthIt = "YES";
-} else if ((psa10GGR ?? 0) >= 30 && (psa9GGR ?? 0) >= -10 && (psa9GGR ?? 0) < 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
-  gradeWorthIt = "HIGH RISK";
-}
-  // Sell Decision (AC)
+// 1. Grade Worth It Evaluation ($20+ net PSA 10 profit floor)
+  let gradeWorthIt = "NO";
+  if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
+    gradeWorthIt = "YES";
+  } else if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= -10 && (psa9GGR ?? 0) < 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
+    gradeWorthIt = "HIGH RISK";
+  }
+
+  // 2. Sell Decision Engine
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -339,17 +340,24 @@ if ((psa10GGR ?? 0) >= 30 && (psa9GGR ?? 0) >= 0 && (gradedEV ?? -Infinity) >= (
     else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
-    const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? -Infinity) > (rawGGR ?? -Infinity);
-    if (gradeFirst) {
+    // RAW CARDS DECISION TREE
+    const minRoiThreshold = 0.20;
+    const minDollarProfit = 3.00;
+
+    const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
+    const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
+
+    // Must pass gradeWorthIt AND clear $20 PSA 10 profit
+    const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? 0) >= 20 && (psa10GGR ?? -Infinity) > (rawGGR ?? -Infinity);
+
+    if (sellRawFirst && (rawGGR ?? 0) >= (psa10GGR ?? 0)) {
+      sellDecision = "Sell Raw First";
+    } else if (gradeFirst) {
       sellDecision = "Grade First";
+    } else if (sellRawFirst) {
+      sellDecision = "Sell Raw First";
     } else {
-      const minRoiThreshold = 0.20;
-      const minDollarProfit = 3.00;
-
-      const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
-      const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
-
-      sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
+      sellDecision = "Hold";
     }
   }
 
