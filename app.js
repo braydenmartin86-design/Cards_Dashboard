@@ -317,13 +317,13 @@ function computeCard(c) {
     }
   }
 
-  let gradeWorthIt = "NO";
-  if (psa10GGR >= 20 && psa9GGR >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
-    gradeWorthIt = "YES";
-  } else if (psa10GGR >= 20 && psa9GGR >= -10 && psa9GGR < 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
-    gradeWorthIt = "HIGH RISK";
-  }
-
+ // Tighten the bar: require $30+ net profit on PSA 10 instead of $20
+let gradeWorthIt = "NO";
+if ((psa10GGR ?? 0) >= 30 && (psa9GGR ?? 0) >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
+  gradeWorthIt = "YES";
+} else if ((psa10GGR ?? 0) >= 30 && (psa9GGR ?? 0) >= -10 && (psa9GGR ?? 0) < 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
+  gradeWorthIt = "HIGH RISK";
+}
   // Sell Decision (AC)
   let sellDecision = "";
   if (!c.player) {
