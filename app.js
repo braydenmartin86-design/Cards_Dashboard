@@ -474,6 +474,7 @@ function computePokemonCard(c) {
   const psa9GGR = isActive ? netPsa9Sell - totalCost - futureGCost : null;
   const psa10GGR = isActive ? netPsa10Sell - totalCost - futureGCost : null;
 
+// 1. Calculate Graded EV (with PSA 8/below penalty on setGemRate)
   let gradedEV = null;
   if (isActive && status !== "Graded") {
     const analysis = c.gradeAnalysis;
@@ -484,8 +485,12 @@ function computePokemonCard(c) {
       gradedEV = expectedRevenue - totalCost - futureGCost;
     } else if (gemRate != null) {
       const p10 = gemRate;
-      const p9 = Math.min(1 - p10, 0.5);
-      gradedEV = p10 * (netPsa10Sell - totalCost - futureGCost) + p9 * (netPsa9Sell - totalCost - futureGCost);
+      const p9 = Math.min(1 - p10, 0.40);
+      const pBelow = Math.max(0, 1 - p10 - p9); // Captures floor loss on PSA 8/7
+      
+      gradedEV = p10 * (netPsa10Sell - totalCost - futureGCost) + 
+                 p9 * (netPsa9Sell - totalCost - futureGCost) + 
+                 pBelow * (netRawSell - totalCost - futureGCost);
     } else {
       const p10Prob = c.psa10Prob ?? 0.35;
       const p9Prob = c.psa9Prob ?? 0.45;
@@ -493,11 +498,19 @@ function computePokemonCard(c) {
     }
   }
 
-  let gradeWorthIt = "NO";
-  if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= 0) gradeWorthIt = "YES";
-  else if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= -20) gradeWorthIt = "HIGH RISK";
+  // 2. Gem Rate Floor Check (<25% gets demoted)
+  const gemRateVal = c.setGemRate !== "" && c.setGemRate != null ? Number(c.setGemRate) : null;
+  const passesGemFloor = gemRateVal == null || gemRateVal >= 25.0;
 
-  const gradeCall = status === "Raw" ? gradeWorthIt : "";
+  // 3. Strict Grade Worth It Bar
+  let gradeWorthIt = "NO";
+  if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity) && passesGemFloor) {
+    gradeWorthIt = "YES";
+  } else if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= -10 && (psa9GGR ?? 0) < 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
+    gradeWorthIt = "HIGH RISK";
+  } else if ((psa10GGR ?? 0) >= 20 && !passesGemFloor && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
+    gradeWorthIt = "HIGH RISK"; // Demotes low gem rate cards (<25%) to HIGH RISK
+  }
 
   let sellDecision = "";
   if (status === "Sold") {
