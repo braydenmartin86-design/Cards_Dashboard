@@ -651,16 +651,19 @@ function computeBuy(b) {
   const estProfit = adjMarketValue - (referenceBid + feeDollar + holdingFee + shipping);
   const roiPct = referenceBid > 0 ? estProfit / referenceBid : null;
 
+// Target ROI threshold: 20% minimum (0.20)
+  const MIN_ROI_THRESHOLD = 0.20;
+
   const decision =
     marketPrice <= 0
       ? null
       : currentBid > 0
-      ? estProfit <= 0
+      ? estProfit <= 0 || (roiPct != null && roiPct < MIN_ROI_THRESHOLD)
         ? "PASS"
         : referenceBid <= (b.maxBudget ?? Infinity)
         ? "BUY"
         : "PASS"
-      : maxSnipeBid > 0 && maxSnipeBid <= (b.maxBudget ?? Infinity)
+      : maxSnipeBid > 0 && roiPct >= MIN_ROI_THRESHOLD && maxSnipeBid <= (b.maxBudget ?? Infinity)
       ? "BUY"
       : "PASS";
 
