@@ -519,15 +519,19 @@ function computePokemonCard(c) {
     }
   }
 
-  let sellPriority = 6;
-  if (sellDecision === "Sell PSA 10" || sellDecision === "Sell PSA 9") sellPriority = 1;
+ // Detailed priority mapping to properly place HIGH RISK below YES
+  let sellPriority = 9;
+  if (sellDecision === "") sellPriority = 9;
+  else if (sellDecision === "Sell PSA 9" || sellDecision === "Sell PSA 10") sellPriority = 1;
   else if (sellDecision === "Sell Raw First") sellPriority = 2;
-  else if (sellDecision === "Grade First") sellPriority = 3;
-  else if (sellDecision === "Hold" || sellDecision === "") sellPriority = 4;
-  else if (status === "At Grading") sellPriority = 5;
-  else if (status === "Listed") sellPriority = 6;
-  else if (status === "Sold") sellPriority = 7;
-  else sellPriority = 6;
+  else if (gradeCall === "YES" && sellDecision === "Grade First") sellPriority = 3;       // 👈 Top Grade First
+  else if (gradeCall === "HIGH RISK" && sellDecision === "Grade First") sellPriority = 4; // 👈 High Risk directly below
+  else if (gradeCall === "NO" && sellDecision === "Grade First") sellPriority = 5;
+  else if (sellDecision === "Hold") sellPriority = 6;
+  else if (sellDecision === "Listed") sellPriority = 7;
+  else if (sellDecision === "Sold") sellPriority = 8;
+  else if (status === "At Grading") sellPriority = 6.5;
+  else sellPriority = 9;
 
   const rawBE = totalCost / (1 - fees);
   const psa9BE = (totalCost + futureGCost) / (1 - fees);
