@@ -340,12 +340,14 @@ function computeCard(c) {
       // Must make at least $3.00 net profit AND clear 20% ROI
       const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
 
-      sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
+sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
     }
-  }
+  } // <-- Closes the "else" block for raw cards
 
+  // Return statement must be inside computeCard()
   return {
     ...c,
+    holdingCost,
     totalCost,
     rawGGR,
     psa9GGR,
@@ -354,7 +356,7 @@ function computeCard(c) {
     gradeWorthIt,
     sellDecision,
   };
-}
+} // <-- Closes computeCard() function here!
   // Grade? (AB) — reads the same gradeWorthIt bar computed above, so it can never disagree
   // with a "Grade First" sell decision again.
   const gradeCall = status !== "Raw" || sellDecision === "Sell Raw First" ? "NO" : gradeWorthIt;
