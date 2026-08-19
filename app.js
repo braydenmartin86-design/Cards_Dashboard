@@ -254,11 +254,14 @@ function estimateSellingFee(method, price) {
 }
 
 function computeCard(c) {
+  // If c is null/undefined, return early instead of recursing
+  if (!c) return {};
+
   const holdingCost = (c.shipMyCards || "").toLowerCase() === "yes" ? 4.5 : 0;
   const fees = c.feesPct || 0.13;
   const grade = (c.grade || "").toLowerCase();
   const status = c.status;
-console.log("Cade Cunningham Decision:", computeCard(c).sellDecision)
+
   const isActive = status === "Raw" || status === "Graded";
 
   const raw = c.rawAvg ?? 0;
@@ -269,25 +272,20 @@ console.log("Cade Cunningham Decision:", computeCard(c).sellDecision)
   const netPsa9Sell = psa9 * (1 - fees);
   const netPsa10Sell = psa10 * (1 - fees);
 
-  // 1. Calculate auto grading fee
   const declaredValue = Math.max(psa9, psa10, raw);
   const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
 
-  // 2. Identify self-submission services
   const isSelfGraded = [
-    "PSA via Australia", 
-    "PSA via ShipMyCards", 
+    "PSA via Australia",
+    "PSA via ShipMyCards",
     "SGC via Australia"
   ].includes(c.gradingService);
 
-  // 3. Inject grading fee into Total Cost only if self-graded (Bought Graded / None = $0)
   const appliedGradingCost = Number(c.gradingCostPaid) > 0 
     ? Number(c.gradingCostPaid) 
     : (isSelfGraded && (status === "At Grading" || status === "Graded") ? autoGradingCost : 0);
 
   const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + appliedGradingCost;
-
-  // 4. Future grading cost for raw projections
   const futureGCost = status === "Raw" && isSelfGraded ? autoGradingCost : 0;
 
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
@@ -316,7 +314,6 @@ console.log("Cade Cunningham Decision:", computeCard(c).sellDecision)
     }
   }
 
-  // 5. Grade Worth It Bar ($20+ Net PSA 10 Profit Floor)
   let gradeWorthIt = "NO";
   if ((psa10GGR ?? 0) >= 20 && (psa9GGR ?? 0) >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
     gradeWorthIt = "YES";
@@ -324,7 +321,6 @@ console.log("Cade Cunningham Decision:", computeCard(c).sellDecision)
     gradeWorthIt = "HIGH RISK";
   }
 
-  // 6. Sell Decision Engine
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -339,14 +335,12 @@ console.log("Cade Cunningham Decision:", computeCard(c).sellDecision)
     else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
-    // RAW CARDS
     const minRoiThreshold = 0.20;
     const minDollarProfit = 3.00;
 
     const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
     const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
 
-    // Hard Lock: MUST pass gradeWorthIt AND clear $20 net PSA 10 profit
     const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? 0) >= 20;
 
     if (sellRawFirst && (rawGGR ?? 0) >= (psa10GGR ?? 0)) {
@@ -404,6 +398,7 @@ console.log("Cade Cunningham Decision:", computeCard(c).sellDecision)
     if (gradingTurnaroundDays) gradingProgressPct = Math.min(100, Math.round((gradingDaysElapsed / gradingTurnaroundDays) * 100));
   }
 
+  // Pure data return — NEVER call computeCard inside here!
   return {
     ...c,
     holdingCost,
@@ -432,7 +427,6 @@ console.log("Cade Cunningham Decision:", computeCard(c).sellDecision)
     saleVariancePct,
   };
 }
-
 // Pokemon sheet decision engine
 function computePokemonCard(c) {
   const holdingCost = (c.shipMyCards || "").toLowerCase() === "yes" ? 4.5 : 0;
