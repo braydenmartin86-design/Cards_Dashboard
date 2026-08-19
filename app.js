@@ -595,91 +595,85 @@ const SELL_DECISION_STYLE = {
 
 // ===== Buy Evaluator engine =====
 
+// ===== Buy Evaluator engine =====
+
 function computeBuy(b) {
   const usingSMC = b.shipMyCards === "ShipMyCards";
   const targetROI = usingSMC ? 0.5 : 0.4;
   const holdingFee = usingSMC ? 4.5 : 0;
-  const fees = b.feesPct;
+  const fees = b.feesPct || 0.13; // Default 13% eBay/platform fees if not passed
 
   const gradeLevel = (b.psaLevel || "").toLowerCase();
-  let riskAdjust;
+  let riskAdjust = 0;
   if (b.rawGraded === "Raw") riskAdjust = -0.1;
-  else if (PSA9_GRADES.includes(gradeLevel)) riskAdjust = 0;
-  else if (PSA10_GRADES.includes(gradeLevel)) riskAdjust = 0.1;
-  else riskAdjust = 0;
+  else if (gradeLevel.includes("9")) riskAdjust = 0;
+  else if (gradeLevel.includes("10")) riskAdjust = 0.1;
 
-  // Raw/PSA 9/PSA 10 averages from up to 2 logged sales each — same pattern as My Cards, so
-  // buying and grading decisions use the same real comps instead of a single stale price.
+  // Raw/PSA 9/PSA 10 averages from up to 2 logged sales each
   const rawAvg = avgOfSales(b.rawSale1, b.rawSale2);
   const psa9Avg = avgOfSales(b.psa9Sale1, b.psa9Sale2);
   const psa10Avg = avgOfSales(b.psa10Sale1, b.psa10Sale2);
 
-  // Market price for the buy math itself: whichever tier matches the card's current state —
-  // raw comps if buying it raw, the matching graded comps if buying an already-graded card.
-  let marketPrice;
-  if (b.rawGraded === "Raw") marketPrice = rawAvg ?? 0;
-  else if (PSA9_GRADES.includes(gradeLevel)) marketPrice = psa9Avg ?? 0;
-  else if (PSA10_GRADES.includes(gradeLevel)) marketPrice = psa10Avg ?? 0;
-  else marketPrice = rawAvg ?? 0;
+  // Market price for the buy math itself:
+  // If graded, dynamically match the grade level (or fallback to whichever graded comps exist)
+  let marketPrice = 0;
+  if (b.rawGraded === "Graded") {
+    if (gradeLevel.includes("10")) {
+      marketPrice = psa10Avg ?? psa9Avg ?? rawAvg ?? 0;
+    } else if (gradeLevel.includes("9")) {
+      marketPrice = psa9Avg ?? rawAvg ?? 0;
+    } else {
+      // Fallback: pick the highest available comp tier
+      marketPrice = psa10Avg ?? psa9Avg ?? rawAvg ?? 0;
+    }
+  } else {
+    // Raw card baseline
+    marketPrice = rawAvg ?? 0;
+  }
 
   const adjMarketValue = marketPrice * (1 - riskAdjust);
 
   const auctionHeat =
-    b.bidders >= 7 || b.watchers >= 7 ? "Hot" : b.bidders >= 3 || b.watchers >= 4 ? "Mid" : "Cold";
+    (b.bidders || 0) >= 7 || (b.watchers || 0) >= 7 ? "Hot" : (b.bidders || 0) >= 3 || (b.watchers || 0) >= 4 ? "Mid" : "Cold";
 
   const heatMult = auctionHeat === "Cold" ? 1.08 : auctionHeat === "Hot" ? 0.95 : 1;
   const valueMult = adjMarketValue >= 80 ? 1.1 : adjMarketValue >= 50 ? 1.05 : 1;
 
-  // Max Snipe Bid — the ceiling you should ever bid. Low competition (Cold) or high card value
-  // earns you room to bid closer to true breakeven, but the combined multiplier is capped at 1.0
-  // so the ceiling itself can never sit above breakeven — a "no one else wants it" bonus should
-  // never justify a bid that's mathematically guaranteed to lose money.
   const feeDollar = adjMarketValue * fees;
-  const breakevenBid = adjMarketValue - feeDollar - holdingFee - b.shipping;
+  const shipping = Number(b.shipping) || 0;
+  const breakevenBid = adjMarketValue - feeDollar - holdingFee - shipping;
   const effectiveMult = Math.min(heatMult * valueMult, 1);
   const maxSnipeBid = Math.max(0, breakevenBid * effectiveMult);
 
-  // Profit/ROI/decision are judged against what you'd realistically pay — your logged Current Bid
-  // if you have one, otherwise the Max Snipe Bid ceiling as a fallback estimate. Judging every card
-  // against the full ceiling made cheap, low-competition auctions look like PASS even when the
-  // price you'd actually pay was clearly profitable.
   const currentBid = Number(b.currentBid) || 0;
   const referenceBid = currentBid > 0 ? currentBid : maxSnipeBid;
 
-  const estProfit = adjMarketValue - (referenceBid + feeDollar + holdingFee + b.shipping);
+  const estProfit = adjMarketValue - (referenceBid + feeDollar + holdingFee + shipping);
   const roiPct = referenceBid > 0 ? estProfit / referenceBid : null;
 
-  // Decision: with a logged current bid, judge the real numbers at that price (unchanged).
-  // Without one, judging profit against the ceiling itself was broken by construction — Max
-  // Snipe Bid is deliberately set at breakeven, so estProfit there lands at ~$0 for most cards
-  // and "estProfit <= 0" was flipping that to PASS almost every time no bid was logged yet.
-  // Without a bid, the real question is just "is there a legitimate, budget-fitting ceiling
-  // worth watching this for" — not whether paying the absolute max would still turn a profit.
   const decision =
     marketPrice <= 0
       ? null
       : currentBid > 0
       ? estProfit <= 0
         ? "PASS"
-        : referenceBid <= (b.maxBudget ?? 0)
+        : referenceBid <= (b.maxBudget ?? Infinity)
         ? "BUY"
         : "PASS"
-      : maxSnipeBid > 0 && maxSnipeBid <= (b.maxBudget ?? 0)
+      : maxSnipeBid > 0 && maxSnipeBid <= (b.maxBudget ?? Infinity)
       ? "BUY"
       : "PASS";
 
-  // Worth grading after buying? Only meaningful for raw cards, using the same probability-
-  // weighted logic as My Cards' Grade? call. Cost basis here is the Max Snipe Bid ceiling —
-  // the worst-case price you're actually willing to pay — not the current bid, which is likely
-  // still climbing before the auction closes. Judging this against a live, rising bid made the
-  // grading call look rosier than it'll actually be once the price settles near your ceiling.
+  // Worth grading after buying? ONLY calculated for RAW cards
   let rawGGRBuy = null, psa9GGRBuy = null, psa10GGRBuy = null, gradedEVBuy = null, gradeCallBuy = null;
   const gCost = gradingCost(b.gradingService, Math.max(psa9Avg || 0, psa10Avg || 0));
-  if (b.rawGraded === "Raw") {
-    const costBasis = maxSnipeBid + b.shipping + holdingFee;
+
+  if (b.rawGraded === "Raw" && b.gradingService !== "None") {
+    const costBasis = maxSnipeBid + shipping + holdingFee;
     rawGGRBuy = rawAvg != null ? rawAvg * (1 - fees) - costBasis : null;
     psa9GGRBuy = psa9Avg != null ? psa9Avg * (1 - fees) - costBasis - gCost : null;
     psa10GGRBuy = psa10Avg != null ? psa10Avg * (1 - fees) - costBasis - gCost : null;
+
     if (psa9GGRBuy != null || psa10GGRBuy != null) {
       const analysis = b.gradeAnalysis;
       if (analysis) {
@@ -698,32 +692,29 @@ function computeBuy(b) {
       else gradeCallBuy = "NO";
     }
   }
+
   const gradeDecision =
     b.rawGraded === "Raw"
-      ? referenceBid > 0 && (adjMarketValue - b.shipping - 20) / referenceBid >= 0.5
+      ? referenceBid > 0 && (adjMarketValue - shipping - 20) / referenceBid >= 0.5
         ? "Grade Recommended"
         : "Hold / Sell Raw"
       : "No Grade";
 
-  // % Gap rule: (Market Price - what you'd actually pay) / Market Price, based on your current bid.
   const percentGap = marketPrice > 0 && currentBid > 0 ? (marketPrice - currentBid) / marketPrice : null;
   const gapZone =
     percentGap == null ? null : percentGap >= 0.3 ? "AUTO-BUY" : percentGap >= 0.2 ? "CONDITIONAL" : "NO-BUY";
 
-  // Golden-rule per-card budget cap, checked against what you'd actually pay
   let budgetCap = b.isPokemonInsert ? 25 : b.rawGraded === "Raw" ? 50 : 100;
   const overCap = referenceBid > budgetCap;
 
-  // Current bid vs your ceiling — a live safety check while an auction is running
   const bidRoom = currentBid > 0 ? maxSnipeBid - currentBid : null;
   const alreadyOverMax = currentBid > 0 && currentBid > maxSnipeBid;
 
-  // Recalculated from what you actually paid, once logged — the real numbers, not the projection
   const paidAmount = Number(b.paidAmount) || 0;
   let actualProfit = null;
   let actualROIPct = null;
   if (paidAmount > 0 && marketPrice > 0) {
-    actualProfit = adjMarketValue - (paidAmount + feeDollar + holdingFee + b.shipping);
+    actualProfit = adjMarketValue - (paidAmount + feeDollar + holdingFee + shipping);
     actualROIPct = actualProfit / paidAmount;
   }
 
