@@ -254,17 +254,15 @@ function estimateSellingFee(method, price) {
 
 function computeCard(c) {
   const holdingCost = (c.shipMyCards || "").toLowerCase() === "yes" ? 4.5 : 0;
-  // Total cost includes the grading fee once a card has actually been sent
   const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + (c.gradingCostPaid || 0);
   const fees = c.feesPct || 0.13;
   const grade = (c.grade || "").toLowerCase();
-  const status = c.status; // 'Raw' | 'At Grading' | 'Graded' | 'Listed' | 'Sold'
-  
+  const status = c.status;
+
   const isActive = status === "Raw" || status === "Graded";
 
   const raw = c.rawAvg ?? 0;
   const psa9 = c.psa9Avg ?? 0;
-  // Default unpopulated PSA 10 to PSA 9 price floor
   const psa10 = c.psa10Avg ?? c.psa9Avg ?? 0;
 
   const netRawSell = raw * (1 - fees);
@@ -272,10 +270,8 @@ function computeCard(c) {
   const netPsa10Sell = psa10 * (1 - fees);
 
   const declaredValue = Math.max(psa9, psa10);
-  // Safely default gCost to 0 if no grading service applies
   const gCost = status === "Graded" ? 0 : (gradingCost(c.gradingService, declaredValue) || 0);
 
-  // Raw GGR now correctly deducts seller fees (netRawSell - totalCost)
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
 
   const psa9Eligible = isActive && (status === "Raw" || PSA9_GRADES.includes(grade));
@@ -303,7 +299,6 @@ function computeCard(c) {
     }
   }
 
-  // Consistent Grade? logic check
   let gradeWorthIt = "NO";
   if (psa10GGR >= 20 && psa9GGR >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
     gradeWorthIt = "YES";
@@ -311,7 +306,6 @@ function computeCard(c) {
     gradeWorthIt = "HIGH RISK";
   }
 
-  // Sell Decision (AC)
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -326,25 +320,20 @@ function computeCard(c) {
     else if (PSA9_GRADES.includes(grade) && psa9GGR >= 5) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
-    // Raw — Grade First requires a valid grade call AND better net return than raw
     const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? -Infinity) > (rawGGR ?? -Infinity);
     if (gradeFirst) {
       sellDecision = "Grade First";
     } else {
-      // Minimum thresholds for individual raw sale
-      const minRoiThreshold = 0.20; // 20% ROI
-      const minDollarProfit = 3.00; // $3.00 Net Profit Floor
+      const minRoiThreshold = 0.20;
+      const minDollarProfit = 3.00;
 
       const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
-
-      // Must make at least $3.00 net profit AND clear 20% ROI
       const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
 
-sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
+      sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
     }
-  } // <-- Closes the "else" block for raw cards
+  }
 
-  // Return statement must be inside computeCard()
   return {
     ...c,
     holdingCost,
@@ -356,7 +345,7 @@ sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
     gradeWorthIt,
     sellDecision,
   };
-} // <-- Closes computeCard() function here!
+}
   // Grade? (AB) — reads the same gradeWorthIt bar computed above, so it can never disagree
   // with a "Grade First" sell decision again.
   const gradeCall = status !== "Raw" || sellDecision === "Sell Raw First" ? "NO" : gradeWorthIt;
