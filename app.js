@@ -254,54 +254,36 @@ function estimateSellingFee(method, price) {
 
 function computeCard(c) {
   const holdingCost = (c.shipMyCards || "").toLowerCase() === "yes" ? 4.5 : 0;
-  // Total cost includes the grading fee once a card has actually been sent — computed and
-  // locked in at the moment it's sent (gradingCostPaid), not recalculated later even if
-  // market prices or the grading service's fee schedule changes.
-  const totalCost = c.paid + c.shipping + holdingCost + (c.gradingCostPaid || 0);
-  const fees = c.feesPct;
+  // Total cost includes the grading fee once a card has actually been sent
+  const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + (c.gradingCostPaid || 0);
+  const fees = c.feesPct || 0.13;
   const grade = (c.grade || "").toLowerCase();
   const status = c.status; // 'Raw' | 'At Grading' | 'Graded' | 'Listed' | 'Sold'
-  // A card away being graded isn't actionable — you can't sell it raw (it's not in hand) and
-  // it isn't graded yet, so it's excluded from GGR/sell-decision math the same way Sold/Listed
-  // cards are, until it comes back and its status is updated to Graded.
+  
   const isActive = status === "Raw" || status === "Graded";
 
   const raw = c.rawAvg ?? 0;
   const psa9 = c.psa9Avg ?? 0;
-  // No PSA 10 comp on record (often because none exist yet — a genuinely low/zero population)
-  // is NOT the same as "PSA 10 sells for $0." Defaulting to zero was treating a rare, likely
-  // more valuable grade as worthless, which killed the grade call on exactly the cards where
-  // an unpopulated PSA 10 would probably be worth the most. Floor it at the PSA 9 price instead
-  // — a PSA 10 should never realistically sell for less than a 9 of the same card.
+  // Default unpopulated PSA 10 to PSA 9 price floor
   const psa10 = c.psa10Avg ?? c.psa9Avg ?? 0;
 
   const netRawSell = raw * (1 - fees);
   const netPsa9Sell = psa9 * (1 - fees);
   const netPsa10Sell = psa10 * (1 - fees);
 
-  // Declared value for PSA-via-Australia's value-tiered pricing: the higher of your expected
-  // PSA 9/10 comps, since that's what you'd realistically declare when submitting.
   const declaredValue = Math.max(psa9, psa10);
-  const gCost = gradingCost(c.gradingService, declaredValue);
+  // Safely default gCost to 0 if no grading service applies
+  const gCost = status === "Graded" ? 0 : (gradingCost(c.gradingService, declaredValue) || 0);
 
-  // GGR/EV only mean anything for cards still in active inventory — once Listed or Sold,
-  // they're out of the decision pipeline entirely, so these are nulled rather than showing
-  // stale or nonsensical negative figures.
-  const rawGGR = isActive ? (status === "Graded" ? null : raw - totalCost) : null;
+  // Raw GGR now correctly deducts seller fees (netRawSell - totalCost)
+  const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
 
   const psa9Eligible = isActive && (status === "Raw" || PSA9_GRADES.includes(grade));
-  const psa9GGR = psa9Eligible ? psa9 * (1 - fees) - totalCost - gCost : null;
+  const psa9GGR = psa9Eligible ? netPsa9Sell - totalCost - gCost : null;
 
   const psa10Eligible = isActive && (status === "Raw" || PSA10_GRADES.includes(grade));
-  const psa10GGR = psa10Eligible ? psa10 * (1 - fees) - totalCost - gCost : null;
+  const psa10GGR = psa10Eligible ? netPsa10Sell - totalCost - gCost : null;
 
-  // Graded EV = probability-weighted expected value of actually grading — must include the
-  // grading fee and sale fee (same figures used in psa9GGR/psa10GGR above), not just the raw
-  // market price. Priority order for which probability to use:
-  // 1) A saved photo grade check — condition-specific to this exact copy, the strongest signal.
-  // 2) GemRate's set gem rate — a real population-report base rate for this set/product,
-  //    far better than a flat guess even without a photo check.
-  // 3) The flat 35%/45% default — only when neither of the above is available.
   let gradedEV = null;
   if (isActive && status !== "Graded") {
     const analysis = c.gradeAnalysis;
@@ -313,22 +295,23 @@ function computeCard(c) {
     } else if (gemRate != null) {
       const p10 = gemRate;
       const p9 = Math.min(1 - p10, 0.5);
-      gradedEV = p10 * (psa10 * (1 - fees) - totalCost - gCost) + p9 * (psa9 * (1 - fees) - totalCost - gCost);
+      gradedEV = p10 * (netPsa10Sell - totalCost - gCost) + p9 * (netPsa9Sell - totalCost - gCost);
     } else {
-      gradedEV = c.psa10Prob * (psa10 * (1 - fees) - totalCost - gCost) + c.psa9Prob * (psa9 * (1 - fees) - totalCost - gCost);
+      const p10Prob = c.psa10Prob ?? 0.35;
+      const p9Prob = c.psa9Prob ?? 0.45;
+      gradedEV = p10Prob * (netPsa10Sell - totalCost - gCost) + p9Prob * (netPsa9Sell - totalCost - gCost);
     }
   }
 
-  // Grade? bar — computed once, independently of sellDecision, then used consistently for
-  // BOTH the sell-decision label and the Grade? call. Previously "Grade First" had its own
-  // separate, looser trigger (a straight psa10GGR >= 50 escape hatch that ignored psa9GGR
-  // entirely), which meant a card could show "Grade First" while its own Grade? call said
-  // NO — a real contradiction, not intentional nuance.
+  // Consistent Grade? logic check
   let gradeWorthIt = "NO";
-  if (psa10GGR >= 20 && psa9GGR >= 0 && gradedEV >= rawGGR) gradeWorthIt = "YES";
-  else if (psa10GGR >= 20 && psa9GGR >= -10 && psa9GGR < 0 && gradedEV >= rawGGR) gradeWorthIt = "HIGH RISK";
+  if (psa10GGR >= 20 && psa9GGR >= 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
+    gradeWorthIt = "YES";
+  } else if (psa10GGR >= 20 && psa9GGR >= -10 && psa9GGR < 0 && (gradedEV ?? -Infinity) >= (rawGGR ?? -Infinity)) {
+    gradeWorthIt = "HIGH RISK";
+  }
 
-// Sell Decision (AC)
+  // Sell Decision (AC)
   let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
@@ -342,28 +325,36 @@ function computeCard(c) {
     if (grade === "psa 10" && psa10GGR >= 20) sellDecision = "Sell PSA 10";
     else if (PSA9_GRADES.includes(grade) && psa9GGR >= 5) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
- } else {
-    // Raw — Grade First requires a valid grade call and better return than raw
-    const gradeFirst = gradeWorthIt !== "NO" && psa10GGR > rawGGR;
+  } else {
+    // Raw — Grade First requires a valid grade call AND better net return than raw
+    const gradeFirst = gradeWorthIt !== "NO" && (psa10GGR ?? -Infinity) > (rawGGR ?? -Infinity);
     if (gradeFirst) {
       sellDecision = "Grade First";
     } else {
-      // 1. Minimum 20% ROI threshold
-      const minRoiThreshold = 0.20;
-      
-      // 2. Minimum net dollar profit floor (e.g., $3.00 profit)
-      // Any card making less than $3.00 isn't worth selling individually
-      const minDollarProfit = 3.00; 
+      // Minimum thresholds for individual raw sale
+      const minRoiThreshold = 0.20; // 20% ROI
+      const minDollarProfit = 3.00; // $3.00 Net Profit Floor
 
-      // Calculate net ROI
-      const rawRoi = totalCost > 0 ? rawGGR / totalCost : 0;
+      const rawRoi = totalCost > 0 ? (rawGGR ?? 0) / totalCost : 0;
 
-      // Must make at least $3.00 profit AND clear 20% ROI
-      const sellRawFirst = rawGGR >= minDollarProfit && rawRoi >= minRoiThreshold;
+      // Must make at least $3.00 net profit AND clear 20% ROI
+      const sellRawFirst = (rawGGR ?? 0) >= minDollarProfit && rawRoi >= minRoiThreshold;
 
       sellDecision = sellRawFirst ? "Sell Raw First" : "Hold";
     }
   }
+
+  return {
+    ...c,
+    totalCost,
+    rawGGR,
+    psa9GGR,
+    psa10GGR,
+    gradedEV,
+    gradeWorthIt,
+    sellDecision,
+  };
+}
   // Grade? (AB) — reads the same gradeWorthIt bar computed above, so it can never disagree
   // with a "Grade First" sell decision again.
   const gradeCall = status !== "Raw" || sellDecision === "Sell Raw First" ? "NO" : gradeWorthIt;
