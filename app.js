@@ -3829,8 +3829,6 @@ function ContentDetailModal({ item, onUpdate, onDelete, onClose }) {
 
 // ===== Lot Scanner (AI bulk card identification) =====
 
-// ===== Lot Scanner (AI bulk card identification) =====
-
 const LOT_SCANNER_PROMPT = `You are an expert sports card identification assistant and pricing analyst.
 
 Analyze the image provided and identify every sports card visible in the lot with maximum detail.
@@ -3869,9 +3867,6 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   const [saveName, setSaveName] = useState("");
   const [lotLink, setLotLink] = useState("");
 
-  // Always-visible inline fields, plain onClick, no native browser dialogs — artifacts run in
-  // a sandboxed iframe that blocks window.prompt/alert/confirm (they silently do nothing or
-  // return instantly), which was the actual cause of the button appearing to do nothing.
   function saveScan() {
     if (!results || results.length === 0) return;
     const name = saveName.trim() || `Lot scan ${new Date().toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`;
@@ -3906,7 +3901,7 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setShowSavedList(false);
   }
 
-function deleteScan(targetScan) {
+  function deleteScan(targetScan) {
     const targetId = typeof targetScan === "object" ? targetScan.id : targetScan;
     const targetName = typeof targetScan === "object" ? targetScan.name : null;
 
@@ -3952,14 +3947,20 @@ function deleteScan(targetScan) {
     setResults(null);
     setAddedState({});
     try {
-      const content = [
-        ...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } })),
-        { type: "text", text: LOT_SCANNER_PROMPT },
-      ];
       const firstImage = images[0];
-      const parsed = await callGeminiAi(LOT_SCANNER_PROMPT, firstImage.base64, firstImage.mediaType);
-      if (!Array.isArray(parsed)) throw new Error("Unexpected response shape");
-      setResults(parsed);
+      const rawAiResponse = await callGeminiAi(LOT_SCANNER_PROMPT, firstImage.base64, firstImage.mediaType);
+
+      // Sanitize AI response to parse JSON safely
+      let parsed = rawAiResponse;
+      if (typeof rawAiResponse === "string") {
+        const cleanJsonText = rawAiResponse.replaceAll("```json", "").replaceAll("```", "").trim();
+        parsed = JSON.parse(cleanJsonText);
+      }
+
+      const cardsArray = Array.isArray(parsed) ? parsed : (parsed.cards || parsed.items || []);
+      if (!Array.isArray(cardsArray)) throw new Error("Unexpected response shape");
+
+      setResults(cardsArray);
     } catch (e) {
       console.error(e);
       setError("Couldn't identify the cards in that photo — try a clearer or better-lit shot, fewer cards per photo, or make sure each card is fully visible.");
@@ -4008,11 +4009,11 @@ function deleteScan(targetScan) {
   return (
     <div style={{ marginTop: 24 }}>
       <div style={{ fontSize: 13, color: "#8B90A0", marginBottom: 16, lineHeight: 1.6 }}>
-        Upload a photo of a lot or box of cards and Claude identifies each one — player, set, parallel, card number, and whether it's graded — plus a ready-made eBay search and a rough value estimate for each.
-        <span style={{ color: "#C9A227" }}> These are AI best-guesses from a photo, not verified</span> — double-check anything before relying on it, especially card numbers and parallels, which can look near-identical across different years or sets.
+        Upload a photo of a lot or box of cards and AI identifies each one — player, set, parallel, card number, and whether it's graded — plus a ready-made eBay search and a rough value estimate for each.
+        <span style={{ color: "#C9A227" }}> These are AI best-guesses from a photo, not verified</span> — double-check anything before relying on it, especially card numbers and parallels.
       </div>
 
-{savedScans.length > 0 && (
+      {savedScans.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <button className="btnSecondary" onClick={() => setShowSavedList((v) => !v)} style={{ marginBottom: showSavedList ? 10 : 0 }}>
             📁 Saved scans ({savedScans.length}) {showSavedList ? "▲" : "▼"}
@@ -4135,7 +4136,7 @@ function deleteScan(targetScan) {
                 />
               </div>
               <div style={{ fontSize: 11, color: "#C9A227", lineHeight: 1.6 }}>
-                ⚠️ These values are AI best-guesses from general hobby knowledge, not live sold prices — reliable-ish for common cards, shakier for anything niche or high-value. Verify anything expensive via the search links on each card before you commit to buying the lot.
+                ⚠️ These values are AI best-guesses from general hobby knowledge, not live sold prices. Verify anything expensive via search links before committing to buy.
               </div>
             </div>
           )}
@@ -4163,10 +4164,11 @@ function deleteScan(targetScan) {
     </div>
   );
 }
+
 function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
   const [copyState, setCopyState] = useState("idle");
-  const ebayUrl = card.ebay_search_query ? `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(card.ebay_search_query)}` : null;
-  const point130Url = card.ebay_search_query ? `https://130point.com/sales/?search=${encodeURIComponent(card.ebay_search_query)}` : null;
+  const ebayUrl = card.ebay_search_query ? `[https://www.ebay.com.au/sch/i.html?_nkw=$](https://www.ebay.com.au/sch/i.html?_nkw=$){encodeURIComponent(card.ebay_search_query)}` : null;
+  const point130Url = card.ebay_search_query ? `[https://130point.com/sales/?search=$](https://130point.com/sales/?search=$){encodeURIComponent(card.ebay_search_query)}` : null;
 
   async function copy() {
     const ok = await copyToClipboard(card.ebay_search_query || "");
@@ -4234,11 +4236,9 @@ function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
   );
 }
 
-
 // ===== Grade Check (AI photo assessment) =====
 
-// Updated fileToBase64 with higher clarity (2048px max dimension)
-function fileToBase64(file, maxDimension = 2048) {
+function fileToBase64(file, maxDimension = 1200) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -4263,8 +4263,7 @@ function fileToBase64(file, maxDimension = 2048) {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Render high-clarity JPEG at 85% quality
-        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.75);
         resolve(compressedDataUrl.split(",")[1]);
       };
       img.onerror = reject;
@@ -4274,6 +4273,7 @@ function fileToBase64(file, maxDimension = 2048) {
     reader.readAsDataURL(file);
   });
 }
+
 const GRADE_CHECK_PROMPT = `You are an experienced trading card grader. Examine the uploaded photo(s) of a single sports or Pokémon card the way a professional grader would: centering (front, and back if visible), all four corners, all four edges, and surface (scratches, print lines, staining, whitening).
 
 The card may be photographed inside a toploader or penny sleeve rather than raw — this is common when cards are held remotely (e.g. a storage/forwarding vault) and photographed for the owner rather than shot loose. Toploaders add their own glare, reflection, and slight warping distinct from ordinary lighting issues, which can both hide real surface flaws and create false ones. If a sticker (inventory label, ID tag, etc.) is stuck to the toploader over any part of the card, you cannot assess whatever it's covering — say so explicitly rather than guessing at what's underneath, name which area is blocked (e.g. "top-right corner obscured by a sticker"), and treat that as a reason to lower confidence rather than skip past it.
@@ -4285,7 +4285,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary outside the JSON
 psa10Prob + psa9Prob + belowProb must sum to 1. predictedGradeLow/High are PSA-scale numbers (1-10). If a sticker or heavy glare blocks meaningful assessment of any area, confidence must be "Low" regardless of how clean the visible parts look.`;
 
 function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
-  const [images, setImages] = useState([]); // [{name, base64, mediaType, previewUrl}]
+  const [images, setImages] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
@@ -4305,7 +4305,6 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
     belowAvg: "",
   });
 
-  // Alphabetically sorted cards list
   const allCards = useMemo(() => {
     const combined = [
       ...cards.map((c) => ({ ...c, _src: "cards" })),
@@ -4359,14 +4358,213 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
         firstImage ? firstImage.mediaType : "image/jpeg"
       );
 
-      // Sanitize Markdown code blocks (```json ... ```) before parsing
       let parsed = rawAiResponse;
       if (typeof rawAiResponse === "string") {
-        const cleanJsonText = rawAiResponse
-          .replace(/```json/gi, "")
-          .replace(/
-// ===== Business & Tax Summary =====
+        const cleanJsonText = rawAiResponse.replaceAll("```json", "").replaceAll("```", "").trim();
+        parsed = JSON.parse(cleanJsonText);
+      }
 
+      setResult(parsed);
+    } catch (e) {
+      console.error(e);
+      setError("Couldn't analyze the photo(s) — try again, or with clearer/brighter images.");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  const ev = useMemo(() => {
+    if (!result) return null;
+    const paid = Number(form.paid) || 0;
+    const shipping = Number(form.shipping) || 0;
+    const fees = Number(form.feesPct) || 0;
+    const rawAvg = form.rawAvg === "" ? null : Number(form.rawAvg);
+    const psa9Avg = form.psa9Avg === "" ? null : Number(form.psa9Avg);
+    const psa10Avg = form.psa10Avg === "" ? null : Number(form.psa10Avg);
+    const gCost = gradingCost(form.gradingService, Math.max(psa9Avg ?? 0, psa10Avg ?? 0));
+    const belowAvg = form.belowAvg === "" ? rawAvg : Number(form.belowAvg);
+
+    const totalCostRaw = paid + shipping;
+    const totalCostGraded = paid + shipping + gCost;
+
+    const rawProfit = rawAvg != null ? rawAvg * (1 - fees) - totalCostRaw : null;
+
+    const haveGradedComps = psa9Avg != null || psa10Avg != null;
+    let gradedProfit = null;
+    let expectedRevenue = null;
+    if (haveGradedComps) {
+      expectedRevenue =
+        (psa10Avg ?? 0) * (1 - fees) * result.psa10Prob +
+        (psa9Avg ?? 0) * (1 - fees) * result.psa9Prob +
+        (belowAvg ?? 0) * (1 - fees) * result.belowProb;
+      gradedProfit = expectedRevenue - totalCostGraded;
+    }
+
+    let recommendation = "Not enough data";
+    if (gradedProfit != null) {
+      if (gradedProfit <= 0) recommendation = "Don't grade";
+      else if (rawProfit != null && rawProfit >= gradedProfit) recommendation = "Sell raw instead";
+      else recommendation = "Worth grading";
+    }
+
+    return { rawProfit, gradedProfit, expectedRevenue, gCost, totalCostGraded, recommendation };
+  }, [result, form]);
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ fontSize: 13, color: "#8B90A0", marginBottom: 16, lineHeight: 1.6 }}>
+        Upload front/back photos and AI will assess condition the way a grader would, then run the same profit math as the rest of the app against your comps.
+      </div>
+
+      <SectionTitle>1. Photos (up to 4 — front, back, close-ups)</SectionTitle>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        {images.map((img, i) => (
+          <div key={i} style={{ position: "relative", width: 84, height: 84, borderRadius: 8, overflow: "hidden", border: "1px solid #2C303B" }}>
+            <img src={img.previewUrl} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <div onClick={() => removeImage(i)} style={{ position: "absolute", top: 2, right: 2, background: "#14161Cdd", borderRadius: 999, padding: 2, cursor: "pointer" }}>
+              <X size={12} color="#EDEAE1" />
+            </div>
+          </div>
+        ))}
+        {images.length < 4 && (
+          <label style={{ width: 84, height: 84, borderRadius: 8, border: "1px dashed #333844", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#6B7180" }}>
+            <Plus size={20} />
+            <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => handleFiles(e.target.files)} />
+          </label>
+        )}
+      </div>
+
+      <SectionTitle>2. Card &amp; cost details</SectionTitle>
+      {allCards.length > 0 && (
+        <Field label="Link to an existing card (optional — auto-fills comps)">
+          <select value={linkedId} onChange={(e) => linkCard(e.target.value)}>
+            <option value="">— enter manually —</option>
+            {allCards.map((c) => (
+              <option key={c.id} value={c.id}>{c.player} — {c.card}</option>
+            ))}
+          </select>
+        </Field>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+        <Field label="Player"><input value={form.player} onChange={(e) => setForm({ ...form, player: e.target.value })} /></Field>
+        <Field label="Card / set"><input value={form.card} onChange={(e) => setForm({ ...form, card: e.target.value })} /></Field>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+        <Field label="Paid"><input type="number" step="0.01" value={form.paid} onChange={(e) => setForm({ ...form, paid: e.target.value })} /></Field>
+        <Field label="Shipping"><input type="number" step="0.01" value={form.shipping} onChange={(e) => setForm({ ...form, shipping: e.target.value })} /></Field>
+        <Field label="Fees %"><input type="number" step="0.001" value={form.feesPct} onChange={(e) => setForm({ ...form, feesPct: Number(e.target.value) })} /></Field>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <Field label="Grading service">
+          <select value={form.gradingService} onChange={(e) => setForm({ ...form, gradingService: e.target.value })}>
+            {GRADING_SERVICE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6B7180", marginTop: 10, marginBottom: 4 }}>Market comps (leave blank if unknown)</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
+        <Field label="Raw avg"><input type="number" step="0.01" value={form.rawAvg} onChange={(e) => setForm({ ...form, rawAvg: e.target.value })} /></Field>
+        <Field label="PSA 9 avg"><input type="number" step="0.01" value={form.psa9Avg} onChange={(e) => setForm({ ...form, psa9Avg: e.target.value })} /></Field>
+        <Field label="PSA 10 avg"><input type="number" step="0.01" value={form.psa10Avg} onChange={(e) => setForm({ ...form, psa10Avg: e.target.value })} /></Field>
+        <Field label="PSA 8-or-below avg"><input type="number" step="0.01" placeholder="≈ raw" value={form.belowAvg} onChange={(e) => setForm({ ...form, belowAvg: e.target.value })} /></Field>
+      </div>
+
+      <button className="btnPrimary" onClick={analyze} disabled={images.length === 0 || analyzing} style={{ opacity: images.length === 0 || analyzing ? 0.5 : 1 }}>
+        {analyzing ? "Analyzing…" : "Analyze grade"}
+      </button>
+
+      {error && <div style={{ fontSize: 12, color: "#B4472E", marginTop: 12 }}>{error}</div>}
+
+      {result && (
+        <div style={{ marginTop: 22 }}>
+          <SectionTitle>Assessment</SectionTitle>
+          <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "16px 18px", background: "#191B22", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div className="oswald" style={{ fontSize: 22, fontWeight: 700, color: "#C9A227" }}>
+                PSA {result.predictedGradeLow}–{result.predictedGradeHigh}
+              </div>
+              <span className="mono" style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, background: "#5C7A9922", color: "#5C7A99" }}>
+                {result.confidence} confidence
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: "#C6CAD4", marginBottom: 12 }}>{result.summary}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+              <MiniStat label="Centering" value={result.centering} />
+              <MiniStat label="Surface" value={result.surface} />
+              <MiniStat label="Corners" value={result.corners} />
+              <MiniStat label="Edges" value={result.edges} />
+            </div>
+            {result.obstruction && result.obstruction.toLowerCase() !== "none" && (
+              <div style={{ fontSize: 12, color: "#C9A227", marginBottom: 12, background: "#C9A22715", border: "1px solid #C9A22740", borderRadius: 6, padding: "8px 10px" }}>
+                ⚠️ <span style={{ fontWeight: 600 }}>Obstructed: </span>{result.obstruction}
+              </div>
+            )}
+            {result.keyIssues && result.keyIssues.length > 0 && (
+              <div style={{ fontSize: 12, color: "#A7ADBB", marginBottom: 12 }}>
+                <span style={{ color: "#6B7180" }}>Flagged: </span>{result.keyIssues.join(" · ")}
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              <MiniStat label="PSA 10 chance" value={fmtPct(result.psa10Prob)} />
+              <MiniStat label="PSA 9 chance" value={fmtPct(result.psa9Prob)} />
+              <MiniStat label="PSA 8-or-below chance" value={fmtPct(result.belowProb)} />
+            </div>
+            {linkedId && onUpdateCardIn && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #24272F", display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  className="btnSecondary"
+                  style={{ fontSize: 12, padding: "6px 12px" }}
+                  onClick={() => {
+                    const linked = allCards.find((c) => c.id === linkedId);
+                    if (!linked) return;
+                    onUpdateCardIn(linked._src, linked.id, { gradeAnalysis: result });
+                    setSavedToCard(true);
+                  }}
+                >
+                  💾 Save this assessment to the card
+                </button>
+                {savedToCard && <span style={{ fontSize: 11.5, color: "#4E8B6B" }}>Saved — Graded EV on this card now uses these actual probabilities.</span>}
+              </div>
+            )}
+          </div>
+
+          {ev && (
+            <>
+              <SectionTitle>Worth grading?</SectionTitle>
+              <div
+                style={{
+                  border: `1px solid ${ev.recommendation === "Worth grading" ? "#4E8B6B55" : ev.recommendation === "Don't grade" ? "#B4472E55" : "#C9A22755"}`,
+                  borderRadius: 10,
+                  padding: "16px 18px",
+                  background: ev.recommendation === "Worth grading" ? "#4E8B6B0f" : ev.recommendation === "Don't grade" ? "#B4472E0f" : "#14161C",
+                }}
+              >
+                <div
+                  className="oswald"
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 700,
+                    marginBottom: 12,
+                    color: ev.recommendation === "Worth grading" ? "#4E8B6B" : ev.recommendation === "Don't grade" ? "#B4472E" : "#C9A227",
+                  }}
+                >
+                  {ev.recommendation}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <MiniStat label="Grading cost" value={fmtMoney(ev.gCost)} />
+                  <MiniStat label="Sell raw now" value={ev.rawProfit != null ? fmtMoney(ev.rawProfit) : "—"} color={ev.rawProfit != null ? (ev.rawProfit >= 0 ? "#4E8B6B" : "#B4472E") : undefined} />
+                  <MiniStat label="Expected profit if graded" value={ev.gradedProfit != null ? fmtMoney(ev.gradedProfit) : "—"} color={ev.gradedProfit != null ? (ev.gradedProfit >= 0 ? "#4E8B6B" : "#B4472E") : undefined} emphasis />
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Business & Tax Summary =====
 function currentFYLabel(date = new Date()) {
   const y = date.getFullYear();
   const m = date.getMonth() + 1;
