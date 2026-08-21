@@ -4305,10 +4305,14 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
     belowAvg: "",
   });
 
-  const allCards = useMemo(
-    () => [...cards.map((c) => ({ ...c, _src: "cards" })), ...pokemonCards.map((c) => ({ ...c, _src: "pokemon" }))],
-    [cards, pokemonCards]
-  );
+  // Alphabetically sorted cards list
+  const allCards = useMemo(() => {
+    const combined = [
+      ...cards.map((c) => ({ ...c, _src: "cards" })),
+      ...pokemonCards.map((c) => ({ ...c, _src: "pokemon" })),
+    ];
+    return combined.sort((a, b) => (a.player || "").localeCompare(b.player || ""));
+  }, [cards, pokemonCards]);
 
   function linkCard(id) {
     setLinkedId(id);
@@ -4348,217 +4352,19 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
     setResult(null);
     setSavedToCard(false);
     try {
-      const content = [
-        ...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } })),
-        { type: "text", text: GRADE_CHECK_PROMPT },
-      ];
       const firstImage = images[0];
-      const parsed = await callGeminiAi(GRADE_CHECK_PROMPT, firstImage ? firstImage.base64 : null, firstImage ? firstImage.mediaType : "image/jpeg");
-      setResult(parsed);
-    } catch (e) {
-      console.error(e);
-      setError("Couldn't analyze the photo(s) — try again, or with clearer/brighter images.");
-    } finally {
-      setAnalyzing(false);
-    }
-  }
+      const rawAiResponse = await callGeminiAi(
+        GRADE_CHECK_PROMPT, 
+        firstImage ? firstImage.base64 : null, 
+        firstImage ? firstImage.mediaType : "image/jpeg"
+      );
 
-  const ev = useMemo(() => {
-    if (!result) return null;
-    const paid = Number(form.paid) || 0;
-    const shipping = Number(form.shipping) || 0;
-    const fees = Number(form.feesPct) || 0;
-    const rawAvg = form.rawAvg === "" ? null : Number(form.rawAvg);
-    const psa9Avg = form.psa9Avg === "" ? null : Number(form.psa9Avg);
-    const psa10Avg = form.psa10Avg === "" ? null : Number(form.psa10Avg);
-    const gCost = gradingCost(form.gradingService, Math.max(psa9Avg ?? 0, psa10Avg ?? 0));
-    const belowAvg = form.belowAvg === "" ? rawAvg : Number(form.belowAvg);
-
-    const totalCostRaw = paid + shipping;
-    const totalCostGraded = paid + shipping + gCost;
-
-    const rawProfit = rawAvg != null ? rawAvg * (1 - fees) - totalCostRaw : null;
-
-    const haveGradedComps = psa9Avg != null || psa10Avg != null;
-    let gradedProfit = null;
-    let expectedRevenue = null;
-    if (haveGradedComps) {
-      expectedRevenue =
-        (psa10Avg ?? 0) * (1 - fees) * result.psa10Prob +
-        (psa9Avg ?? 0) * (1 - fees) * result.psa9Prob +
-        (belowAvg ?? 0) * (1 - fees) * result.belowProb;
-      gradedProfit = expectedRevenue - totalCostGraded;
-    }
-
-    let recommendation = "Not enough data";
-    if (gradedProfit != null) {
-      if (gradedProfit <= 0) recommendation = "Don't grade";
-      else if (rawProfit != null && rawProfit >= gradedProfit) recommendation = "Sell raw instead";
-      else recommendation = "Worth grading";
-    }
-
-    return { rawProfit, gradedProfit, expectedRevenue, gCost, totalCostGraded, recommendation };
-  }, [result, form]);
-
-  return (
-    <div style={{ marginTop: 24 }}>
-      <div style={{ fontSize: 13, color: "#8B90A0", marginBottom: 16, lineHeight: 1.6 }}>
-        Upload front/back photos and Claude will assess condition the way a grader would, then run the same profit math as the rest of the app against your comps.
-        <span style={{ color: "#C9A227" }}> This is a photo-based estimate, not a real grade</span> — lighting and resolution hide flaws a grader would catch in hand, so treat it as directional, not a promise.
-        Photos through a toploader (common for ShipMyCards-held cards) or with a sticker over any part of the card get flagged automatically — check for an "Obstructed" warning under the result, and try a different angle if one shows up.
-      </div>
-
-      <SectionTitle>1. Photos (up to 4 — front, back, close-ups)</SectionTitle>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        {images.map((img, i) => (
-          <div key={i} style={{ position: "relative", width: 84, height: 84, borderRadius: 8, overflow: "hidden", border: "1px solid #2C303B" }}>
-            <img src={img.previewUrl} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            <div onClick={() => removeImage(i)} style={{ position: "absolute", top: 2, right: 2, background: "#14161Cdd", borderRadius: 999, padding: 2, cursor: "pointer" }}>
-              <X size={12} color="#EDEAE1" />
-            </div>
-          </div>
-        ))}
-        {images.length < 4 && (
-          <label style={{ width: 84, height: 84, borderRadius: 8, border: "1px dashed #333844", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#6B7180" }}>
-            <Plus size={20} />
-            <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => handleFiles(e.target.files)} />
-          </label>
-        )}
-      </div>
-
-      <SectionTitle>2. Card &amp; cost details</SectionTitle>
-      {allCards.length > 0 && (
-        <Field label="Link to an existing card (optional — auto-fills comps)">
-          <select value={linkedId} onChange={(e) => linkCard(e.target.value)}>
-            <option value="">— enter manually —</option>
-            {allCards.map((c) => (
-              <option key={c.id} value={c.id}>{c.player} — {c.card}</option>
-            ))}
-          </select>
-        </Field>
-      )}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-        <Field label="Player"><input value={form.player} onChange={(e) => setForm({ ...form, player: e.target.value })} /></Field>
-        <Field label="Card / set"><input value={form.card} onChange={(e) => setForm({ ...form, card: e.target.value })} /></Field>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
-        <Field label="Paid"><input type="number" step="0.01" value={form.paid} onChange={(e) => setForm({ ...form, paid: e.target.value })} /></Field>
-        <Field label="Shipping"><input type="number" step="0.01" value={form.shipping} onChange={(e) => setForm({ ...form, shipping: e.target.value })} /></Field>
-        <Field label="Fees %"><input type="number" step="0.001" value={form.feesPct} onChange={(e) => setForm({ ...form, feesPct: Number(e.target.value) })} /></Field>
-      </div>
-      <div style={{ marginTop: 10 }}>
-        <Field label="Grading service">
-          <select value={form.gradingService} onChange={(e) => setForm({ ...form, gradingService: e.target.value })}>
-            {GRADING_SERVICE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
-          </select>
-        </Field>
-      </div>
-      <div style={{ fontSize: 11.5, color: "#6B7180", marginTop: 10, marginBottom: 4 }}>Market comps (leave blank if unknown)</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
-        <Field label="Raw avg"><input type="number" step="0.01" value={form.rawAvg} onChange={(e) => setForm({ ...form, rawAvg: e.target.value })} /></Field>
-        <Field label="PSA 9 avg"><input type="number" step="0.01" value={form.psa9Avg} onChange={(e) => setForm({ ...form, psa9Avg: e.target.value })} /></Field>
-        <Field label="PSA 10 avg"><input type="number" step="0.01" value={form.psa10Avg} onChange={(e) => setForm({ ...form, psa10Avg: e.target.value })} /></Field>
-        <Field label="PSA 8-or-below avg"><input type="number" step="0.01" placeholder="≈ raw" value={form.belowAvg} onChange={(e) => setForm({ ...form, belowAvg: e.target.value })} /></Field>
-      </div>
-
-      <button className="btnPrimary" onClick={analyze} disabled={images.length === 0 || analyzing} style={{ opacity: images.length === 0 || analyzing ? 0.5 : 1 }}>
-        {analyzing ? "Analyzing…" : "Analyze grade"}
-      </button>
-
-      {error && <div style={{ fontSize: 12, color: "#B4472E", marginTop: 12 }}>{error}</div>}
-
-      {result && (
-        <div style={{ marginTop: 22 }}>
-          <SectionTitle>Assessment</SectionTitle>
-          <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "16px 18px", background: "#191B22", marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div className="oswald" style={{ fontSize: 22, fontWeight: 700, color: "#C9A227" }}>
-                PSA {result.predictedGradeLow}–{result.predictedGradeHigh}
-              </div>
-              <span className="mono" style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, background: "#5C7A9922", color: "#5C7A99" }}>
-                {result.confidence} confidence
-              </span>
-            </div>
-            <div style={{ fontSize: 13, color: "#C6CAD4", marginBottom: 12 }}>{result.summary}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-              <MiniStat label="Centering" value={result.centering} />
-              <MiniStat label="Surface" value={result.surface} />
-              <MiniStat label="Corners" value={result.corners} />
-              <MiniStat label="Edges" value={result.edges} />
-            </div>
-            {result.obstruction && result.obstruction.toLowerCase() !== "none" && (
-              <div style={{ fontSize: 12, color: "#C9A227", marginBottom: 12, background: "#C9A22715", border: "1px solid #C9A22740", borderRadius: 6, padding: "8px 10px" }}>
-                ⚠️ <span style={{ fontWeight: 600 }}>Obstructed: </span>{result.obstruction}
-              </div>
-            )}
-            {result.keyIssues && result.keyIssues.length > 0 && (
-              <div style={{ fontSize: 12, color: "#A7ADBB", marginBottom: 12 }}>
-                <span style={{ color: "#6B7180" }}>Flagged: </span>{result.keyIssues.join(" · ")}
-              </div>
-            )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              <MiniStat label="PSA 10 chance" value={fmtPct(result.psa10Prob)} />
-              <MiniStat label="PSA 9 chance" value={fmtPct(result.psa9Prob)} />
-              <MiniStat label="PSA 8-or-below chance" value={fmtPct(result.belowProb)} />
-            </div>
-            {linkedId && onUpdateCardIn && (
-              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #24272F", display: "flex", alignItems: "center", gap: 10 }}>
-                <button
-                  className="btnSecondary"
-                  style={{ fontSize: 12, padding: "6px 12px" }}
-                  onClick={() => {
-                    const linked = allCards.find((c) => c.id === linkedId);
-                    if (!linked) return;
-                    onUpdateCardIn(linked._src, linked.id, { gradeAnalysis: result });
-                    setSavedToCard(true);
-                  }}
-                >
-                  💾 Save this assessment to the card
-                </button>
-                {savedToCard && <span style={{ fontSize: 11.5, color: "#4E8B6B" }}>Saved — Graded EV on this card now uses these actual probabilities.</span>}
-              </div>
-            )}
-          </div>
-
-          {ev && (
-            <>
-              <SectionTitle>Worth grading?</SectionTitle>
-              <div
-                style={{
-                  border: `1px solid ${ev.recommendation === "Worth grading" ? "#4E8B6B55" : ev.recommendation === "Don't grade" ? "#B4472E55" : "#C9A22755"}`,
-                  borderRadius: 10,
-                  padding: "16px 18px",
-                  background: ev.recommendation === "Worth grading" ? "#4E8B6B0f" : ev.recommendation === "Don't grade" ? "#B4472E0f" : "#14161C",
-                }}
-              >
-                <div
-                  className="oswald"
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 700,
-                    marginBottom: 12,
-                    color: ev.recommendation === "Worth grading" ? "#4E8B6B" : ev.recommendation === "Don't grade" ? "#B4472E" : "#C9A227",
-                  }}
-                >
-                  {ev.recommendation}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
-                  <MiniStat label="Grading cost" value={fmtMoney(ev.gCost)} />
-                  <MiniStat label="Sell raw now" value={ev.rawProfit != null ? fmtMoney(ev.rawProfit) : "—"} color={ev.rawProfit != null ? (ev.rawProfit >= 0 ? "#4E8B6B" : "#B4472E") : undefined} />
-                  <MiniStat label="Expected profit if graded" value={ev.gradedProfit != null ? fmtMoney(ev.gradedProfit) : "—"} color={ev.gradedProfit != null ? (ev.gradedProfit >= 0 ? "#4E8B6B" : "#B4472E") : undefined} emphasis />
-                </div>
-                <div style={{ fontSize: 11.5, color: "#6B7180" }}>
-                  Expected profit if graded is probability-weighted across the PSA 10/9/8-or-below chances above, net of fees, minus what grading actually costs. Add PSA 9/10 comps if this looks empty.
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
+      // Sanitize Markdown code blocks (```json ... ```) before parsing
+      let parsed = rawAiResponse;
+      if (typeof rawAiResponse === "string") {
+        const cleanJsonText = rawAiResponse
+          .replace(/```json/gi, "")
+          .replace(/
 // ===== Business & Tax Summary =====
 
 function currentFYLabel(date = new Date()) {
