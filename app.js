@@ -333,7 +333,7 @@ function computeCard(c) {
     gradeWorthIt = "HIGH RISK"; // Demotes low gem rate cards (<25%) to HIGH RISK
   }
 
-  let sellDecision = "";
+let sellDecision = "";
   if (!c.player) {
     sellDecision = "";
   } else if (status === "Sold") {
@@ -343,7 +343,7 @@ function computeCard(c) {
   } else if (status === "At Grading") {
     sellDecision = "At Grading";
   } else if (status === "Graded") {
-    if (grade === "psa 10" && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
+    if (PSA10_GRADES.includes(grade) && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
     else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
@@ -516,17 +516,18 @@ function computePokemonCard(c) {
   const gradeCall = status === "Raw" ? gradeWorthIt : "";
 
   // 2. Sell Decision Tree
-  let sellDecision = "";
-  if (status === "Sold") {
+ let sellDecision = "";
+  if (!c.player) {
+    sellDecision = "";
+  } else if (status === "Sold") {
     sellDecision = "Sold";
   } else if (status === "Listed") {
     sellDecision = "Listed";
   } else if (status === "At Grading") {
     sellDecision = "At Grading";
   } else if (status === "Graded") {
-    const pkmnGradeCheck = (c.grade || "").toLowerCase();
-    if (PSA10_GRADES.includes(pkmnGradeCheck) && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
-    else if (PSA9_GRADES.includes(pkmnGradeCheck) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
+    if (PSA10_GRADES.includes(grade) && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
+    else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
     else sellDecision = "Hold";
   } else {
     const minRoiThreshold = 0.20;
