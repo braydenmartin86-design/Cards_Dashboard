@@ -5361,100 +5361,6 @@ function BoxDetailModal({ box, onClose, onUpdate, onDelete }) {
 
 // ===== My Sales =====
 
-function MySales({ items, onUpdate, onDelete, onAddManualSale }) {
-  const [search, setSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(50);
-  const [editingItem, setEditingItem] = useState(null);
-  const [showManualModal, setShowManualModal] = useState(false);
-
-  const sorted = useMemo(
-    () => [...items].sort((a, b) => (a.status === b.status ? 0 : a.status === "Listed" ? -1 : 1)),
-    [items]
-  );
-
-  const searched = useMemo(() => {
-    if (!search.trim()) return sorted;
-    const q = search.trim().toLowerCase();
-    return sorted.filter((i) => `${i.player} ${i.card} ${i.cardNum}`.toLowerCase().includes(q));
-  }, [sorted, search]);
-
-  useEffect(() => setVisibleCount(50), [search]);
-
-  const visible = searched.slice(0, visibleCount);
-
-  const totals = useMemo(() => {
-    const qty = (c) => Number(c.quantity) || 1;
-    const sold = items.filter((i) => i.status === "Sold");
-    const listed = items.filter((i) => i.status === "Listed");
-    const realised = sold.reduce((s, c) => s + (c.realisedProfit ?? 0) * qty(c), 0);
-    const listedValue = listed.reduce((s, c) => s + (Number(c.listedPrice) || 0) * qty(c), 0);
-    return { soldCount: sold.length, listedCount: listed.length, realised, listedValue };
-  }, [items]);
-
-  const selectedItem = editingItem ? items.find((i) => i._source === editingItem._source && i.id === editingItem.id) : null;
-
-  return (
-    <div style={{ marginTop: 24 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 1, background: "#2C303B", border: "1px solid #2C303B", borderRadius: 12, overflow: "hidden", marginBottom: 20 }}>
-        <Stat label="Listed" value={totals.listedCount} color="#2FA89A" />
-        <Stat label="Sold" value={totals.soldCount} color="#4E8B6B" />
-        <Stat label="Listed value" value={fmtMoney(totals.listedValue)} />
-        <Stat label="Realised profit" value={`${totals.realised >= 0 ? "+" : ""}${fmtMoney(totals.realised)}`} color={totals.realised >= 0 ? "#4E8B6B" : "#B4472E"} />
-      </div>
-
-      <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by player or card…"
-          style={{ flex: 1 }}
-        />
-        <button className="btnPrimary" onClick={() => setShowManualModal(true)} style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
-          + Log Manual / Lot Sale
-        </button>
-      </div>
-
-      {searched.length === 0 ? (
-        <div style={{ padding: "3rem 0", textAlign: "center", color: "#5C6270", border: "1px solid #2C303B", borderRadius: 10 }}>
-          {items.length === 0
-            ? "Nothing listed or sold yet — set a card's status to Listed or Sold from My Cards or Pokémon, or log a manual sale above."
-            : "No matches for that search."}
-        </div>
-      ) : (
-        <>
-          <div style={{ border: "1px solid #2C303B", borderRadius: 10, overflow: "hidden" }}>
-            {visible.map((item) => (
-              <SalesRow key={`${item._source}-${item.id}`} item={item} onClick={() => setEditingItem({ _source: item._source, id: item.id })} />
-            ))}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, fontSize: 12, color: "#6B7180" }}>
-            <span>Showing {visible.length} of {searched.length}</span>
-            {visibleCount < searched.length && (
-              <button className="btnSecondary" onClick={() => setVisibleCount((v) => v + 50)}>
-                Load 50 more
-              </button>
-            )}
-          </div>
-        </>
-      )}
-
-      {selectedItem && (
-        <SalesDetailModal item={selectedItem} onClose={() => setEditingItem(null)} onUpdate={onUpdate} onDelete={onDelete} />
-      )}
-
-      {showManualModal && (
-        <AddManualSaleModal
-          onClose={() => setShowManualModal(false)}
-          onAdd={(newCard) => {
-            if (onAddManualSale) onAddManualSale(newCard);
-            setShowManualModal(false);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
 function SalesRow({ item, onClick }) {
   const isListed = item.status === "Listed";
   const statusColor = isListed ? "#2FA89A" : "#4E8B6B";
@@ -5707,6 +5613,99 @@ function AddManualSaleModal({ onClose, onAdd }) {
   );
 }
 
+function MySales({ items, onUpdate, onDelete, onAddManualSale }) {
+  const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(50);
+  const [editingItem, setEditingItem] = useState(null);
+  const [showManualModal, setShowManualModal] = useState(false);
+
+  const sorted = useMemo(
+    () => [...items].sort((a, b) => (a.status === b.status ? 0 : a.status === "Listed" ? -1 : 1)),
+    [items]
+  );
+
+  const searched = useMemo(() => {
+    if (!search.trim()) return sorted;
+    const q = search.trim().toLowerCase();
+    return sorted.filter((i) => `${i.player} ${i.card} ${i.cardNum}`.toLowerCase().includes(q));
+  }, [sorted, search]);
+
+  useEffect(() => setVisibleCount(50), [search]);
+
+  const visible = searched.slice(0, visibleCount);
+
+  const totals = useMemo(() => {
+    const qty = (c) => Number(c.quantity) || 1;
+    const sold = items.filter((i) => i.status === "Sold");
+    const listed = items.filter((i) => i.status === "Listed");
+    const realised = sold.reduce((s, c) => s + (c.realisedProfit ?? 0) * qty(c), 0);
+    const listedValue = listed.reduce((s, c) => s + (Number(c.listedPrice) || 0) * qty(c), 0);
+    return { soldCount: sold.length, listedCount: listed.length, realised, listedValue };
+  }, [items]);
+
+  const selectedItem = editingItem ? items.find((i) => i._source === editingItem._source && i.id === editingItem.id) : null;
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 1, background: "#2C303B", border: "1px solid #2C303B", borderRadius: 12, overflow: "hidden", marginBottom: 20 }}>
+        <Stat label="Listed" value={totals.listedCount} color="#2FA89A" />
+        <Stat label="Sold" value={totals.soldCount} color="#4E8B6B" />
+        <Stat label="Listed value" value={fmtMoney(totals.listedValue)} />
+        <Stat label="Realised profit" value={`${totals.realised >= 0 ? "+" : ""}${fmtMoney(totals.realised)}`} color={totals.realised >= 0 ? "#4E8B6B" : "#B4472E"} />
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by player or card…"
+          style={{ flex: 1 }}
+        />
+        <button className="btnPrimary" onClick={() => setShowManualModal(true)} style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
+          + Log Manual / Lot Sale
+        </button>
+      </div>
+
+      {searched.length === 0 ? (
+        <div style={{ padding: "3rem 0", textAlign: "center", color: "#5C6270", border: "1px solid #2C303B", borderRadius: 10 }}>
+          {items.length === 0
+            ? "Nothing listed or sold yet — set a card's status to Listed or Sold from My Cards or Pokémon, or log a manual sale above."
+            : "No matches for that search."}
+        </div>
+      ) : (
+        <>
+          <div style={{ border: "1px solid #2C303B", borderRadius: 10, overflow: "hidden" }}>
+            {visible.map((item) => (
+              <SalesRow key={`${item._source}-${item.id}`} item={item} onClick={() => setEditingItem({ _source: item._source, id: item.id })} />
+            ))}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, fontSize: 12, color: "#6B7180" }}>
+            <span>Showing {visible.length} of {searched.length}</span>
+            {visibleCount < searched.length && (
+              <button className="btnSecondary" onClick={() => setVisibleCount((v) => v + 50)}>
+                Load 50 more
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {selectedItem && (
+        <SalesDetailModal item={selectedItem} onClose={() => setEditingItem(null)} onUpdate={onUpdate} onDelete={onDelete} />
+      )}
+
+      {showManualModal && (
+        <AddManualSaleModal
+          onClose={() => setShowManualModal(false)}
+          onAdd={(newCard) => {
+            if (onAddManualSale) onAddManualSale(newCard);
+            setShowManualModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 function newBuyTarget() {
   return {
