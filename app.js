@@ -1541,8 +1541,14 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   </>
 )}
 
-        {tab === "sales" && <MySales items={salesItems} onUpdate={updateCardIn} onDelete={deleteCardIn} />}
-
+       {tab === "sales" && (
+  <MySales 
+    items={salesItems} 
+    onUpdate={updateCardIn} 
+    onDelete={deleteCardIn} 
+    onAddManualSale={(newCard) => setCards((prev) => [newCard, ...prev])}
+  />
+)}
         {tab === "boxbreaks" && <BoxBreaks boxBreaks={boxBreaks} setBoxBreaks={setBoxBreaks} />}
 
         {tab === "gradecheck" && <GradeCheck cards={cards} pokemonCards={pokemonCards} onUpdateCardIn={updateCardIn} />}
