@@ -5420,6 +5420,11 @@ function SalesRow({ item, onClick }) {
 function SalesDetailModal({ item, onClose, onUpdate, onDelete }) {
   const isListed = item.status === "Listed";
   const isSold = item.status === "Sold";
+
+  // Local state for editable title & description
+  const [playerTitle, setPlayerTitle] = useState(item.player || "");
+  const [cardDesc, setCardDesc] = useState(item.card || "");
+
   const suggestedFee = estimateSellingFee(item.sellingMethod, isListed ? item.listedPrice : item.actualSellPrice);
   const hasActualFees = item.actualFeesPaid != null && item.actualFeesPaid !== "";
   const listedFeeEstimate = hasActualFees ? Number(item.actualFeesPaid) : suggestedFee != null ? suggestedFee : item.listedPrice ? item.listedPrice * item.feesPct : null;
@@ -5434,14 +5439,33 @@ function SalesDetailModal({ item, onClose, onUpdate, onDelete }) {
   return (
     <div className="modalOverlay" onClick={onClose}>
       <div className="modalBox" onClick={(e) => e.stopPropagation()}>
-        <ModalHeader title={item.player} onClose={onClose} />
-        <div style={{ fontSize: 12, color: "#8B90A0", marginBottom: 16 }}>
-          {item.sport && <span style={{ marginRight: 6 }}>{SPORT_EMOJI[item.sport] || "🎴"}</span>}
-          {item.card} {item.cardNum}{item.grade ? ` · ${item.grade}` : ""}
-          {(item.quantity ?? 1) > 1 && <span> · Qty {item.quantity}</span>}
-        </div>
+        <ModalHeader title="Edit Sales Item Details" onClose={onClose} />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 10 }}>
+          {/* Editable Item Title / Player */}
+          <Field label="Item Title / Player">
+            <input
+              value={playerTitle}
+              onChange={(e) => {
+                setPlayerTitle(e.target.value);
+                onUpdate(item._source, item.id, { player: e.target.value });
+              }}
+              placeholder="e.g. Elly De La Cruz"
+            />
+          </Field>
+
+          {/* Editable Card / Description */}
+          <Field label="Description / Set Details">
+            <input
+              value={cardDesc}
+              onChange={(e) => {
+                setCardDesc(e.target.value);
+                onUpdate(item._source, item.id, { card: e.target.value });
+              }}
+              placeholder="e.g. 2024 Topps Heritage #473"
+            />
+          </Field>
+
           <Field label="Status">
             <select value={item.status} onChange={(e) => onUpdate(item._source, item.id, { status: e.target.value })}>
               {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
