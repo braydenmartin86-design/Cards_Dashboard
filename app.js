@@ -5384,19 +5384,31 @@ function SalesRow({ item, onClick }) {
     <div
       onClick={onClick}
       className="cardRow"
-      style={{ display: "grid", gridTemplateColumns: "2fr 90px 90px 90px 100px 24px", padding: "8px 14px", borderTop: "1px solid #24272F", cursor: "pointer", alignItems: "center", fontSize: 12.5 }}
+      style={{ display: "grid", gridTemplateColumns: "2fr 80px 80px 80px 90px 90px 24px", padding: "8px 14px", borderTop: "1px solid #24272F", cursor: "pointer", alignItems: "center", fontSize: 12.5 }}
     >
       <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <span style={{ fontWeight: 600 }}>{item.player}</span>
         <span style={{ color: "#6B7180", marginLeft: 6 }}>{item.card}{item.cardNum ? ` ${item.cardNum}` : ""}</span>
         {item.sport && <span className="mono" style={{ fontSize: 9.5, color: "#6B7180", marginLeft: 6 }}>{SPORT_EMOJI[item.sport] || "🎴"}</span>}
         {item.sellingMethod && <span className="mono" style={{ fontSize: 9.5, color: "#5C7A99", marginLeft: 6 }}>via {item.sellingMethod}</span>}
+        {item.listingUrl && (
+          <a
+            href={item.listingUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontSize: 10, color: "#2FA89A", marginLeft: 8, textDecoration: "none" }}
+          >
+            Link ↗
+          </a>
+        )}
       </div>
       <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: `${statusColor}22`, color: statusColor, fontWeight: 600, justifySelf: "start" }}>
         {item.status}
       </span>
       <div style={{ color: "#8B90A0" }}>{fmtMoney(item.totalCost)}</div>
-      <div>{priceValue ? fmtMoney(priceValue) : "—"}</div>
+      <div style={{ color: "#2FA89A" }}>{item.listedPrice ? fmtMoney(item.listedPrice) : "—"}</div>
+      <div>{isListed ? "—" : priceValue ? fmtMoney(priceValue) : "—"}</div>
       <div style={{ color: profit == null ? "#6B7180" : profit >= 0 ? "#4E8B6B" : "#B4472E", fontWeight: 600 }}>
         {profit != null ? fmtMoney(profit) : "—"}
       </div>
@@ -5434,6 +5446,14 @@ function SalesDetailModal({ item, onClose, onUpdate, onDelete }) {
             <select value={item.status} onChange={(e) => onUpdate(item._source, item.id, { status: e.target.value })}>
               {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
             </select>
+          </Field>
+
+          <Field label="Listing Link (eBay / Store)">
+            <input
+              placeholder="https://www.ebay.com.au/itm/..."
+              value={item.listingUrl || ""}
+              onChange={(e) => onUpdate(item._source, item.id, { listingUrl: e.target.value })}
+            />
           </Field>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -5499,11 +5519,6 @@ function SalesDetailModal({ item, onClose, onUpdate, onDelete }) {
               value={item.actualFeesPaid ?? ""}
               onChange={(e) => onUpdate(item._source, item.id, { actualFeesPaid: e.target.value === "" ? "" : Number(e.target.value) })}
             />
-            <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 4 }}>
-              {hasActualFees
-                ? "Realised profit now uses these actual figures instead of the card's generic Fees %."
-                : "Not entered yet — realised profit is still using the card's generic Fees % estimate (built for flat eBay-style fees, not DCSports87/Fanatics/Whatnot's real structures)."}
-            </div>
           </div>
 
           {isListed && (
@@ -5533,36 +5548,34 @@ function SalesDetailModal({ item, onClose, onUpdate, onDelete }) {
   );
 }
 
-function AddManualSaleModal({ onClose, onAdd }) {
+function AddManualListingModal({ onClose, onAdd }) {
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
   const [sport, setSport] = useState("MLB");
   const [cost, setCost] = useState("");
-  const [soldPrice, setSoldPrice] = useState("");
-  const [feesPaid, setFeesPaid] = useState("0");
-  const [sellingMethod, setSellingMethod] = useState("Cash / Private Deal");
+  const [listedPrice, setListedPrice] = useState("");
+  const [listingUrl, setListingUrl] = useState("");
+  const [sellingMethod, setSellingMethod] = useState("eBay");
 
   function handleSubmit(e) {
     e.preventDefault();
     const costVal = Number(cost) || 0;
-    const soldVal = Number(soldPrice) || 0;
-    const feesVal = Number(feesPaid) || 0;
-    const netProfit = soldVal - costVal - feesVal;
+    const listVal = Number(listedPrice) || 0;
 
     const manualCard = {
       id: crypto.randomUUID(),
       _source: "cards",
-      player: title.trim() || "Untracked Lot",
-      card: details.trim() || "Base Card / Private Sale",
+      player: title.trim() || "Untracked Item",
+      card: details.trim() || "Manual Listing",
       sport,
-      status: "Sold",
+      status: "Listed",
       totalCost: costVal,
-      actualSellPrice: soldVal,
-      actualFeesPaid: feesVal,
-      realisedProfit: netProfit,
+      listedPrice: listVal,
+      listingUrl: listingUrl.trim() || null,
       sellingMethod,
       quantity: 1,
-      dateSold: new Date().toISOString().slice(0, 10),
+      feesPct: 0.137,
+      dateListed: new Date().toISOString().slice(0, 10),
     };
 
     onAdd(manualCard);
@@ -5571,7 +5584,7 @@ function AddManualSaleModal({ onClose, onAdd }) {
   return (
     <div className="modalOverlay" onClick={onClose}>
       <div className="modalBox" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
-        <ModalHeader title="Log Manual / Lot Sale" onClose={onClose} />
+        <ModalHeader title="Log Manual Listing" onClose={onClose} />
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 10 }}>
           <Field label="Title / Player">
             <input required placeholder="e.g. 50x Bowman Base Lot or Untracked Card" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -5579,6 +5592,10 @@ function AddManualSaleModal({ onClose, onAdd }) {
 
           <Field label="Description / Set Details (optional)">
             <input placeholder="e.g. 2024 Topps Heritage Chrome / Refractor Lot" value={details} onChange={(e) => setDetails(e.target.value)} />
+          </Field>
+
+          <Field label="eBay / Listing Link (optional)">
+            <input placeholder="https://www.ebay.com.au/itm/..." value={listingUrl} onChange={(e) => setListingUrl(e.target.value)} />
           </Field>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -5591,27 +5608,23 @@ function AddManualSaleModal({ onClose, onAdd }) {
             </Field>
 
             <Field label="Selling Method">
-              <input placeholder="e.g. Cash, Facebook, Card Show" value={sellingMethod} onChange={(e) => setSellingMethod(e.target.value)} />
+              <input placeholder="e.g. eBay, Facebook, Card Show" value={sellingMethod} onChange={(e) => setSellingMethod(e.target.value)} />
             </Field>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label="Cost Basis ($)">
               <input type="number" step="0.01" placeholder="0.00" value={cost} onChange={(e) => setCost(e.target.value)} />
             </Field>
 
-            <Field label="Sold Price ($)">
-              <input required type="number" step="0.01" placeholder="0.00" value={soldPrice} onChange={(e) => setSoldPrice(e.target.value)} />
-            </Field>
-
-            <Field label="Fees Paid ($)">
-              <input type="number" step="0.01" placeholder="0.00" value={feesPaid} onChange={(e) => setFeesPaid(e.target.value)} />
+            <Field label="Listed Price ($)">
+              <input required type="number" step="0.01" placeholder="0.00" value={listedPrice} onChange={(e) => setListedPrice(e.target.value)} />
             </Field>
           </div>
 
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 10 }}>
             <button type="button" className="btnSecondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btnPrimary">Save Sale</button>
+            <button type="submit" className="btnPrimary">Save Listing</button>
           </div>
         </form>
       </div>
@@ -5668,19 +5681,30 @@ function MySales({ items, onUpdate, onDelete, onAddManualSale }) {
           style={{ flex: 1 }}
         />
         <button className="btnPrimary" onClick={() => setShowManualModal(true)} style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
-          + Log Manual / Lot Sale
+          + Log Manual Listing
         </button>
       </div>
 
       {searched.length === 0 ? (
         <div style={{ padding: "3rem 0", textAlign: "center", color: "#5C6270", border: "1px solid #2C303B", borderRadius: 10 }}>
           {items.length === 0
-            ? "Nothing listed or sold yet — set a card's status to Listed or Sold from My Cards or Pokémon, or log a manual sale above."
+            ? "Nothing listed or sold yet — set a card's status to Listed or Sold, or log a manual listing above."
             : "No matches for that search."}
         </div>
       ) : (
         <>
           <div style={{ border: "1px solid #2C303B", borderRadius: 10, overflow: "hidden" }}>
+            {/* Table Header */}
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 80px 80px 80px 90px 90px 24px", padding: "8px 14px", background: "#14161C", color: "#6B7180", fontSize: 11, fontWeight: 600 }}>
+              <div>ITEM</div>
+              <div>STATUS</div>
+              <div>COST</div>
+              <div>LISTED</div>
+              <div>SOLD</div>
+              <div>PROFIT</div>
+              <div></div>
+            </div>
+
             {visible.map((item) => (
               <SalesRow key={`${item._source}-${item.id}`} item={item} onClick={() => setEditingItem({ _source: item._source, id: item.id })} />
             ))}
@@ -5701,7 +5725,7 @@ function MySales({ items, onUpdate, onDelete, onAddManualSale }) {
       )}
 
       {showManualModal && (
-        <AddManualSaleModal
+        <AddManualListingModal
           onClose={() => setShowManualModal(false)}
           onAdd={(newCard) => {
             if (onAddManualSale) onAddManualSale(newCard);
