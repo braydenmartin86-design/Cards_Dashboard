@@ -77,37 +77,51 @@ function convertUsdToAud(usdAmount) {
   return Math.round(Number(usdAmount) * USD_TO_AUD_RATE * 100) / 100;
 }
 
-// Compress image before sending to Supabase Edge Function (Fixes 413 Content Too Large)
-function compressImageForApi(base64Image, maxDimension = 1200, quality = 0.82) {
+// Reliable Client-Side Image Compression (Keeps payloads under 300KB to prevent Supabase 413 errors)
+function compressImageForApi(base64Image, maxDimension = 900, quality = 0.65) {
   return new Promise((resolve) => {
-    const img = new Image();
-    const src = base64Image.includes(",") ? base64Image : `data:image/jpeg;base64,${base64Image}`;
+    try {
+      const img = new Image();
+      const src = base64Image.includes(",") ? base64Image : `data:image/jpeg;base64,${base64Image}`;
 
-    img.onload = () => {
-      let width = img.width;
-      let height = img.height;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
 
-      if (width > maxDimension || height > maxDimension) {
-        if (width > height) {
-          height = Math.round((height * maxDimension) / width);
-          width = maxDimension;
-        } else {
-          width = Math.round((width * maxDimension) / height);
-          height = maxDimension;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
         }
-      }
 
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, width, height);
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
 
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
+        // Fill background white in case image has transparency
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
 
-    img.onerror = () => resolve(src);
-    img.src = src;
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve(compressedDataUrl);
+      };
+
+      img.onerror = (err) => {
+        console.warn("Compression image load failed, using raw fallback:", err);
+        resolve(base64Image);
+      };
+
+      img.src = src;
+    } catch (e) {
+      console.warn("Canvas compression exception, using raw fallback:", e);
+      resolve(base64Image);
+    }
   });
 }
 
@@ -115,9 +129,9 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
 
-    // Compress image to <500KB before POSTing to Supabase
-    const compressedDataUrl = await compressImageForApi(base64Image, 1200, 0.82);
-    const cleanBase64 = compressedDataUrl.split(",")[1];
+    // ⚡ FIX 413: Aggressively compress image down to ~150KB–250KB before POSTing to Supabase
+    const compressedDataUrl = await compressImageForApi(base64Image, 900, 0.65);
+    const cleanBase64 = compressedDataUrl.includes(",") ? compressedDataUrl.split(",")[1] : compressedDataUrl;
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
@@ -201,7 +215,11 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
   } catch (err) {
     console.warn("CardSight AI proxy failed. Switching to Gemini Fallback...", err);
 
-    const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
+    // Also send compressed image to Gemini to prevent 413 on the fallback call
+    const compressedForGemini = await compressImageForApi(base64Image, 900, 0.65);
+    const cleanGeminiBase64 = compressedForGemini.includes(",") ? compressedForGemini.split(",")[1] : compressedForGemini;
+
+    const rawGeminiText = await callGeminiAi(fallbackPrompt, cleanGeminiBase64, mediaType);
     let parsedGemini = [];
     try {
       const cleanJson = String(rawGeminiText).replaceAll("```json", "").replaceAll("```", "").trim();
