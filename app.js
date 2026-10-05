@@ -354,7 +354,7 @@ async function verifyPriceWithCardSight(card) {
 }
 
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
-async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 3000) {
+async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 2, delay = 3000) {
   if (!supabaseClient) {
     throw new Error("Supabase client is not initialized.");
   }
@@ -374,18 +374,18 @@ async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jp
         }
       });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
+      if (data && data.error) throw new Error(data.error);
 
       const output = typeof data === "string" ? data : data?.text || data?.result || JSON.stringify(data);
+      if (!output || output === "{}") throw new Error("Empty response payload from Gemini Edge Function.");
+
       return output;
     } catch (err) {
       console.warn(`Supabase AI Function attempt ${i + 1} failed:`, err.message || err);
       
       if (i === retries - 1) throw err;
       
-      // Wait 3s, 6s, 12s before retrying when hitting rate limits
       await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)));
     }
   }
