@@ -148,13 +148,13 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
 
-    // 1. Compress image client-side to ~800px max dimension
+    // 1. Compress image client-side to max 800px
     const compressedDataUrl = await compressImageForApi(base64Image, 800, 0.60);
     
     // 2. Convert compressed Base64 to Binary Blob
     const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
 
-    // 3. Send as binary multipart/form-data (Fixes 413 Payload Too Large)
+    // 3. Send as binary multipart/form-data
     const formData = new FormData();
     formData.append("file", imageBlob, "scan.jpg");
     formData.append("endpoint", "/identify/card");
@@ -164,7 +164,6 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       headers: {
         "apikey": anonKey,
         "Authorization": `Bearer ${anonKey}`,
-        // Note: Do NOT manually set Content-Type header when sending FormData!
       },
       body: formData,
     });
@@ -176,26 +175,42 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
     }
 
+    const gradingCompanies = ["PSA", "BGS", "SGC", "CGC", "TAG", "CSG", "HGA"];
+
     function findCardObject(obj) {
       if (!obj || typeof obj !== "object") return null;
 
-      const player = obj.player_name || obj.player || obj.name || obj.title || obj.subject || null;
-      const set = obj.set_name || obj.set || obj.release || null;
-      const year = obj.year || obj.release_year || null;
-      const cardNum = obj.card_number || obj.cardNumber || obj.number || null;
-      const parallel = obj.parallel || obj.variant || obj.parallel_or_variant || "Base";
-      const price = obj.estimated_value || obj.market_price || obj.price || obj.avg_price || null;
-      const sport = obj.sport || obj.category || "NBA";
+      // Extract raw candidate strings
+      let playerCandidate = obj.player_name || obj.player || obj.name || obj.title || obj.subject || null;
+      if (typeof playerCandidate === "object" && playerCandidate !== null) {
+        playerCandidate = playerCandidate.name || playerCandidate.player_name || null;
+      }
 
+      // If the candidate string is just a grading company name (e.g. "PSA"), ignore it as a player name
+      if (playerCandidate && gradingCompanies.includes(String(playerCandidate).trim().toUpperCase())) {
+        playerCandidate = null;
+      }
+
+      const set = obj.set_name || obj.set || obj.release || (obj.card && obj.card.set) || null;
+      const year = obj.year || obj.release_year || (obj.card && obj.card.year) || null;
+      const cardNum = obj.card_number || obj.cardNumber || obj.number || (obj.card && obj.card.card_number) || null;
+      const parallel = obj.parallel || obj.variant || obj.parallel_or_variant || (obj.card && obj.card.parallel) || "Base";
+      const sport = obj.sport || obj.category || (obj.card && obj.card.sport) || "NBA";
+
+      // Price extraction across all nested pricing models
+      const pricingObj = obj.pricing || obj.market_data || (obj.card && obj.card.pricing) || {};
+      const price = pricingObj.estimated_value || pricingObj.market_price || pricingObj.price || pricingObj.avg_price || obj.estimated_value || obj.price || null;
+
+      // Slab / Grade details
       const slab = obj.slab || {};
-      const grade = slab.grade || obj.grade || null;
-      const slabCompany = slab.company || obj.grading_company || null;
-      const isGraded = Boolean(grade || slabCompany || obj.is_graded);
-      const fullGradeString = slabCompany && grade ? `${slabCompany} ${grade}` : (grade || null);
+      const gradeVal = slab.grade || obj.grade || null;
+      const slabCompany = slab.company || obj.grading_company || (gradingCompanies.includes(String(obj.name).toUpperCase()) ? obj.name : null);
+      const isGraded = Boolean(gradeVal || slabCompany || obj.is_graded);
+      const fullGradeString = slabCompany && gradeVal ? `${slabCompany} ${gradeVal}` : (gradeVal || slabCompany || null);
 
-      if (player && player !== "Unknown Card") {
+      if (playerCandidate && playerCandidate !== "Unknown Card") {
         return {
-          player_name: player,
+          player_name: playerCandidate,
           sport: sport,
           year: year || "",
           set_name: set || "",
@@ -203,12 +218,13 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
           parallel_or_variant: parallel,
           is_graded: isGraded,
           grade: fullGradeString,
-          ebay_search_query: `${year || ''} ${set || ''} ${player} ${parallel !== 'Base' ? parallel : ''}`.trim(),
+          ebay_search_query: `${year || ''} ${set || ''} ${playerCandidate} ${parallel !== 'Base' ? parallel : ''}`.trim(),
           estimated_value_aud: convertUsdToAud(price),
           value_confidence: "High",
         };
       }
 
+      // Recursively search nested objects (detections, cards, results, card, data)
       for (const key of Object.keys(obj)) {
         if (typeof obj[key] === "object" && obj[key] !== null) {
           if (Array.isArray(obj[key])) {
