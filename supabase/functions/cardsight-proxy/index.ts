@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // Forwards requests from the dashboard to the CardSight AI API, keeping the CardSight key
 // server-side. Two request shapes are accepted:
 //   - multipart/form-data with `file` (the photo) and `endpoint` = "/identify/card"
-//   - JSON { endpoint: "/pricing/<card uuid>", method: "GET", query: { ... } }
+//   - JSON { endpoint: "/pricing/<card uuid>" or "/pricing/search", method: "GET", query: { ... } }
 // Only the endpoints in ALLOWED are forwarded, since anyone can call this function with the
 // public anon key and it would otherwise relay any request on your CardSight account.
 
@@ -11,6 +11,7 @@ const CARDSIGHT_BASE = "https://api.cardsight.ai/v1";
 const ALLOWED = [
   /^\/identify\/card$/,
   /^\/pricing\/[0-9a-f-]{36}$/i,
+  /^\/pricing\/search$/,
 ];
 
 const corsHeaders = {

@@ -157,7 +157,7 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
     // 2. Secondary Engine Backup: CardSight Proxy
     try {
       const anonKey = window.SUPABASE_ANON_KEY;
-      const compressedDataUrl = await compressImageForApi(base64Image, 800, 0.60);
+      const compressedDataUrl = await compressImageForApi(base64Image, 1200, 0.85);
       const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
 
       const formData = new FormData();
@@ -298,6 +298,94 @@ function wantedGrade(detection, card) {
   return null;
 }
 
+// Market value from sold listings: average of the 3 most recent, or the most recent if fewer.
+function summarizeSales(sales, label, pricedAs) {
+  const used = sales.slice(0, sales.length >= 3 ? 3 : 1);
+  const priceUsd = Math.round((used.reduce((s, r) => s + Number(r.price), 0) / used.length) * 100) / 100;
+  const lastDate = new Date(used[0].date).toLocaleDateString();
+  return {
+    success: true,
+    priceUsd,
+    priceAud: convertUsdToAud(priceUsd),
+    source: used.length === 3 ? `${label} · avg of last 3 sales` : `${label} · last sale ${lastDate}`,
+    confidence: "Sold comps",
+    pricedAs,
+    sales: used.map((r) => ({ date: r.date, priceUsd: Number(r.price), title: r.title, url: r.url })),
+  };
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// For cards CardSight can't match from the photo: fuzzy-search sold listing titles, then keep
+// only listings that clearly are this card — same player, card number, parallel and grade.
+async function searchSoldListingsByTitle(card) {
+  const grade = wantedGrade({}, card);
+  const variant = String(card.parallel_or_variant || "").trim();
+  const isBase = !variant || /^base( card)?$/i.test(variant);
+  const number = String(card.card_number || "").replace(/^#/, "").trim();
+  const year = String(card.year || "").slice(0, 4);
+
+  const q = [
+    year,
+    card.set_name,
+    card.player_name,
+    number ? `#${number}` : "",
+    isBase ? "" : variant,
+    grade ? `${grade.company || ""} ${grade.value}` : "",
+  ].join(" ").replace(/\s+/g, " ").trim();
+
+  const data = await callCardSightProxy({
+    endpoint: "/pricing/search",
+    method: "GET",
+    query: { q, listing_type: "auction", limit: 100 },
+  });
+
+  const nameTokens = normalizeCardText(card.player_name).split(" ").filter((t) => t.length > 1);
+  const variantTokens = normalizeCardText(variant).split(" ").filter((t) => t.length > 2);
+  const gradeInTitle = grade
+    ? new RegExp(`\\b${grade.company ? escapeRegExp(grade.company) + "\\s*(?:gem\\s*(?:mint|mt)\\s*)?" : ""}${escapeRegExp(grade.value)}\\b`, "i")
+    : null;
+
+  const sales = (data.results || []).filter((r) => {
+    if (!r || !(Number(r.price) > 0) || !r.date || r.listing_type === "fixed") return false;
+    const rawTitle = r.title || "";
+    const title = normalizeCardText(rawTitle);
+    if (!nameTokens.length || !nameTokens.every((t) => title.includes(t))) return false;
+
+    const matchedYear = String((r.matched_card && r.matched_card.set && r.matched_card.set.year) || "");
+    if (year && !title.includes(year) && !matchedYear.includes(year)) return false;
+
+    if (number) {
+      const m = rawTitle.match(/#\s*([A-Za-z0-9-]+)/);
+      if (m && normalizeCardText(m[1]) !== normalizeCardText(number)) return false;
+    }
+
+    const slabGrade = r.grade && r.grade.grade_value;
+    const looksSlabbed = slabGrade || /\b(psa|bgs|sgc|cgc|beckett|tag)\s*\d/i.test(rawTitle);
+    if (!grade) {
+      if (looksSlabbed) return false;
+    } else if (slabGrade) {
+      if (String(r.grade.grade_value) !== grade.value) return false;
+      if (grade.company && normalizeCardText(r.grade.company_name) !== normalizeCardText(grade.company)) return false;
+    } else if (!gradeInTitle.test(rawTitle)) {
+      return false;
+    }
+
+    if (isBase) {
+      // Base cards aren't serial-numbered; "/99"-style titles are parallels.
+      if (r.parallel_name || /\/\s*\d{1,4}\b/.test(rawTitle)) return false;
+    } else {
+      const hay = `${normalizeCardText(r.parallel_name)} ${title}`;
+      if (!variantTokens.every((t) => hay.includes(t))) return false;
+    }
+    return true;
+  }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return { q, sales };
+}
+
 async function verifyPriceWithCardSight(card) {
   try {
     const imageSource = card._rawBase64 || card.previewUrl;
@@ -306,8 +394,9 @@ async function verifyPriceWithCardSight(card) {
       throw new Error("No image data available on this card row to verify.");
     }
 
-    // 1. Identify. Compress to ~800px to keep the upload small.
-    const compressedDataUrl = await compressImageForApi(imageSource, 800, 0.65);
+    // 1. Identify. CardSight warns that 800px photos are too small for accurate matching, so
+    // send up to 1200px (the size the scanner keeps) at high quality.
+    const compressedDataUrl = await compressImageForApi(imageSource, 1200, 0.85);
     const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
 
     const formData = new FormData();
@@ -317,12 +406,14 @@ async function verifyPriceWithCardSight(card) {
     const identified = await callCardSightProxy(formData);
     const detections = (identified.detections || []).filter((d) => d && d.card && d.card.id);
     const detection = detections.length ? pickCardSightDetection(detections, card) : null;
+    const cardSightNotes = (identified.messages || []).map((m) => m.message).filter(Boolean).join(" ");
 
     let noSalesReason = null;
     if (!detection) {
       noSalesReason = detections.length
-        ? `CardSight found ${detections.length} cards in the photo but none matched "${card.player_name}". Scan this card on its own for an exact match.`
-        : "CardSight couldn't match this card to an exact catalog entry.";
+        ? `CardSight found ${detections.length} cards in the photo but none matched "${card.player_name}".`
+        : "CardSight couldn't match the photo to an exact catalog entry.";
+      if (cardSightNotes) noSalesReason += ` (${cardSightNotes})`;
     } else {
       // 2. Completed auction sales for this card.
       const grade = wantedGrade(detection, card);
@@ -383,24 +474,24 @@ async function verifyPriceWithCardSight(card) {
         grade ? `${grade.company || ""} ${grade.value}`.trim() : "Raw",
       ].filter(Boolean).join(" ");
 
-      if (sales.length > 0) {
-        const used = sales.slice(0, sales.length >= 3 ? 3 : 1);
-        const priceUsd = Math.round((used.reduce((s, r) => s + Number(r.price), 0) / used.length) * 100) / 100;
-        const lastDate = new Date(used[0].date).toLocaleDateString();
-        return {
-          success: true,
-          priceUsd,
-          priceAud: convertUsdToAud(priceUsd),
-          source: used.length === 3 ? "CardSight · avg of last 3 sales" : `CardSight · last sale ${lastDate}`,
-          confidence: "Sold comps",
-          pricedAs,
-          sales: used.map((r) => ({ date: r.date, priceUsd: Number(r.price), title: r.title, url: r.url })),
-        };
-      }
+      if (sales.length > 0) return summarizeSales(sales, "CardSight", pricedAs);
       noSalesReason = `CardSight has no recent sold listings for ${pricedAs}.`;
     }
 
-    // 3. Fallback: no sold comps, so ask Gemini AI for an estimate (labelled as such).
+    // 3. Fallback: search sold listings by title, using what was read off the card.
+    try {
+      const search = await searchSoldListingsByTitle(card);
+      if (search.sales.length > 0) {
+        const result = summarizeSales(search.sales, "CardSight title search", search.q);
+        result.note = `${noSalesReason} Matched sold listings by title instead — check the titles below.`;
+        return result;
+      }
+      noSalesReason += ` A title search for "${search.q}" found no matching sold listings either.`;
+    } catch (e) {
+      console.warn("CardSight title search failed:", e);
+    }
+
+    // 4. Last resort: no sold comps anywhere, so ask Gemini AI for an estimate (labelled as such).
     console.info(`${noSalesReason} Falling back to a Gemini valuation estimate...`);
     const pricePrompt = `Estimate the realistic market value in AUD for this card: ${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''} ${card.grade ? 'Grade: ' + card.grade : 'Raw'}. Return ONLY a JSON object: {"estimated_value_aud": 120.00}`;
 

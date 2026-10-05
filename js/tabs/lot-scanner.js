@@ -456,6 +456,7 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
             card._sales.map((s, i) => (
               <div key={i}>
                 {new Date(s.date).toLocaleDateString()} · US${s.priceUsd.toFixed(2)} (≈ A${convertUsdToAud(s.priceUsd).toFixed(2)})
+                {s.title && <span style={{ color: "#6B7180" }}> · {s.title.length > 70 ? s.title.slice(0, 70) + "…" : s.title}</span>}
                 {s.url && (
                   <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "#2FA89A", marginLeft: 6 }}>
                     listing
