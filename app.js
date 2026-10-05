@@ -255,51 +255,56 @@ async function verifyPriceWithCardSight(card) {
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
 
-    if (!card._rawBase64 && !card.previewUrl) {
-      throw new Error("No image data available for this card to verify.");
-    }
-
-    const imageSource = card._rawBase64 || card.previewUrl;
-    const compressedDataUrl = await compressImageForApi(imageSource, 800, 0.65);
-    const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
-
-    const formData = new FormData();
-    formData.append("file", imageBlob, "verify_card.jpg");
-    formData.append("endpoint", "/identify/card");
+    // Build structured payload for CardSight /v1/pricing endpoint
+    const pricingPayload = {
+      player_name: card.player_name || card.player || "",
+      set_name: card.set_name || card.set || "",
+      year: card.year ? String(card.year) : "",
+      card_number: card.card_number || card.cardNumber || "",
+      parallel: card.parallel_or_variant || card.parallel || "Base",
+      is_graded: Boolean(card.is_graded || card.grade),
+      grade: card.grade || null,
+      grading_company: card.grading_company || null,
+      query: card.ebay_search_query || `${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''}`.trim()
+    };
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
+        "Content-Type": "application/json",
         "apikey": anonKey,
         "Authorization": `Bearer ${anonKey}`,
       },
-      body: formData,
+      body: JSON.stringify({
+        endpoint: "/pricing",
+        payload: pricingPayload
+      }),
     });
 
-    if (!response.ok) throw new Error(`CardSight Proxy status ${response.status}`);
+    if (!response.ok) throw new Error(`CardSight Pricing Proxy status ${response.status}`);
 
     const wrapper = await response.json();
     const data = wrapper.raw || wrapper;
 
-    // Deep search helper for pricing
-    function findPrice(obj) {
+    // Extract price value from CardSight pricing response keys
+    function extractPricingValue(obj) {
       if (!obj || typeof obj !== "object") return null;
 
-      const pricing = obj.pricing || obj.market_data || {};
-      const directPrice = pricing.estimated_value || pricing.market_price || obj.estimated_value || obj.market_price || obj.price;
+      const p = obj.pricing || obj.market_data || obj;
+      const val = p.estimated_value || p.market_price || p.price || p.avg_price || p.median_price || p.last_sold_price;
 
-      if (directPrice) return directPrice;
+      if (val && !isNaN(val)) return Number(val);
 
-      for (const key of Object.keys(obj)) {
-        if (typeof obj[key] === "object" && obj[key] !== null) {
-          const found = findPrice(obj[key]);
-          if (found) return found;
+      for (const k of Object.keys(obj)) {
+        if (typeof obj[k] === "object" && obj[k] !== null) {
+          const res = extractPricingValue(obj[k]);
+          if (res) return res;
         }
       }
       return null;
     }
 
-    const rawPriceUsd = findPrice(data);
+    const rawPriceUsd = extractPricingValue(data);
 
     if (rawPriceUsd) {
       const priceAud = convertUsdToAud(rawPriceUsd);
@@ -311,9 +316,9 @@ async function verifyPriceWithCardSight(card) {
       };
     }
 
-    // ⚡ Fallback: If CardSight has no comps, ask Gemini AI to estimate based on exact card details
-    console.info("CardSight returned no pricing comps. Requesting Gemini valuation estimate...");
-    const pricePrompt = `Estimate the realistic market value in AUD for this sports card: ${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''} ${card.grade ? 'Grade: ' + card.grade : 'Raw'}. Return ONLY the numeric dollar value (e.g. 150.00).`;
+    // Fallback to Gemini AI if CardSight has no price comps indexed for this query
+    console.info("CardSight /v1/pricing returned no comps for this query. Requesting Gemini AI estimation...");
+    const pricePrompt = `Estimate realistic market value in AUD for: ${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''} ${card.grade ? 'Grade: ' + card.grade : 'Raw'}. Return ONLY the numeric AUD dollar value.`;
     
     const geminiPriceText = await callGeminiAi(pricePrompt);
     const numericMatch = String(geminiPriceText).match(/\d+(\.\d+)?/);
@@ -326,7 +331,7 @@ async function verifyPriceWithCardSight(card) {
       };
     }
 
-    throw new Error("No recent price comps found in CardSight database.");
+    throw new Error("No live pricing available from CardSight or Gemini.");
   } catch (err) {
     console.warn("CardSight price verification notice:", err);
     return { success: false, error: err.message };
