@@ -67,11 +67,9 @@ function ContentCreationTab({ cards, contentPlan, setContentPlan }) {
   // ... rest of ContentCreationTab code ...
 }
 // ===== Dual-Engine API Configuration =====
-// Note: Store SUPABASE_URL and SUPABASE_ANON_KEY in window or global state if already set, or define here
-const SUPABASE_URL = window.SUPABASE_URL || "https://your-project-ref.supabase.co"; 
-const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "your-supabase-anon-key"; 
-const CARDSIGHT_API_KEY = "YOUR_CARDSIGHT_API_KEY"; // Optional if stored in Supabase Secrets
-const USD_TO_AUD_RATE = 1.44; // Currency conversion multiplier
+const SUPABASE_URL = "https://aguyvxedljyhtllrcvvf.supabase.co"; 
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY; // Pulled from your existing Supabase init
+const USD_TO_AUD_RATE = 1.44; // Central USD to AUD conversion multiplier
 
 // Central Currency Converter
 function convertUsdToAud(usdAmount) {
@@ -92,7 +90,6 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       body: JSON.stringify({
         image: `data:${mediaType};base64,${base64Image}`,
         endpoint: "/identify/card",
-        api_key: typeof CARDSIGHT_API_KEY !== "undefined" ? CARDSIGHT_API_KEY : null,
       }),
     });
 
@@ -120,7 +117,7 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
 
     return { source: "CardSight AI", cards: convertedCards };
   } catch (err) {
-    console.warn("CardSight AI proxy failed. Falling back to Gemini...", err);
+    console.warn("CardSight AI proxy failed/limit reached. Falling back to Gemini...", err);
 
     // Fallback to Gemini AI
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
