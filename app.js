@@ -86,6 +86,12 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
 
+    // Ensure base64 string is clean
+    let cleanBase64 = base64Image;
+    if (cleanBase64 && cleanBase64.includes(",")) {
+      cleanBase64 = cleanBase64.split(",")[1];
+    }
+
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
@@ -94,35 +100,36 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
         "Authorization": `Bearer ${anonKey}`,
       },
       body: JSON.stringify({
-        image: `data:${mediaType};base64,${base64Image}`,
+        image: cleanBase64,
         endpoint: "/identify/card",
       }),
     });
 
-    if (!response.ok) throw new Error(`Supabase Edge Proxy status ${response.status}`);
-
     const data = await response.json();
-    if (data.error) throw new Error(data.error);
 
-    const rawCards = Array.isArray(data.cards) ? data.cards : [data];
+    if (!response.ok || data.error) {
+      throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
+    }
+
+    const rawCards = Array.isArray(data.cards) ? data.cards : data.result ? (Array.isArray(data.result) ? data.result : [data.result]) : [data];
 
     const convertedCards = rawCards.map((c) => ({
-      player_name: c.player_name || c.title || "Unknown Card",
+      player_name: c.player_name || c.player || c.title || "Unknown Card",
       sport: c.sport || "MLB",
       year: c.year || "",
-      set_name: c.set_name || "",
-      card_number: c.card_number || "",
-      parallel_or_variant: c.parallel || "Base",
-      is_graded: Boolean(c.is_graded),
+      set_name: c.set_name || c.set || "",
+      card_number: c.card_number || c.cardNumber || "",
+      parallel_or_variant: c.parallel || c.parallel_or_variant || "Base",
+      is_graded: Boolean(c.is_graded || c.isGraded),
       grade: c.grade || null,
       ebay_search_query: c.ebay_search_query || `${c.player_name || ''} ${c.set_name || ''}`,
-      estimated_value_aud: convertUsdToAud(c.estimated_value || c.price),
+      estimated_value_aud: convertUsdToAud(c.estimated_value || c.estimated_value_aud || c.price),
       value_confidence: "High",
     }));
 
     return { source: "CardSight AI", cards: convertedCards };
   } catch (err) {
-    console.warn("CardSight AI proxy failed. Falling back to Gemini...", err);
+    console.warn("CardSight AI proxy failed/rejected payload. Falling back to Gemini...", err);
 
     // Fallback to Gemini AI
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
