@@ -77,15 +77,17 @@ function convertUsdToAud(usdAmount) {
   return Math.round(Number(usdAmount) * USD_TO_AUD_RATE * 100) / 100;
 }
 
-// Unified Dual-Engine Call via Supabase Edge Function Proxy (CardSight AI Primary -> Gemini AI Fallback)
 async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fallbackPrompt = "") {
   try {
-    // Call Supabase Edge Function proxy (bypasses browser CORS restriction)
+    // Safely get the anon key from client or global scope
+    const anonKey = window.SUPABASE_ANON_KEY || (supabaseClient && supabaseClient.supabaseKey);
+
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": anonKey,
+        "Authorization": `Bearer ${anonKey}`,
       },
       body: JSON.stringify({
         image: `data:${mediaType};base64,${base64Image}`,
@@ -100,7 +102,6 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
 
     const rawCards = Array.isArray(data.cards) ? data.cards : [data];
 
-    // Convert returned pricing to AUD
     const convertedCards = rawCards.map((c) => ({
       player_name: c.player_name || c.title || "Unknown Card",
       sport: c.sport || "MLB",
@@ -117,7 +118,7 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
 
     return { source: "CardSight AI", cards: convertedCards };
   } catch (err) {
-    console.warn("CardSight AI proxy failed/limit reached. Falling back to Gemini...", err);
+    console.warn("CardSight AI proxy failed. Falling back to Gemini...", err);
 
     // Fallback to Gemini AI
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
