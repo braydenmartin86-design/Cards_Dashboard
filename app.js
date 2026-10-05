@@ -330,7 +330,7 @@ async function verifyPriceWithCardSight(card) {
   }
 }
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
-async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 2000) {
+async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 3000) {
   if (!supabaseClient) {
     throw new Error("Supabase client is not initialized.");
   }
@@ -350,7 +350,10 @@ async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jp
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        // If rate limited, throw to enter exponential backoff delay
+        throw error;
+      }
 
       const output = typeof data === "string" ? data : data?.text || data?.result || JSON.stringify(data);
       return output;
@@ -359,6 +362,7 @@ async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jp
       
       if (i === retries - 1) throw err;
       
+      // Wait 3s, 6s, 12s before retrying when hitting rate limits
       await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)));
     }
   }
