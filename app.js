@@ -229,48 +229,12 @@ const SEED_CARDS = [{"player": "Amen Thompson", "card": "Prizm RC Luck OT Lotter
 const SEED_POKEMON = [{"player": "Arcanine EX", "card": "2023 Scarlet & Violet", "cardNum": "#032/198", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 4.0, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Mewtwo EX", "card": "2024 Scarlet & Violet: Paradox Rift", "cardNum": "#058/182", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 4.0, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Lapras VMAX", "card": "2020 Sword & Shield", "cardNum": "#203/202", "rookie": false, "shipMyCards": "Yes", "status": "Raw", "grade": null, "paid": 14.39, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via ShipMyCards", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Charmander (x2)", "card": "2025 Mega Evo Phantasmal Flames", "cardNum": "#011/094", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 0.8, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Charmeleon", "card": "2025 Mega Evo Phantasmal Flames", "cardNum": "#012/094", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 0.8, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Reshiram R-Holo", "card": "2025 Mega Evo Phantasmal Flames", "cardNum": "#017/094", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 0.8, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Charcadet R-Holo", "card": "2025 Mega Evo Phantasmal Flames", "cardNum": "#019/094", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 0.8, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Mismagius EX", "card": "2025 Mega Evo Phantasmal Flames", "cardNum": "#036/094", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 0.8, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Mega Heracross EX", "card": "2025 Mega Evo Phantasmal Flames", "cardNum": "#004/094", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 0.8, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}, {"player": "Wigglytuff (Illustration Rare)", "card": "2025 Mega Evo Phantasmal Flames", "cardNum": "#105/094", "rookie": false, "shipMyCards": "No", "status": "Raw", "grade": null, "paid": 0.8, "shipping": 0.0, "feesPct": 0.137, "rawAvg": null, "psa9Avg": null, "psa10Avg": null, "gradingService": "PSA via Australia", "psa10Prob": 0.35, "psa9Prob": 0.45, "actualSellPrice": null, "sport": "Pok\u00e9mon", "location": "In Hand", "numbered": false, "outOf": null, "quantity": 1, "rawHistory": [], "psa9History": [], "psa10History": []}];
 
 const SEED_TARGETS = [{"id": null, "player": "Jackson Chourio", "sport": "MLB", "cardToLookFor": "2024 Topps Chrome/Bowman base rookie", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Improving", "reasoning": "Elite power/speed combo already producing at the MLB level for Milwaukee. Base rookies remain cheap for the production level.", "targetPriceRaw": 22, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Ausar Thompson", "sport": "NBA", "cardToLookFor": "2023-24 Prizm Silver, PSA 9", "tier": "Buy Now", "researchScore": 52, "performanceTrend": "Improving", "reasoning": "Defensive win shares climbing, PSA 9 Silver copies trading in the low $40s — cheap entry on a legitimate two-way piece.", "targetPriceRaw": "", "targetPriceGraded": 63, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Keyonte George", "sport": "NBA", "cardToLookFor": "2023-24 Optic Purple Shock /149", "tier": "Buy Now", "researchScore": 46, "performanceTrend": "Stable", "reasoning": "Numbered parallel with a stabilizing assist-to-turnover ratio — primary guard role on a rebuilding roster gives him a real usage floor.", "targetPriceRaw": 51, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "GG Jackson II", "sport": "NBA", "cardToLookFor": "2023-24 Donruss Choice Red/Green", "tier": "Speculative", "researchScore": 38, "performanceTrend": "Stable", "reasoning": "One of the youngest high-volume scorers in the league. Cheap parallel, real speculative upside if usage keeps climbing.", "targetPriceRaw": 42, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Tre Johnson", "sport": "NBA", "cardToLookFor": "2025-26 Prizm rookie", "tier": "Speculative", "researchScore": 40, "performanceTrend": "Stable", "reasoning": "Efficient 19.9 PPG freshman season translated into draft buzz. Rookie cards still cheap pre-breakout.", "targetPriceRaw": 45, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Ethan Salas", "sport": "MLB", "cardToLookFor": "Bowman Chrome prospect card", "tier": "Speculative", "researchScore": 32, "performanceTrend": "Stable", "reasoning": "Top catching prospect, still developing at Double A. Cheap lottery-ticket entry on a well-regarded prospect pedigree.", "targetPriceRaw": 15, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Walker Jenkins", "sport": "MLB", "cardToLookFor": "Bowman Draft rookie", "tier": "Speculative", "researchScore": 34, "performanceTrend": "Stable", "reasoning": "Power/speed tools prospect, trades cheap raw. Same profile as Jackson Chourio pre-breakout.", "targetPriceRaw": 20, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Drake Maye", "sport": "NFL", "cardToLookFor": "Opti Chrome insert", "tier": "Buy Now", "researchScore": 44, "performanceTrend": "Stable", "reasoning": "Cheap insert pricing ahead of a full season as starter — training camp buzz historically moves these before kickoff.", "targetPriceRaw": 25, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "AJ Dybantsa", "sport": "NBA", "cardToLookFor": "Bowman U NOW (pre-rookie)", "tier": "Speculative", "researchScore": 32, "performanceTrend": "Stable", "reasoning": "Consensus top prospect for next year's draft class. No real rookie card exists yet — cheap, high-risk early entry.", "targetPriceRaw": 45, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Darryn Peterson", "sport": "NBA", "cardToLookFor": "Bowman U NOW (pre-rookie)", "tier": "Speculative", "researchScore": 27, "performanceTrend": "Stable", "reasoning": "Alongside Dybantsa, one of the two best names in next year's class. Same pre-rookie caveat.", "targetPriceRaw": 35, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Willem Duursma", "sport": "AFL", "cardToLookFor": "2026 Select rookie card", "tier": "Speculative", "researchScore": 28, "performanceTrend": "Improving", "reasoning": "West Coast's No.1 pick in the 2025 AFL Draft, already praised for footy smarts early. Thin dedicated card-market data for AFL.", "targetPriceRaw": 30, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Anthony Edwards", "sport": "NBA", "cardToLookFor": "2020-21 Prizm base rookie, PSA 9", "tier": "Buy Now", "researchScore": 56, "performanceTrend": "Improving", "reasoning": "MVP conversations, All-Star, growing global fanbase. PSA 9 copies sit well under the PSA 10 blue-chip price for similar collector cachet.", "targetPriceRaw": "", "targetPriceGraded": 150, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Justin Herbert", "sport": "NFL", "cardToLookFor": "2020 Prizm rookie, PSA 9", "tier": "Buy Now", "researchScore": 48, "performanceTrend": "Stable", "reasoning": "PSA 9 copies trade $80-120 USD (~$120-180 AUD) versus $300-400 for PSA 10 — same recognizable rookie at a fraction of the premium-grade cost.", "targetPriceRaw": "", "targetPriceGraded": 150, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Nick Daicos", "sport": "AFL", "cardToLookFor": "Select rookie signatures, numbered parallels", "tier": "Buy Now", "researchScore": 55, "performanceTrend": "Stable", "reasoning": "Established, decorated star — one of the safest holds in the AFL market. Thin dedicated AFL card-market data compared to US sports.", "targetPriceRaw": 130, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Konnor Griffin", "sport": "MLB", "cardToLookFor": "2026 Bowman / Topps Chrome first-year cards", "tier": "Speculative", "researchScore": 42, "performanceTrend": "Stable", "reasoning": "Headlines this year's Bowman and Topps Chrome checklists as one of the most sought-after prospects in the product, still in the minors.", "targetPriceRaw": 150, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Carnell Tate", "sport": "NFL", "cardToLookFor": "2026 Prizm / Optic rookie autos", "tier": "Buy Now", "researchScore": 50, "performanceTrend": "Stable", "reasoning": "First WR off the board, landing opposite an ascending young QB. Strong, reliable college production.", "targetPriceRaw": 140, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Jeremiyah Love", "sport": "NFL", "cardToLookFor": "2026 Prizm / Optic rookie autos", "tier": "Buy Now", "researchScore": 36, "performanceTrend": "Stable", "reasoning": "Top RB in the class. RBs carry more bust/workload risk than QBs and WRs — size smaller than the QB/WR targets.", "targetPriceRaw": 130, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Bianca Belair", "sport": "WWE", "cardToLookFor": "2026 Topps Chrome WWE autos", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Improving", "reasoning": "Flagged in June 2026 market coverage as a genuine buying opportunity — trading soft for a multi-time champion, real room to correct upward.", "targetPriceRaw": "", "targetPriceGraded": 130, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Islam Makhachev", "sport": "MMA", "cardToLookFor": "Topps/Panini Select autographed cards", "tier": "Buy Now", "researchScore": 48, "performanceTrend": "Stable", "reasoning": "Reigning lightweight champion, one of the sport's most dominant current fighters — proven titleholder, not speculative.", "targetPriceRaw": "", "targetPriceGraded": 160, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Fernando Mendoza", "sport": "NFL", "cardToLookFor": "2026 Prizm / Donruss Optic rookie autos", "tier": "Buy Now", "researchScore": 62, "performanceTrend": "Stable", "reasoning": "No.1 overall pick with a confirmed starting job. QB is the position with the biggest hobby premium.", "targetPriceRaw": 240, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Cooper Flagg", "sport": "NBA", "cardToLookFor": "2025-26 Prizm / Topps Chrome rookie", "tier": "Buy Now", "researchScore": 50, "performanceTrend": "Improving", "reasoning": "The class's foundational prospect, now in his rookie NBA season. Already priced accordingly — an 'own the blue chip' hold, not a sleeper.", "targetPriceRaw": 260, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Gunther", "sport": "WWE", "cardToLookFor": "2026 Topps Royalty WWE, WrestleMania patch autos", "tier": "Buy Now", "researchScore": 40, "performanceTrend": "Stable", "reasoning": "One of the hottest chases in the product — his 1/1 WrestleMania patch auto sold for over $18,000. Standard autos still land in reach.", "targetPriceRaw": "", "targetPriceGraded": 260, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Jude Bellingham", "sport": "Soccer", "cardToLookFor": "Topps Chrome UCL, Match Attax rookie-era cards", "tier": "Buy Now", "researchScore": 52, "performanceTrend": "Stable", "reasoning": "Established Real Madrid/England star, cited as a benchmark long-term soccer card hold. Steadier than a rising rookie pick.", "targetPriceRaw": 220, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Victor Wembanyama", "sport": "NBA", "cardToLookFor": "Recon Future Legends insert (premium tier, lower entry than base Prizm)", "tier": "Buy Now", "researchScore": 60, "performanceTrend": "Improving", "reasoning": "Insert-tier entry point on a card whose base rookie has already sold privately for $5.11M. Premium tier still carries real collector cachet at a fraction of the cost.", "targetPriceRaw": "", "targetPriceGraded": 300, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Justin Herbert (PSA 10)", "sport": "NFL", "cardToLookFor": "2020 Prizm base rookie, PSA 10", "tier": "Buy Now", "researchScore": 44, "performanceTrend": "Stable", "reasoning": "PSA 10 copies trade $300-400 USD (~$450-600 AUD) — established, recognizable rookie with a long track record as a top-tier arm.", "targetPriceRaw": "", "targetPriceGraded": 480, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Roman Anthony (PSA 9)", "sport": "MLB", "cardToLookFor": "2026 Topps Chrome / Bowman Chrome, PSA 9", "tier": "Buy Now", "researchScore": 48, "performanceTrend": "Improving", "reasoning": "Elite outfield prospect already producing at the MLB level, elite plate discipline. Prices have moved fast — this is more 'own at least one' than a bargain now.", "targetPriceRaw": "", "targetPriceGraded": 380, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Lamine Yamal", "sport": "Soccer", "cardToLookFor": "Topps Match Attax Red Hot / Golden Moment inserts", "tier": "Buy Now", "researchScore": 55, "performanceTrend": "Improving", "reasoning": "Teenage sensation driving current Match Attax pull rates. Global star with the 2026 World Cup as a major demand catalyst for the whole category.", "targetPriceRaw": 350, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Anthony Edwards (PSA 10)", "sport": "NBA", "cardToLookFor": "2020-21 Prizm base rookie, PSA 10", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Improving", "reasoning": "Considered a blue-chip modern hobby card — Prizm brand credibility, MVP-conversation trajectory, growing global fanbase.", "targetPriceRaw": "", "targetPriceGraded": 700, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Lamine Yamal (PSA 10)", "sport": "Soccer", "cardToLookFor": "Base Chrome rookie, PSA 10", "tier": "Buy Now", "researchScore": 53, "performanceTrend": "Improving", "reasoning": "PSA 10 base Chrome copies trading $500-1,500 USD and rising, per current market coverage — World Cup year adds further upside.", "targetPriceRaw": "", "targetPriceGraded": 750, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Umbreon VMAX Alt Art (\"Moonbreon\")", "sport": "Pokémon", "cardToLookFor": "Evolving Skies Umbreon VMAX Alt Art, near-mint raw", "tier": "Buy Now", "researchScore": 62, "performanceTrend": "Stable", "reasoning": "The poster child for modern Pokémon investing — went from ~$200 to $700+ within two years of release. Raw near-mint sits below the PSA 10 premium.", "targetPriceRaw": 650, "targetPriceGraded": "", "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Erling Haaland", "sport": "Soccer", "cardToLookFor": "Base rookie, PSA 10", "tier": "Buy Now", "researchScore": 54, "performanceTrend": "Stable", "reasoning": "Incredible scoring record makes his rookies among the most sought-after modern soccer cards. PSA 10 base copies trade $1,000-2,500 USD (~$1,500-3,700 AUD).", "targetPriceRaw": "", "targetPriceGraded": 1600, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Victor Wembanyama (PSA 10)", "sport": "NBA", "cardToLookFor": "2023-24 Prizm base rookie, PSA 10", "tier": "Buy Now", "researchScore": 66, "performanceTrend": "Improving", "reasoning": "Defensive Player of the Year, MVP-level Year 3 numbers. One of his rookie cards sold privately for $5.11M — the base PSA 10 is the safest liquid entry into that same market.", "targetPriceRaw": "", "targetPriceGraded": 900, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Umbreon VMAX Alt Art (\"Moonbreon\") — PSA 10", "sport": "Pokémon", "cardToLookFor": "Evolving Skies Umbreon VMAX Alt Art, PSA 10", "tier": "Buy Now", "researchScore": 60, "performanceTrend": "Stable", "reasoning": "PSA 10 copies average roughly $3,500. Eeveelution demand plus a rotating set keeps supply tightening.", "targetPriceRaw": "", "targetPriceGraded": 5200, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Charizard (Base Set, 1st Edition)", "sport": "Pokémon", "cardToLookFor": "1999 Base Set 1st Edition Charizard, any grade", "tier": "Buy Now", "researchScore": 58, "performanceTrend": "Stable", "reasoning": "The blue-chip of the entire hobby, vintage or modern. PSA 10 copies trade near $168,000-$170,000 USD with a $550,000 sale on record — obviously the top of the market, included for completeness.", "targetPriceRaw": "", "targetPriceGraded": 250000, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}, {"id": null, "player": "Conor McGregor", "sport": "MMA", "cardToLookFor": "Topps Chrome UFC rookie-era autos, PSA 10", "tier": "Buy Now", "researchScore": 50, "performanceTrend": "Stable", "reasoning": "Still described as 'the king' of UFC card collector interest — best cards trade in four figures regardless of active fight status. Safest, most liquid MMA card rather than the highest-upside.", "targetPriceRaw": "", "targetPriceGraded": 1800, "status": "Watching", "monthAdded": "2026-08-11", "lastRefreshed": "2026-08-11"}];
-// Compress high-res phone photos client-side to prevent 413 (Content Too Large) errors
-function compressBase64Image(base64Str, maxWidth = 1200, quality = 0.8) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    let src = base64Str;
-    if (!src.startsWith("data:")) {
-      src = `data:image/jpeg;base64,${base64Str}`;
-    }
-
-    img.onload = () => {
-      let { width, height } = img;
-
-      // Maintain aspect ratio while capping max dimension
-      if (width > maxWidth || height > maxWidth) {
-        if (width > height) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        } else {
-          width = Math.round((width * maxWidth) / height);
-          height = maxWidth;
-        }
-      }
-
-      const canvas =The `413 (Content Too Large)` error is thrown directly by the **Supabase Edge Function infrastructure**. 
-
-Supabase Edge Functions limit incoming JSON request bodies to roughly **2MB to 6MB**. When a camera or modern phone photo (4MB–10MB) is converted into Base64 text, the character string expands by ~33%, blowing past Supabase's payload limit before your function code even runs!
-
-To eliminate `413 Content Too Large` forever, add **Canvas Client-Side Image Compression** directly inside `app.js` before sending the image payload.
-
----
-
-### Step 1: Add Image Compression Helper to `app.js`
-
-Add this lightweight HTML5 Canvas helper to `app.js`. It scales large high-res photos down to max ~1200px (plenty for CardSight AI to read PSA labels and parallel details) and compresses the JPEG quality down to under 500KB:
-
-```javascript
 // Compress image before sending to Supabase Edge Function (Fixes 413 Content Too Large)
-function compressImageForApi(base64Image, maxDimension = 1200, quality = 0.8) {
+function compressImageForApi(base64Image, maxDimension = 1200, quality = 0.82) {
   return new Promise((resolve) => {
     const img = new Image();
     const src = base64Image.includes(",") ? base64Image : `data:image/jpeg;base64,${base64Image}`;
-    
+
     img.onload = () => {
       let width = img.width;
       let height = img.height;
@@ -291,7 +255,6 @@ function compressImageForApi(base64Image, maxDimension = 1200, quality = 0.8) {
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Returns compressed data URL
       resolve(canvas.toDataURL("image/jpeg", quality));
     };
 
@@ -299,6 +262,147 @@ function compressImageForApi(base64Image, maxDimension = 1200, quality = 0.8) {
     img.src = src;
   });
 }
+
+async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fallbackPrompt = "") {
+  try {
+    const anonKey = window.SUPABASE_ANON_KEY;
+
+    // Compress image to <500KB before POSTing to Supabase (bypasses 413 limit)
+    const compressedDataUrl = await compressImageForApi(base64Image, 1200, 0.82);
+    const cleanBase64 = compressedDataUrl.split(",")[1];
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": anonKey,
+        "Authorization": `Bearer ${anonKey}`,
+      },
+      body: JSON.stringify({
+        image: cleanBase64,
+        mimeType: "image/jpeg",
+        endpoint: "/identify/card",
+      }),
+    });
+
+    const wrapper = await response.json();
+    const data = wrapper.raw || wrapper;
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
+    }
+
+    // Unpack CardSight response shapes
+    function findCardObject(obj) {
+      if (!obj || typeof obj !== "object") return null;
+
+      const player = obj.player_name || obj.player || obj.name || obj.title || obj.subject || null;
+      const set = obj.set_name || obj.set || obj.release || null;
+      const year = obj.year || obj.release_year || null;
+      const cardNum = obj.card_number || obj.cardNumber || obj.number || null;
+      const parallel = obj.parallel || obj.variant || obj.parallel_or_variant || "Base";
+      const price = obj.estimated_value || obj.market_price || obj.price || obj.avg_price || null;
+      const sport = obj.sport || obj.category || "NBA";
+
+      const slab = obj.slab || {};
+      const grade = slab.grade || obj.grade || null;
+      const slabCompany = slab.company || obj.grading_company || null;
+      const isGraded = Boolean(grade || slabCompany || obj.is_graded);
+      const fullGradeString = slabCompany && grade ? `${slabCompany} ${grade}` : (grade || null);
+
+      if (player && player !== "Unknown Card") {
+        return {
+          player_name: player,
+          sport: sport,
+          year: year || "",
+          set_name: set || "",
+          card_number: cardNum || "",
+          parallel_or_variant: parallel,
+          is_graded: isGraded,
+          grade: fullGradeString,
+          ebay_search_query: `${year || ''} ${set || ''} ${player} ${parallel !== 'Base' ? parallel : ''}`.trim(),
+          estimated_value_aud: convertUsdToAud(price),
+          value_confidence: "High",
+        };
+      }
+
+      for (const key of Object.keys(obj)) {
+        if (typeof obj[key] === "object" && obj[key] !== null) {
+          if (Array.isArray(obj[key])) {
+            for (const item of obj[key]) {
+              const res = findCardObject(item);
+              if (res) return res;
+            }
+          } else {
+            const res = findCardObject(obj[key]);
+            if (res) return res;
+          }
+        }
+      }
+
+      return null;
+    }
+
+    const identifiedCard = findCardObject(data);
+
+    if (!identifiedCard) {
+      console.warn("CardSight raw output:", data);
+      throw new Error("No valid card detections found in CardSight payload");
+    }
+
+    return { source: "CardSight AI", cards: [identifiedCard] };
+  } catch (err) {
+    console.warn("CardSight AI proxy failed. Switching to Gemini Fallback...", err);
+
+    const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
+    let parsedGemini = [];
+    try {
+      const cleanJson = String(rawGeminiText).replaceAll("```json", "").replaceAll("```", "").trim();
+      parsedGemini = JSON.parse(cleanJson);
+    } catch (e) {
+      console.error("Gemini Fallback parsing error:", e);
+    }
+
+    const finalArray = Array.isArray(parsedGemini) ? parsedGemini : [parsedGemini];
+    return { source: "Gemini AI (Fallback)", cards: finalArray };
+  }
+}
+
+// Universal AI Call Proxy with exponential backoff retries & safe string parsing
+async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 2000) {
+  if (!supabaseClient) {
+    throw new Error("Supabase client is not initialized.");
+  }
+
+  let cleanBase64 = imageBase64;
+  if (cleanBase64 && cleanBase64.includes(",")) {
+    cleanBase64 = cleanBase64.split(",")[1];
+  }
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      const { data, error } = await supabaseClient.functions.invoke("analyze-card", {
+        body: {
+          prompt: promptText,
+          imageBase64: cleanBase64,
+          mimeType: mimeType
+        }
+      });
+
+      if (error) throw error;
+
+      const output = typeof data === "string" ? data : data?.text || data?.result || JSON.stringify(data);
+      return output;
+    } catch (err) {
+      console.warn(`Supabase AI Function attempt ${i + 1} failed:`, err.message || err);
+      
+      if (i === retries - 1) throw err;
+      
+      await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)));
+    }
+  }
+}
+
 // ===== Formula engine, ported 1:1 from the user's Excel model =====
 async function generateAiMonthlyTargets(cards = [], pokemonCards = []) {
   const sportsSummary = [...(cards || []), ...(pokemonCards || [])]
@@ -345,11 +449,7 @@ Trends allowed: "Improving", "Stable".
     return null;
   }
 }
-// PSA-via-Australia (local shop, e.g. The Hobby) prices by declared card value in USD,
-// not a flat fee. Tiers below are the standard card-only tier (not vintage/faster-service/
-// jumbo/autograph sub-tiers — those run higher, adjust manually if your card falls there).
-// Declared value is assumed in AUD and roughly converted to USD for the tier lookup, since
-// PSA denominates its tiers in USD but you're paying the AU shop in AUD.
+
 const AUD_TO_USD_APPROX = 0.65;
 function tieredPsaAuCost(declaredValueAUD) {
   const usd = (declaredValueAUD || 0) * AUD_TO_USD_APPROX;
@@ -366,14 +466,13 @@ function gradingCost(service, declaredValue = 0) {
   if (!service || service === "None" || service === "Bought Graded") return 0;
   
   if (service === "PSA via Australia") {
-    return declaredValue > 500 ? 45 : 22; // Example tiering
+    return declaredValue > 500 ? 45 : 22;
   }
   if (service === "PSA via ShipMyCards") return 25;
   if (service === "SGC via Australia") return 20;
   
   return 0;
 }
-
 // Rough expected turnaround in days, used only for the Grading Tracker progress bar. PSA via
 // Australia has real published tiers by declared value; ShipMyCards (US) and SGC don't have a
 // specific figure on record here, so those two use a reasonable estimate — flagged as such in
