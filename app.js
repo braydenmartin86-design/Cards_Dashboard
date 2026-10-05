@@ -91,6 +91,7 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       cleanBase64 = cleanBase64.split(",")[1];
     }
 
+    // Call CardSight API
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
@@ -111,27 +112,46 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
     }
 
-    const rawCards = Array.isArray(data.cards) ? data.cards : data.result ? (Array.isArray(data.result) ? data.result : [data.result]) : [data];
+    // Extract card array from various CardSight response shapes
+    let rawCards = [];
+    if (Array.isArray(data.cards)) rawCards = data.cards;
+    else if (Array.isArray(data.detected_cards)) rawCards = data.detected_cards;
+    else if (Array.isArray(data.results)) rawCards = data.results;
+    else if (data.card || data.title || data.player_name) rawCards = [data.card || data];
 
-    const convertedCards = rawCards.map((c) => ({
-      player_name: c.player_name || c.player || c.title || "Unknown Card",
-      sport: c.sport || "MLB",
-      year: c.year || "",
-      set_name: c.set_name || c.set || "",
-      card_number: c.card_number || c.cardNumber || "",
-      parallel_or_variant: c.parallel || c.parallel_or_variant || "Base",
-      is_graded: Boolean(c.is_graded || c.isGraded),
-      grade: c.grade || null,
-      ebay_search_query: c.ebay_search_query || `${c.player_name || ''} ${c.set_name || ''}`,
-      estimated_value_aud: convertUsdToAud(c.estimated_value || c.estimated_value_aud || c.price),
-      value_confidence: "High",
-    }));
+    // Map CardSight fields reliably
+    const convertedCards = rawCards.map((c) => {
+      const details = c.details || c.card_details || c;
+      const pricing = c.pricing || c.market_data || {};
+      
+      const playerName = details.player_name || details.player || c.title || details.name || null;
+      const rawPrice = pricing.market_price || pricing.estimated_value || c.estimated_value || c.price || null;
+
+      return {
+        player_name: playerName,
+        sport: details.sport || "MLB",
+        year: details.year || "",
+        set_name: details.set_name || details.set || "",
+        card_number: details.card_number || details.cardNumber || "",
+        parallel_or_variant: details.parallel || details.variant || "Base",
+        is_graded: Boolean(details.is_graded || details.isGraded || details.grade),
+        grade: details.grade || null,
+        ebay_search_query: c.ebay_search_query || `${playerName || ''} ${details.set_name || ''}`,
+        estimated_value_aud: convertUsdToAud(rawPrice),
+        value_confidence: playerName ? "High" : "Low",
+      };
+    }).filter(c => c.player_name && c.player_name !== "Unknown Card");
+
+    // If CardSight failed to recognize cards in a multi-card lot, trigger Gemini fallback
+    if (convertedCards.length === 0) {
+      throw new Error("CardSight returned no identifiable cards for this lot layout.");
+    }
 
     return { source: "CardSight AI", cards: convertedCards };
   } catch (err) {
-    console.warn("CardSight AI proxy failed/rejected payload. Falling back to Gemini...", err);
+    console.warn("CardSight AI could not parse lot image. Triggering Gemini Fallback...", err);
 
-    // Fallback to Gemini AI
+    // Fallback to Gemini AI (which excels at multi-card lot images)
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
     let parsedGemini = [];
     try {
