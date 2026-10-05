@@ -125,26 +125,48 @@ function compressImageForApi(base64Image, maxDimension = 900, quality = 0.65) {
   });
 }
 
+// Convert Base64 data string to a binary Blob
+function base64ToBlob(base64Data, mimeType = "image/jpeg") {
+  const cleanBase64 = base64Data.includes(",") ? base64Data.split(",")[1] : base64Data;
+  const byteCharacters = atob(cleanBase64);
+  const byteArrays = [];
+
+  for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+    const slice = byteCharacters.slice(offset, offset + 512);
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+
+  return new Blob(byteArrays, { type: mimeType });
+}
+
 async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fallbackPrompt = "") {
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
 
-    // ⚡ FIX 413: Aggressively compress image down to ~150KB–250KB before POSTing to Supabase
-    const compressedDataUrl = await compressImageForApi(base64Image, 900, 0.65);
-    const cleanBase64 = compressedDataUrl.includes(",") ? compressedDataUrl.split(",")[1] : compressedDataUrl;
+    // 1. Compress image client-side to ~800px max dimension
+    const compressedDataUrl = await compressImageForApi(base64Image, 800, 0.60);
+    
+    // 2. Convert compressed Base64 to Binary Blob
+    const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
+
+    // 3. Send as binary multipart/form-data (Fixes 413 Payload Too Large)
+    const formData = new FormData();
+    formData.append("file", imageBlob, "scan.jpg");
+    formData.append("endpoint", "/identify/card");
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         "apikey": anonKey,
         "Authorization": `Bearer ${anonKey}`,
+        // Note: Do NOT manually set Content-Type header when sending FormData!
       },
-      body: JSON.stringify({
-        image: cleanBase64,
-        mimeType: "image/jpeg",
-        endpoint: "/identify/card",
-      }),
+      body: formData,
     });
 
     const wrapper = await response.json();
@@ -215,8 +237,8 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
   } catch (err) {
     console.warn("CardSight AI proxy failed. Switching to Gemini Fallback...", err);
 
-    // Also send compressed image to Gemini to prevent 413 on the fallback call
-    const compressedForGemini = await compressImageForApi(base64Image, 900, 0.65);
+    // Compress for Gemini Fallback
+    const compressedForGemini = await compressImageForApi(base64Image, 800, 0.60);
     const cleanGeminiBase64 = compressedForGemini.includes(",") ? compressedForGemini.split(",")[1] : compressedForGemini;
 
     const rawGeminiText = await callGeminiAi(fallbackPrompt, cleanGeminiBase64, mediaType);
@@ -232,7 +254,6 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
     return { source: "Gemini AI (Fallback)", cards: finalArray };
   }
 }
-
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 2000) {
   if (!supabaseClient) {
