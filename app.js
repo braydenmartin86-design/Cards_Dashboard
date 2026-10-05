@@ -105,59 +105,68 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       }),
     });
 
-    const data = await response.json();
+    const wrapper = await response.json();
+    const data = wrapper.raw || wrapper;
+    console.log("CardSight Response Object:", data);
 
     if (!response.ok || data.error) {
       throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
     }
 
-    // Unpack CardSight official schema: result.data.detections or result.detections
-    const rootData = data.data || data;
-    let detections = rootData.detections || rootData.cards || rootData.results || [];
-    
-    // Fallback if data itself is a single detection object
-    if (!Array.isArray(detections) && typeof detections === "object") {
-      detections = [detections];
+    // Helper function to extract fields from any nested structure
+    function extractCardInfo(obj) {
+      if (!obj || typeof obj !== "object") return null;
+
+      // Common key variations returned by CardSight AI endpoints
+      const player = obj.player_name || obj.player || obj.name || obj.title || obj.subject || null;
+      const set = obj.set_name || obj.set || obj.release || null;
+      const year = obj.year || obj.release_year || null;
+      const cardNum = obj.card_number || obj.cardNumber || obj.number || null;
+      const parallel = obj.parallel || obj.variant || obj.parallel_or_variant || "Base";
+      const price = obj.estimated_value || obj.market_price || obj.price || obj.avg_price || null;
+      const sport = obj.sport || obj.category || "NBA";
+
+      // Slab/Grading info
+      const grade = obj.grade || (obj.slab ? `${obj.slab.company || ''} ${obj.slab.grade || ''}`.trim() : null);
+      const isGraded = Boolean(grade || obj.is_graded || obj.isGraded);
+
+      if (player && player !== "Unknown Card") {
+        return {
+          player_name: player,
+          sport: sport,
+          year: year || "",
+          set_name: set || "",
+          card_number: cardNum || "",
+          parallel_or_variant: parallel,
+          is_graded: isGraded,
+          grade: grade,
+          ebay_search_query: `${year || ''} ${set || ''} ${player} ${parallel !== 'Base' ? parallel : ''}`.trim(),
+          estimated_value_aud: convertUsdToAud(price),
+          value_confidence: "High",
+        };
+      }
+
+      // Recursively search nested objects (e.g. data.cards, data.detections, data.results, data.data)
+      for (const key of Object.keys(obj)) {
+        if (typeof obj[key] === "object" && obj[key] !== null) {
+          const nested = extractCardInfo(obj[key]);
+          if (nested) return nested;
+        }
+      }
+
+      return null;
     }
 
-    if (detections.length === 0 && (rootData.card || rootData.name)) {
-      detections = [rootData];
-    }
+    const identifiedCard = extractCardInfo(data);
 
-    const convertedCards = detections.map((det) => {
-      const c = det.card || det.details || det;
-      const slab = det.slab || {};
-      const pricing = det.pricing || c.pricing || {};
-
-      const playerName = c.name || c.player_name || c.player || det.title || "Unknown Card";
-      const rawPrice = pricing.estimated_value || pricing.market_price || c.price || null;
-
-      // Detect if graded via slab object or card boolean
-      const isGraded = Boolean(slab.company || c.is_graded || c.grade);
-      const gradeString = slab.company && slab.grade ? `${slab.company} ${slab.grade}` : (c.grade || null);
-
-      return {
-        player_name: playerName,
-        sport: c.sport || "NBA",
-        year: c.year || "",
-        set_name: c.set || c.set_name || "",
-        card_number: c.card_number || c.cardNumber || "",
-        parallel_or_variant: c.parallel || c.variant || "Base",
-        is_graded: isGraded,
-        grade: gradeString,
-        ebay_search_query: `${c.year || ''} ${c.set || ''} ${playerName} ${c.parallel || ''}`.trim(),
-        estimated_value_aud: convertUsdToAud(rawPrice),
-        value_confidence: det.confidence && det.confidence > 0.8 ? "High" : "Medium",
-      };
-    }).filter((card) => card.player_name && card.player_name !== "Unknown Card");
-
-    if (convertedCards.length === 0) {
+    if (!identifiedCard) {
+      console.warn("Raw CardSight payload returned no matching fields. Raw object:", data);
       throw new Error("No valid card detections found in CardSight payload");
     }
 
-    return { source: "CardSight AI", cards: convertedCards };
+    return { source: "CardSight AI", cards: [identifiedCard] };
   } catch (err) {
-    console.warn("CardSight AI extraction issue. Falling back to Gemini...", err);
+    console.warn("CardSight AI extraction issue. Switching to Gemini Fallback...", err);
 
     // Fallback to Gemini AI
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
