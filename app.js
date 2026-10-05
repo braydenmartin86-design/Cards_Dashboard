@@ -254,32 +254,56 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
 async function verifyPriceWithCardSight(card) {
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
-    const searchQuery = card.ebay_search_query || `${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''}`.trim();
+
+    // Use the card's preview/base64 image or fall back to client compression
+    if (!card._rawBase64 && !card.previewUrl) {
+      throw new Error("No image data available for this card to verify.");
+    }
+
+    const imageSource = card._rawBase64 || card.previewUrl;
+    const compressedDataUrl = await compressImageForApi(imageSource, 800, 0.65);
+    const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
+
+    const formData = new FormData();
+    formData.append("file", imageBlob, "verify_card.jpg");
+    formData.append("endpoint", "/identify/card");
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         "apikey": anonKey,
         "Authorization": `Bearer ${anonKey}`,
       },
-      body: JSON.stringify({
-        query: searchQuery,
-        endpoint: "/cards/search",
-      }),
+      body: formData,
     });
 
     if (!response.ok) throw new Error(`CardSight Proxy status ${response.status}`);
 
-    const data = await response.json();
-    const result = data.data || data.results || data.cards || data.items || (Array.isArray(data) ? data : [data]);
-    
-    // Extract raw pricing from top match
-    const topMatch = Array.isArray(result) ? result[0] : result;
-    const rawPriceUsd = topMatch?.estimated_value || topMatch?.market_price || topMatch?.pricing?.market_price || topMatch?.price || null;
+    const wrapper = await response.json();
+    const data = wrapper.raw || wrapper;
+
+    // Helper to extract pricing across nested CardSight objects
+    function findPrice(obj) {
+      if (!obj || typeof obj !== "object") return null;
+
+      const pricing = obj.pricing || obj.market_data || {};
+      const directPrice = pricing.estimated_value || pricing.market_price || obj.estimated_value || obj.market_price || obj.price;
+
+      if (directPrice) return directPrice;
+
+      for (const key of Object.keys(obj)) {
+        if (typeof obj[key] === "object" && obj[key] !== null) {
+          const found = findPrice(obj[key]);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    const rawPriceUsd = findPrice(data);
 
     if (!rawPriceUsd) {
-      throw new Error("No live pricing comps found for this search query.");
+      throw new Error("CardSight identified the card image but returned no pricing comps.");
     }
 
     const priceAud = convertUsdToAud(rawPriceUsd);
@@ -287,7 +311,6 @@ async function verifyPriceWithCardSight(card) {
       success: true,
       priceAud: priceAud,
       priceUsd: rawPriceUsd,
-      details: topMatch,
     };
   } catch (err) {
     console.warn("CardSight price verification failed:", err);
