@@ -4183,38 +4183,40 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setImages((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  async function scanLot() {
-    if (images.length === 0) return;
-    setLoadedScanId(null);
-    setSaveName("");
-    setLotLink("");
-    setScanning(true);
-    setError(null);
-    setResults(null);
-    setAddedState({});
+ async function scanLot() {
+  if (images.length === 0) return;
+  setLoadedScanId(null);
+  setSaveName("");
+  setLotLink("");
+  setScanning(true);
+  setError(null);
+  setResults(null);
+  setAddedState({});
 
-    try {
-      const firstImage = images[0];
-      const engineResponse = await callDualEngineIdentify(
-        firstImage.base64, 
-        firstImage.mediaType, 
-        LOT_SCANNER_PROMPT
-      );
+  try {
+    const firstImage = images[0];
+    const engineResponse = await callDualEngineIdentify(
+      firstImage.base64, 
+      firstImage.mediaType, 
+      LOT_SCANNER_PROMPT
+    );
 
-      const taggedCards = engineResponse.cards.map((c) => ({
-        ...c,
-        player_name: c.player_name || c.player || "Unknown Player",
-        _engineSource: engineResponse.source,
-      }));
+    // Store the base image source on each card for targeted CardSight re-verification
+    const taggedCards = engineResponse.cards.map((c) => ({
+      ...c,
+      player_name: c.player_name || c.player || "Unknown Player",
+      _rawBase64: firstImage.base64,
+      _engineSource: engineResponse.source,
+    }));
 
-      setResults(taggedCards);
-    } catch (e) {
-      console.error(e);
-      setError("Couldn't identify the cards in that photo — try a clearer shot.");
-    } finally {
-      setScanning(false);
-    }
+    setResults(taggedCards);
+  } catch (e) {
+    console.error(e);
+    setError("Couldn't identify the cards in that photo — try a clearer shot.");
+  } finally {
+    setScanning(false);
   }
+}
 
   function updateCardValue(idx, newValue) {
     setResults((prev) =>
