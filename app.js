@@ -66,6 +66,73 @@ Return ONLY a valid JSON array of objects with keys: "id" (unique string), "titl
 function ContentCreationTab({ cards, contentPlan, setContentPlan }) {
   // ... rest of ContentCreationTab code ...
 }
+// ===== Dual-Engine API Configuration =====
+const CARDSIGHT_API_KEY = "YOUR_CARDSIGHT_API_KEY"; // Insert your free key from cardsight.ai
+const CARDSIGHT_BASE_URL = "https://api.cardsight.ai/v1";
+const USD_TO_AUD_RATE = 1.44; // Currency conversion multiplier
+
+// Central Currency Converter
+function convertUsdToAud(usdAmount) {
+  if (usdAmount == null || isNaN(usdAmount)) return null;
+  return Math.round(Number(usdAmount) * USD_TO_AUD_RATE * 100) / 100;
+}
+
+// Unified Dual-Engine Call (CardSight AI Primary -> Gemini AI Fallback)
+async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fallbackPrompt = "") {
+  // Attempt Primary Call via CardSight AI
+  try {
+    if (!CARDSIGHT_API_KEY) throw new Error("No CardSight API Key provided");
+
+    const response = await fetch(`${CARDSIGHT_BASE_URL}/identify/card`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": CARDSIGHT_API_KEY,
+      },
+      body: JSON.stringify({
+        image: `data:${mediaType};base64,${base64Image}`,
+        include_pricing: true,
+      }),
+    });
+
+    if (!response.ok) throw new Error(`CardSight status ${response.status}`);
+
+    const data = await response.json();
+    const rawCards = Array.isArray(data.cards) ? data.cards : [data];
+
+    // Convert returned pricing to AUD
+    const convertedCards = rawCards.map((c) => ({
+      player_name: c.player_name || c.title || "Unknown Card",
+      sport: c.sport || "MLB",
+      year: c.year || "",
+      set_name: c.set_name || "",
+      card_number: c.card_number || "",
+      parallel_or_variant: c.parallel || "Base",
+      is_graded: Boolean(c.is_graded),
+      grade: c.grade || null,
+      ebay_search_query: c.ebay_search_query || `${c.player_name} ${c.set_name}`,
+      estimated_value_aud: convertUsdToAud(c.estimated_value || c.price),
+      value_confidence: "High",
+    }));
+
+    return { source: "CardSight AI", cards: convertedCards };
+  } catch (err) {
+    console.warn("CardSight AI limit reached or error. Falling back to Gemini...", err);
+
+    // Fallback to Gemini AI
+    const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
+    let parsedGemini = [];
+    try {
+      const cleanJson = String(rawGeminiText).replaceAll("```json", "").replaceAll("```", "").trim();
+      parsedGemini = JSON.parse(cleanJson);
+    } catch (e) {
+      console.error("Gemini Fallback parsing error:", e);
+    }
+
+    const finalArray = Array.isArray(parsedGemini) ? parsedGemini : [parsedGemini];
+    return { source: "Gemini AI (Fallback)", cards: finalArray };
+  }
+}
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 2000) {
   if (!supabaseClient) {
@@ -3943,7 +4010,7 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setImages((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  async function scanLot() {
+async function scanLot() {
     if (images.length === 0) return;
     setLoadedScanId(null);
     setSaveName("");
@@ -3952,24 +4019,25 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setError(null);
     setResults(null);
     setAddedState({});
+
     try {
       const firstImage = images[0];
-      const rawAiResponse = await callGeminiAi(LOT_SCANNER_PROMPT, firstImage.base64, firstImage.mediaType);
+      const engineResponse = await callDualEngineIdentify(
+        firstImage.base64, 
+        firstImage.mediaType, 
+        LOT_SCANNER_PROMPT
+      );
 
-      // Sanitize AI response to parse JSON safely
-      let parsed = rawAiResponse;
-      if (typeof rawAiResponse === "string") {
-        const cleanJsonText = rawAiResponse.replaceAll("```json", "").replaceAll("```", "").trim();
-        parsed = JSON.parse(cleanJsonText);
-      }
+      // Attach the engine source tag to each card object
+      const taggedCards = engineResponse.cards.map((c) => ({
+        ...c,
+        _engineSource: engineResponse.source,
+      }));
 
-      const cardsArray = Array.isArray(parsed) ? parsed : (parsed.cards || parsed.items || []);
-      if (!Array.isArray(cardsArray)) throw new Error("Unexpected response shape");
-
-      setResults(cardsArray);
+      setResults(taggedCards);
     } catch (e) {
       console.error(e);
-      setError("Couldn't identify the cards in that photo — try a clearer or better-lit shot, fewer cards per photo, or make sure each card is fully visible.");
+      setError("Couldn't identify the cards in that photo — try a clearer shot.");
     } finally {
       setScanning(false);
     }
@@ -4173,8 +4241,8 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
 
 function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
   const [copyState, setCopyState] = useState("idle");
-  const ebayUrl = card.ebay_search_query ? `[https://www.ebay.com.au/sch/i.html?_nkw=$](https://www.ebay.com.au/sch/i.html?_nkw=$){encodeURIComponent(card.ebay_search_query)}` : null;
-  const point130Url = card.ebay_search_query ? `[https://130point.com/sales/?search=$](https://130point.com/sales/?search=$){encodeURIComponent(card.ebay_search_query)}` : null;
+  const ebayUrl = card.ebay_search_query ? `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(card.ebay_search_query)}` : null;
+  const point130Url = card.ebay_search_query ? `https://130point.com/sales/?search=${encodeURIComponent(card.ebay_search_query)}` : null;
 
   async function copy() {
     const ok = await copyToClipboard(card.ebay_search_query || "");
@@ -4184,6 +4252,25 @@ function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
 
   return (
     <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22" }}>
+      {/* ⚡ STEP 3 BADGE ADDED HERE */}
+      {card._engineSource && (
+        <span
+          className="mono"
+          style={{
+            fontSize: 9.5,
+            padding: "2px 6px",
+            borderRadius: 4,
+            background: card._engineSource === "CardSight AI" ? "#2FA89A22" : "#C9A22722",
+            color: card._engineSource === "CardSight AI" ? "#2FA89A" : "#C9A227",
+            border: `1px solid ${card._engineSource === "CardSight AI" ? "#2FA89A40" : "#C9A22740"}`,
+            display: "inline-block",
+            marginBottom: 8,
+          }}
+        >
+          ⚡ Powered by {card._engineSource}
+        </span>
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div>
           <div className="oswald" style={{ fontSize: 15, fontWeight: 600 }}>
@@ -4570,6 +4657,31 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
   );
 }
 
+// Zero-Cost Local "Card Magic" Enhancer for eBay / Instagram photos
+function processCardMagicImage(file, brightness = 1.08, contrast = 1.12) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+
+        // Apply photo enhancements
+        ctx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(1.05)`;
+        ctx.drawImage(img, 0, 0);
+
+        resolve(canvas.toDataURL("image/jpeg", 0.90));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 // ===== Business & Tax Summary =====
 function currentFYLabel(date = new Date()) {
   const y = date.getFullYear();
