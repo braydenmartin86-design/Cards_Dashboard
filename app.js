@@ -105,19 +105,18 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       }),
     });
 
-    const wrapper = await response.json();
-    const data = wrapper.raw || wrapper;
-    console.log("CardSight Response Object:", data);
+    const data = await response.json();
+    console.log("CardSight Raw Output in Browser:", data);
 
     if (!response.ok || data.error) {
       throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
     }
 
-    // Helper function to extract fields from any nested structure
-    function extractCardInfo(obj) {
+    // Helper to unwrap card info from any CardSight JSON structure
+    function findCardObject(obj) {
       if (!obj || typeof obj !== "object") return null;
 
-      // Common key variations returned by CardSight AI endpoints
+      // Direct player/card field checks
       const player = obj.player_name || obj.player || obj.name || obj.title || obj.subject || null;
       const set = obj.set_name || obj.set || obj.release || null;
       const year = obj.year || obj.release_year || null;
@@ -126,9 +125,12 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       const price = obj.estimated_value || obj.market_price || obj.price || obj.avg_price || null;
       const sport = obj.sport || obj.category || "NBA";
 
-      // Slab/Grading info
-      const grade = obj.grade || (obj.slab ? `${obj.slab.company || ''} ${obj.slab.grade || ''}`.trim() : null);
-      const isGraded = Boolean(grade || obj.is_graded || obj.isGraded);
+      // Slab / Grade details
+      const slab = obj.slab || {};
+      const grade = slab.grade || obj.grade || null;
+      const slabCompany = slab.company || obj.grading_company || null;
+      const isGraded = Boolean(grade || slabCompany || obj.is_graded);
+      const fullGradeString = slabCompany && grade ? `${slabCompany} ${grade}` : (grade || null);
 
       if (player && player !== "Unknown Card") {
         return {
@@ -139,34 +141,41 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
           card_number: cardNum || "",
           parallel_or_variant: parallel,
           is_graded: isGraded,
-          grade: grade,
+          grade: fullGradeString,
           ebay_search_query: `${year || ''} ${set || ''} ${player} ${parallel !== 'Base' ? parallel : ''}`.trim(),
           estimated_value_aud: convertUsdToAud(price),
           value_confidence: "High",
         };
       }
 
-      // Recursively search nested objects (e.g. data.cards, data.detections, data.results, data.data)
+      // Recursively unwrap nested objects/arrays (cards, detections, results, data, matches)
       for (const key of Object.keys(obj)) {
         if (typeof obj[key] === "object" && obj[key] !== null) {
-          const nested = extractCardInfo(obj[key]);
-          if (nested) return nested;
+          if (Array.isArray(obj[key])) {
+            for (const item of obj[key]) {
+              const res = findCardObject(item);
+              if (res) return res;
+            }
+          } else {
+            const res = findCardObject(obj[key]);
+            if (res) return res;
+          }
         }
       }
 
       return null;
     }
 
-    const identifiedCard = extractCardInfo(data);
+    const identifiedCard = findCardObject(data);
 
     if (!identifiedCard) {
-      console.warn("Raw CardSight payload returned no matching fields. Raw object:", data);
+      console.warn("CardSight returned no matching fields. Raw object:", data);
       throw new Error("No valid card detections found in CardSight payload");
     }
 
     return { source: "CardSight AI", cards: [identifiedCard] };
   } catch (err) {
-    console.warn("CardSight AI extraction issue. Switching to Gemini Fallback...", err);
+    console.warn("CardSight AI proxy failed. Switching to Gemini Fallback...", err);
 
     // Fallback to Gemini AI
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
