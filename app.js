@@ -145,129 +145,109 @@ function base64ToBlob(base64Data, mimeType = "image/jpeg") {
 }
 
 async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fallbackPrompt = "") {
+  // 1. Primary Engine: Gemini AI (Fast, accurate OCR reading for single cards & lot photos)
   try {
-    const anonKey = window.SUPABASE_ANON_KEY;
-
-    // 1. Compress image client-side to max 800px
-    const compressedDataUrl = await compressImageForApi(base64Image, 800, 0.60);
-    
-    // 2. Convert compressed Base64 to Binary Blob
-    const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
-
-    // 3. Send as binary multipart/form-data
-    const formData = new FormData();
-    formData.append("file", imageBlob, "scan.jpg");
-    formData.append("endpoint", "/identify/card");
-
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
-      method: "POST",
-      headers: {
-        "apikey": anonKey,
-        "Authorization": `Bearer ${anonKey}`,
-      },
-      body: formData,
-    });
-
-    const wrapper = await response.json();
-    const data = wrapper.raw || wrapper;
-
-    if (!response.ok || data.error) {
-      throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
-    }
-
-    const gradingCompanies = ["PSA", "BGS", "SGC", "CGC", "TAG", "CSG", "HGA"];
-
-    function findCardObject(obj) {
-      if (!obj || typeof obj !== "object") return null;
-
-      // Extract raw candidate strings
-      let playerCandidate = obj.player_name || obj.player || obj.name || obj.title || obj.subject || null;
-      if (typeof playerCandidate === "object" && playerCandidate !== null) {
-        playerCandidate = playerCandidate.name || playerCandidate.player_name || null;
-      }
-
-      // If the candidate string is just a grading company name (e.g. "PSA"), ignore it as a player name
-      if (playerCandidate && gradingCompanies.includes(String(playerCandidate).trim().toUpperCase())) {
-        playerCandidate = null;
-      }
-
-      const set = obj.set_name || obj.set || obj.release || (obj.card && obj.card.set) || null;
-      const year = obj.year || obj.release_year || (obj.card && obj.card.year) || null;
-      const cardNum = obj.card_number || obj.cardNumber || obj.number || (obj.card && obj.card.card_number) || null;
-      const parallel = obj.parallel || obj.variant || obj.parallel_or_variant || (obj.card && obj.card.parallel) || "Base";
-      const sport = obj.sport || obj.category || (obj.card && obj.card.sport) || "NBA";
-
-      // Price extraction across all nested pricing models
-      const pricingObj = obj.pricing || obj.market_data || (obj.card && obj.card.pricing) || {};
-      const price = pricingObj.estimated_value || pricingObj.market_price || pricingObj.price || pricingObj.avg_price || obj.estimated_value || obj.price || null;
-
-      // Slab / Grade details
-      const slab = obj.slab || {};
-      const gradeVal = slab.grade || obj.grade || null;
-      const slabCompany = slab.company || obj.grading_company || (gradingCompanies.includes(String(obj.name).toUpperCase()) ? obj.name : null);
-      const isGraded = Boolean(gradeVal || slabCompany || obj.is_graded);
-      const fullGradeString = slabCompany && gradeVal ? `${slabCompany} ${gradeVal}` : (gradeVal || slabCompany || null);
-
-      if (playerCandidate && playerCandidate !== "Unknown Card") {
-        return {
-          player_name: playerCandidate,
-          sport: sport,
-          year: year || "",
-          set_name: set || "",
-          card_number: cardNum || "",
-          parallel_or_variant: parallel,
-          is_graded: isGraded,
-          grade: fullGradeString,
-          ebay_search_query: `${year || ''} ${set || ''} ${playerCandidate} ${parallel !== 'Base' ? parallel : ''}`.trim(),
-          estimated_value_aud: convertUsdToAud(price),
-          value_confidence: "High",
-        };
-      }
-
-      // Recursively search nested objects (detections, cards, results, card, data)
-      for (const key of Object.keys(obj)) {
-        if (typeof obj[key] === "object" && obj[key] !== null) {
-          if (Array.isArray(obj[key])) {
-            for (const item of obj[key]) {
-              const res = findCardObject(item);
-              if (res) return res;
-            }
-          } else {
-            const res = findCardObject(obj[key]);
-            if (res) return res;
-          }
-        }
-      }
-
-      return null;
-    }
-
-    const identifiedCard = findCardObject(data);
-
-    if (!identifiedCard) {
-      console.warn("CardSight raw output:", data);
-      throw new Error("No valid card detections found in CardSight payload");
-    }
-
-    return { source: "CardSight AI", cards: [identifiedCard] };
-  } catch (err) {
-    console.warn("CardSight AI proxy failed. Switching to Gemini Fallback...", err);
-
-    // Compress for Gemini Fallback
-    const compressedForGemini = await compressImageForApi(base64Image, 800, 0.60);
+    const compressedForGemini = await compressImageForApi(base64Image, 1200, 0.75);
     const cleanGeminiBase64 = compressedForGemini.includes(",") ? compressedForGemini.split(",")[1] : compressedForGemini;
 
-    const rawGeminiText = await callGeminiAi(fallbackPrompt, cleanGeminiBase64, mediaType);
+    const rawGeminiText = await callGeminiAi(fallbackPrompt || LOT_SCANNER_PROMPT, cleanGeminiBase64, mediaType);
     let parsedGemini = [];
+
     try {
       const cleanJson = String(rawGeminiText).replaceAll("```json", "").replaceAll("```", "").trim();
       parsedGemini = JSON.parse(cleanJson);
     } catch (e) {
-      console.error("Gemini Fallback parsing error:", e);
+      console.error("Gemini primary parsing error:", e);
     }
 
-    const finalArray = Array.isArray(parsedGemini) ? parsedGemini : [parsedGemini];
-    return { source: "Gemini AI (Fallback)", cards: finalArray };
+    const cardsArray = Array.isArray(parsedGemini) ? parsedGemini : [parsedGemini];
+
+    // Ensure valid cards were extracted
+    const validCards = cardsArray.filter(c => c && (c.player_name || c.player || c.title));
+    if (validCards.length > 0) {
+      return { 
+        source: "Gemini AI", 
+        cards: validCards.map(c => ({
+          player_name: c.player_name || c.player || c.title || "Unknown Card",
+          sport: c.sport || "MLB",
+          year: c.year || "",
+          set_name: c.set_name || c.set || "",
+          card_number: c.card_number || c.cardNumber || "",
+          parallel_or_variant: c.parallel_or_variant || c.parallel || "Base",
+          is_graded: Boolean(c.is_graded || c.grade),
+          grade: c.grade || null,
+          ebay_search_query: c.ebay_search_query || `${c.player_name || c.player || ''} ${c.set_name || c.set || ''}`,
+          estimated_value_aud: c.estimated_value_aud || convertUsdToAud(c.estimated_value || c.price),
+          value_confidence: "High"
+        }))
+      };
+    }
+    throw new Error("Gemini returned no valid card details.");
+  } catch (geminiErr) {
+    console.warn("Gemini AI Primary scan failed/timed out. Switching to CardSight AI Backup...", geminiErr);
+
+    // 2. Secondary Engine Backup: CardSight Proxy
+    try {
+      const anonKey = window.SUPABASE_ANON_KEY;
+      const compressedDataUrl = await compressImageForApi(base64Image, 800, 0.60);
+      const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
+
+      const formData = new FormData();
+      formData.append("file", imageBlob, "scan.jpg");
+      formData.append("endpoint", "/identify/card");
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
+        method: "POST",
+        headers: {
+          "apikey": anonKey,
+          "Authorization": `Bearer ${anonKey}`,
+        },
+        body: formData,
+      });
+
+      const wrapper = await response.json();
+      const data = wrapper.raw || wrapper;
+
+      function findCardObject(obj) {
+        if (!obj || typeof obj !== "object") return null;
+        const playerCandidate = obj.player_name || obj.player || obj.name || obj.title || null;
+        const set = obj.set_name || obj.set || null;
+        const price = obj.estimated_value || obj.market_price || obj.price || null;
+
+        if (playerCandidate && !["PSA", "BGS", "SGC"].includes(String(playerCandidate).toUpperCase())) {
+          return {
+            player_name: playerCandidate,
+            sport: obj.sport || "MLB",
+            year: obj.year || "",
+            set_name: set || "",
+            card_number: obj.card_number || "",
+            parallel_or_variant: obj.parallel || "Base",
+            is_graded: Boolean(obj.grade),
+            grade: obj.grade || null,
+            ebay_search_query: `${playerCandidate} ${set || ''}`.trim(),
+            estimated_value_aud: convertUsdToAud(price),
+            value_confidence: "High",
+          };
+        }
+
+        for (const key of Object.keys(obj)) {
+          if (typeof obj[key] === "object" && obj[key] !== null) {
+            const res = findCardObject(obj[key]);
+            if (res) return res;
+          }
+        }
+        return null;
+      }
+
+      const backupCard = findCardObject(data);
+      if (backupCard) {
+        return { source: "CardSight AI (Backup)", cards: [backupCard] };
+      }
+      throw new Error("CardSight backup also returned no card details.");
+    } catch (cardSightErr) {
+      console.error("Both engines failed to identify the card photo:", cardSightErr);
+      throw cardSightErr;
+    }
   }
 }
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
