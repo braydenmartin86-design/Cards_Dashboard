@@ -86,7 +86,6 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
 
-    // Ensure base64 string is clean
     let cleanBase64 = base64Image;
     if (cleanBase64 && cleanBase64.includes(",")) {
       cleanBase64 = cleanBase64.split(",")[1];
@@ -101,6 +100,7 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       },
       body: JSON.stringify({
         image: cleanBase64,
+        mimeType: mediaType,
         endpoint: "/identify/card",
       }),
     });
@@ -145,7 +145,6 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
     return { source: "Gemini AI (Fallback)", cards: finalArray };
   }
 }
-
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 2000) {
   if (!supabaseClient) {
