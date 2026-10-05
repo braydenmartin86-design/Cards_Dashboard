@@ -256,7 +256,6 @@ async function verifyPriceWithCardSight(card) {
     const anonKey = window.SUPABASE_ANON_KEY;
     const searchQuery = card.ebay_search_query || `${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''}`.trim();
 
-    // Call Edge Proxy using text search endpoint or single card identify endpoint
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
@@ -266,18 +265,18 @@ async function verifyPriceWithCardSight(card) {
       },
       body: JSON.stringify({
         query: searchQuery,
-        endpoint: "/search/card",
+        endpoint: "/cards/search",
       }),
     });
 
-    if (!response.ok) throw new Error(`CardSight Proxy returned ${response.status}`);
+    if (!response.ok) throw new Error(`CardSight Proxy status ${response.status}`);
 
     const data = await response.json();
-    const result = data.data || data.results || data.cards || (Array.isArray(data) ? data : [data]);
+    const result = data.data || data.results || data.cards || data.items || (Array.isArray(data) ? data : [data]);
     
-    // Extract raw USD pricing from top result
+    // Extract raw pricing from top match
     const topMatch = Array.isArray(result) ? result[0] : result;
-    const rawPriceUsd = topMatch?.estimated_value || topMatch?.market_price || topMatch?.pricing?.market_price || null;
+    const rawPriceUsd = topMatch?.estimated_value || topMatch?.market_price || topMatch?.pricing?.market_price || topMatch?.price || null;
 
     if (!rawPriceUsd) {
       throw new Error("No live pricing comps found for this search query.");
