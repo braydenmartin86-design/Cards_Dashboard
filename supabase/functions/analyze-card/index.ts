@@ -9,6 +9,7 @@ const corsHeaders = {
 // "gemini-flash-latest" always points at Google's current Flash model, so this won't break
 // when a specific version is retired. Set a GEMINI_MODEL secret to pin a specific model.
 const DEFAULT_MODEL = "gemini-flash-latest";
+const FALLBACK_MODEL = "gemini-flash-lite-latest";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -47,21 +48,29 @@ serve(async (req) => {
     parts.push({ text: prompt });
     const contents = [{ role: "user", parts }];
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: "POST",
-        // Key goes in a header rather than the URL so it doesn't end up in request logs.
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({ contents }),
-      }
-    );
+    // When the main model is overloaded ("high demand") or unavailable, try the lighter
+    // Flash-Lite model before giving up.
+    const models = [...new Set([model, FALLBACK_MODEL])];
+    let geminiRes: Response | null = null;
+    let geminiData: any = null;
+    for (const m of models) {
+      geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,
+        {
+          method: "POST",
+          // Key goes in a header rather than the URL so it doesn't end up in request logs.
+          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+          body: JSON.stringify({ contents }),
+        }
+      );
+      geminiData = await geminiRes.json();
+      const retryable = [404, 429, 500, 503].includes(geminiRes.status);
+      if (geminiRes.ok || !retryable) break;
+    }
 
-    const geminiData = await geminiRes.json();
-
-    if (!geminiRes.ok) {
+    if (!geminiRes!.ok) {
       return new Response(
-        JSON.stringify({ error: geminiData.error?.message || `Gemini API returned status ${geminiRes.status}` }),
+        JSON.stringify({ error: geminiData.error?.message || `Gemini API returned status ${geminiRes!.status}` }),
         {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

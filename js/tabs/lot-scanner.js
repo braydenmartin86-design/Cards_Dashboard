@@ -161,8 +161,11 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
         updated[index] = {
           ...updated[index],
           estimated_value_aud: res.priceAud,
-          _priceSource: "CardSight Verified",
-          value_confidence: "Verified High",
+          _priceSource: res.source,
+          _pricedAs: res.pricedAs || null,
+          _sales: res.sales || null,
+          _priceNote: res.note || null,
+          value_confidence: res.confidence || "Verified",
         };
         return updated;
       });
@@ -402,13 +405,13 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
               fontSize: 9.5,
               padding: "2px 6px",
               borderRadius: 4,
-              background: "#4E8B6B22",
-              color: "#4E8B6B",
-              border: "1px solid #4E8B6B40",
+              background: card._priceSource.startsWith("Gemini") ? "#C9A22722" : "#4E8B6B22",
+              color: card._priceSource.startsWith("Gemini") ? "#C9A227" : "#4E8B6B",
+              border: `1px solid ${card._priceSource.startsWith("Gemini") ? "#C9A22740" : "#4E8B6B40"}`,
               display: "inline-block",
             }}
           >
-            ✓ {card._priceSource}
+            {card._priceSource.startsWith("Gemini") ? "≈" : "✓"} {card._priceSource}
           </span>
         )}
       </div>
@@ -445,6 +448,24 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
           <div className="mono" style={{ fontSize: 9, color: "#6B7180", marginTop: 3 }}>{card.value_confidence || "Low"} confidence</div>
         </div>
       </div>
+
+      {(card._sales || card._priceNote) && (
+        <div style={{ fontSize: 11, color: "#8B90A0", background: "#14161C", border: "1px solid #2C303B", borderRadius: 6, padding: "8px 10px", marginBottom: 10, lineHeight: 1.6 }}>
+          {card._pricedAs && <div style={{ color: "#A7ADBB", marginBottom: 2 }}>Priced as: {card._pricedAs}</div>}
+          {card._sales &&
+            card._sales.map((s, i) => (
+              <div key={i}>
+                {new Date(s.date).toLocaleDateString()} · US${s.priceUsd.toFixed(2)} (≈ A${convertUsdToAud(s.priceUsd).toFixed(2)})
+                {s.url && (
+                  <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "#2FA89A", marginLeft: 6 }}>
+                    listing
+                  </a>
+                )}
+              </div>
+            ))}
+          {card._priceNote && <div>{card._priceNote}</div>}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button

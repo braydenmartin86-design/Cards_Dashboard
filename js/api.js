@@ -220,17 +220,93 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
   }
 }
 
-// Dedicated CardSight Price Verification Helper with Gemini Fallback
+// ===== CardSight price verification =====
+// 1. /identify/card on the photo -> CardSight's catalog id for the card (plus slab grade, if any).
+// 2. /pricing/{card_id} -> completed auction sales for that card, grade and parallel.
+// 3. Market value = average of the 3 most recent sales, or the most recent sale if fewer exist.
+// Identification alone never includes prices, so step 2 is what actually finds sold comps.
+
+async function callCardSightProxy(body) {
+  const anonKey = window.SUPABASE_ANON_KEY;
+  const isForm = body instanceof FormData;
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
+    method: "POST",
+    headers: {
+      "apikey": anonKey,
+      "Authorization": `Bearer ${anonKey}`,
+      ...(isForm ? {} : { "Content-Type": "application/json" }),
+    },
+    body: isForm ? body : JSON.stringify(body),
+  });
+
+  if (response.status === 429) {
+    throw new Error("Rate limit reached. Please wait a few seconds before retrying.");
+  }
+  let wrapper = null;
+  try {
+    wrapper = await response.json();
+  } catch (e) {}
+  if (!response.ok) {
+    const detail = wrapper && (wrapper.error || wrapper.message);
+    throw new Error(`CardSight returned status ${response.status}${detail ? `: ${detail}` : ""}`);
+  }
+  // Older proxy versions wrapped identify replies as { raw: ... }. Pricing replies have their
+  // own `raw` section (raw-card sales), so only unwrap when it really is a wrapped identify reply.
+  const data = (wrapper && wrapper.raw && wrapper.raw.detections ? wrapper.raw : wrapper) || {};
+  if (data.error && !data.detections && !data.raw && !data.graded) throw new Error(String(data.error));
+  return data;
+}
+
+function normalizeCardText(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// A lot photo can contain several cards; pick the detection that matches the row clicked.
+function pickCardSightDetection(detections, card) {
+  if (detections.length === 1) return detections[0];
+  const nameTokens = normalizeCardText(card.player_name).split(" ").filter((t) => t.length > 1);
+  const wantNumber = normalizeCardText(card.card_number).replace(/^no /, "");
+  let best = null;
+  let bestScore = 0;
+  for (const d of detections) {
+    const name = normalizeCardText(d.card.name);
+    const nameScore = nameTokens.length ? nameTokens.filter((t) => name.includes(t)).length / nameTokens.length : 0;
+    if (nameScore === 0) continue;
+    let score = nameScore;
+    if (wantNumber && normalizeCardText(d.card.number) === wantNumber) score += 0.3;
+    if (card.year && String(d.card.year || "").includes(String(card.year).slice(0, 4))) score += 0.2;
+    if (score > bestScore) {
+      best = d;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+// Graded cards: the slab detected by CardSight wins; otherwise fall back to the scanned row's grade.
+function wantedGrade(detection, card) {
+  const g = detection.grading;
+  if (g && g.grade && g.grade.value) {
+    return { company: g.company && g.company.name, value: String(g.grade.value), gradeId: g.grade.id || null };
+  }
+  if (card.is_graded && card.grade) {
+    const parts = String(card.grade).trim().split(/\s+/);
+    const value = parts[parts.length - 1];
+    const company = card.grading_company || (parts.length > 1 ? parts[0] : null);
+    return { company, value, gradeId: null };
+  }
+  return null;
+}
+
 async function verifyPriceWithCardSight(card) {
   try {
-    const anonKey = window.SUPABASE_ANON_KEY;
     const imageSource = card._rawBase64 || card.previewUrl;
 
     if (!imageSource) {
       throw new Error("No image data available on this card row to verify.");
     }
 
-    // 1. Compress image to ~800px to ensure fast binary payload under 200KB
+    // 1. Identify. Compress to ~800px to keep the upload small.
     const compressedDataUrl = await compressImageForApi(imageSource, 800, 0.65);
     const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
 
@@ -238,61 +314,102 @@ async function verifyPriceWithCardSight(card) {
     formData.append("file", imageBlob, "verify_card.jpg");
     formData.append("endpoint", "/identify/card");
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
-      method: "POST",
-      headers: {
-        "apikey": anonKey,
-        "Authorization": `Bearer ${anonKey}`,
-      },
-      body: formData,
-    });
+    const identified = await callCardSightProxy(formData);
+    const detections = (identified.detections || []).filter((d) => d && d.card && d.card.id);
+    const detection = detections.length ? pickCardSightDetection(detections, card) : null;
 
-    if (response.status === 429) {
-      throw new Error("Rate limit reached. Please wait a few seconds before retrying.");
-    }
+    let noSalesReason = null;
+    if (!detection) {
+      noSalesReason = detections.length
+        ? `CardSight found ${detections.length} cards in the photo but none matched "${card.player_name}". Scan this card on its own for an exact match.`
+        : "CardSight couldn't match this card to an exact catalog entry.";
+    } else {
+      // 2. Completed auction sales for this card.
+      const grade = wantedGrade(detection, card);
+      const variant = String(card.parallel_or_variant || "").trim();
+      const isBase = !variant || /^base( card)?$/i.test(variant);
+      const suggestion = isBase
+        ? null
+        : (detection.card.parallelSuggestions || []).find((p) => {
+            const a = normalizeCardText(p.name);
+            const b = normalizeCardText(variant);
+            return a && b && (a.includes(b) || b.includes(a));
+          });
 
-    if (!response.ok) {
-      throw new Error(`CardSight Proxy returned status ${response.status}`);
-    }
+      const query = { listing_type: "auction" };
+      if (isBase) query.parallel_id = "null";
+      else if (suggestion) query.parallel_id = suggestion.id;
+      if (!grade) query.grade_id = "null";
+      else if (grade.gradeId) query.grade_id = grade.gradeId;
 
-    const wrapper = await response.json();
-    const data = wrapper.raw || wrapper;
+      let pricing = {};
+      try {
+        pricing = await callCardSightProxy({ endpoint: `/pricing/${detection.card.id}`, method: "GET", query });
+      } catch (e) {
+        // 404 = CardSight has no price history for this card; treat it as "no sales".
+        if (!/status 404/.test(e.message || "")) throw e;
+      }
 
-    // Deep extractor for CardSight price fields
-    function extractPricingValue(obj) {
-      if (!obj || typeof obj !== "object") return null;
-
-      const p = obj.pricing || obj.market_data || {};
-      const val = p.estimated_value || p.market_price || p.price || p.avg_price || obj.estimated_value || obj.market_price || obj.price;
-
-      if (val && !isNaN(val) && Number(val) > 0) return Number(val);
-
-      for (const k of Object.keys(obj)) {
-        if (typeof obj[k] === "object" && obj[k] !== null) {
-          const res = extractPricingValue(obj[k]);
-          if (res) return res;
+      let records = [];
+      if (!grade) {
+        records = (pricing.raw && pricing.raw.records) || [];
+      } else {
+        for (const company of pricing.graded || []) {
+          if (grade.company && normalizeCardText(company.company_name) !== normalizeCardText(grade.company)) continue;
+          for (const g of company.grades || []) {
+            if (!grade.gradeId && String(g.grade_value) !== grade.value) continue;
+            records.push(...(g.records || []));
+          }
         }
       }
-      return null;
+      // Parallel named on the row but not in CardSight's suggestions: match on listing data instead.
+      if (!isBase && !suggestion) {
+        const want = normalizeCardText(variant);
+        records = records.filter((r) => {
+          const p = normalizeCardText(r.parallel_name);
+          return p && (p.includes(want) || want.includes(p));
+        });
+      }
+
+      const sales = records
+        .filter((r) => r && Number(r.price) > 0 && r.date && (r.listing_type || "auction") === "auction")
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      const pricedAs = [
+        detection.card.year,
+        detection.card.releaseName,
+        detection.card.name,
+        isBase ? "Base" : (suggestion && suggestion.name) || variant,
+        grade ? `${grade.company || ""} ${grade.value}`.trim() : "Raw",
+      ].filter(Boolean).join(" ");
+
+      if (sales.length > 0) {
+        const used = sales.slice(0, sales.length >= 3 ? 3 : 1);
+        const priceUsd = Math.round((used.reduce((s, r) => s + Number(r.price), 0) / used.length) * 100) / 100;
+        const lastDate = new Date(used[0].date).toLocaleDateString();
+        return {
+          success: true,
+          priceUsd,
+          priceAud: convertUsdToAud(priceUsd),
+          source: used.length === 3 ? "CardSight · avg of last 3 sales" : `CardSight · last sale ${lastDate}`,
+          confidence: "Sold comps",
+          pricedAs,
+          sales: used.map((r) => ({ date: r.date, priceUsd: Number(r.price), title: r.title, url: r.url })),
+        };
+      }
+      noSalesReason = `CardSight has no recent sold listings for ${pricedAs}.`;
     }
 
-    const rawPriceUsd = extractPricingValue(data);
-
-    if (rawPriceUsd) {
-      const priceAud = convertUsdToAud(rawPriceUsd);
-      return {
-        success: true,
-        priceAud: priceAud,
-        priceUsd: rawPriceUsd,
-        source: "CardSight Verified",
-      };
-    }
-
-    // 2. Fallback: If CardSight has no comps for this specific card, ask Gemini AI to estimate
-    console.info("CardSight returned no pricing comps. Fallback to Gemini valuation estimate...");
+    // 3. Fallback: no sold comps, so ask Gemini AI for an estimate (labelled as such).
+    console.info(`${noSalesReason} Falling back to a Gemini valuation estimate...`);
     const pricePrompt = `Estimate the realistic market value in AUD for this card: ${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''} ${card.grade ? 'Grade: ' + card.grade : 'Raw'}. Return ONLY a JSON object: {"estimated_value_aud": 120.00}`;
 
-    const geminiPriceText = await callGeminiAi(pricePrompt);
+    let geminiPriceText;
+    try {
+      geminiPriceText = await callGeminiAi(pricePrompt);
+    } catch (geminiErr) {
+      return { success: false, error: `${noSalesReason} A Gemini estimate wasn't available either (${geminiErr.message || geminiErr}).` };
+    }
     let parsedPrice = null;
     try {
       const cleanJson = String(geminiPriceText).replaceAll("```json", "").replaceAll("```", "").trim();
@@ -306,7 +423,9 @@ async function verifyPriceWithCardSight(card) {
       return {
         success: true,
         priceAud: parsedPrice.estimated_value_aud,
-        source: "Gemini Estimated",
+        source: "Gemini estimate · no sold comps",
+        confidence: "AI estimate",
+        note: noSalesReason,
       };
     }
 
