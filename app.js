@@ -255,45 +255,49 @@ async function verifyPriceWithCardSight(card) {
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
 
-    // Build structured payload for CardSight /v1/pricing endpoint
-    const pricingPayload = {
-      player_name: card.player_name || card.player || "",
-      set_name: card.set_name || card.set || "",
-      year: card.year ? String(card.year) : "",
-      card_number: card.card_number || card.cardNumber || "",
-      parallel: card.parallel_or_variant || card.parallel || "Base",
-      is_graded: Boolean(card.is_graded || card.grade),
-      grade: card.grade || null,
-      grading_company: card.grading_company || null,
-      query: card.ebay_search_query || `${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''}`.trim()
-    };
+    // Use the card's original base64 photo if available
+    const imageSource = card._rawBase64 || card.previewUrl;
+    
+    if (!imageSource) {
+      throw new Error("No image data available on this card row to verify.");
+    }
+
+    // 1. Compress image to ~800px to ensure fast binary payload under 200KB
+    const compressedDataUrl = await compressImageForApi(imageSource, 800, 0.65);
+    const imageBlob = base64ToBlob(compressedDataUrl, "image/jpeg");
+
+    const formData = new FormData();
+    formData.append("file", imageBlob, "verify_card.jpg");
+    formData.append("endpoint", "/identify/card");
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         "apikey": anonKey,
         "Authorization": `Bearer ${anonKey}`,
       },
-      body: JSON.stringify({
-        endpoint: "/pricing",
-        payload: pricingPayload
-      }),
+      body: formData,
     });
 
-    if (!response.ok) throw new Error(`CardSight Pricing Proxy status ${response.status}`);
+    if (response.status === 429) {
+      throw new Error("Rate limit reached. Please wait a few seconds before retrying.");
+    }
+
+    if (!response.ok) {
+      throw new Error(`CardSight Proxy returned status ${response.status}`);
+    }
 
     const wrapper = await response.json();
     const data = wrapper.raw || wrapper;
 
-    // Extract price value from CardSight pricing response keys
+    // Deep extractor for CardSight price fields
     function extractPricingValue(obj) {
       if (!obj || typeof obj !== "object") return null;
 
-      const p = obj.pricing || obj.market_data || obj;
-      const val = p.estimated_value || p.market_price || p.price || p.avg_price || p.median_price || p.last_sold_price;
+      const p = obj.pricing || obj.market_data || {};
+      const val = p.estimated_value || p.market_price || p.price || p.avg_price || obj.estimated_value || obj.market_price || obj.price;
 
-      if (val && !isNaN(val)) return Number(val);
+      if (val && !isNaN(val) && Number(val) > 0) return Number(val);
 
       for (const k of Object.keys(obj)) {
         if (typeof obj[k] === "object" && obj[k] !== null) {
@@ -316,25 +320,13 @@ async function verifyPriceWithCardSight(card) {
       };
     }
 
-    // Fallback to Gemini AI if CardSight has no price comps indexed for this query
-    console.info("CardSight /v1/pricing returned no comps for this query. Requesting Gemini AI estimation...");
-    const pricePrompt = `Estimate realistic market value in AUD for: ${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''} ${card.grade ? 'Grade: ' + card.grade : 'Raw'}. Return ONLY the numeric AUD dollar value.`;
-    
-    const geminiPriceText = await callGeminiAi(pricePrompt);
-    const numericMatch = String(geminiPriceText).match(/\d+(\.\d+)?/);
-
-    if (numericMatch) {
-      return {
-        success: true,
-        priceAud: parseFloat(numericMatch[0]),
-        source: "Gemini Estimated",
-      };
-    }
-
-    throw new Error("No live pricing available from CardSight or Gemini.");
+    return {
+      success: false,
+      error: "CardSight identified the card but has no active price comps in its database.",
+    };
   } catch (err) {
-    console.warn("CardSight price verification notice:", err);
-    return { success: false, error: err.message };
+    console.warn("CardSight price verification notice:", err.message || err);
+    return { success: false, error: err.message || "Price verification unavailable." };
   }
 }
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
