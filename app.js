@@ -147,7 +147,7 @@ function base64ToBlob(base64Data, mimeType = "image/jpeg") {
 async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fallbackPrompt = "") {
   // 1. Primary Engine: Gemini AI (Fast, accurate OCR reading for single cards & lot photos)
   try {
-    const compressedForGemini = await compressImageForApi(base64Image, 1200, 0.75);
+    const compressedForGemini = await compressImageForApi(base64Image, 1000, 0.70);
     const cleanGeminiBase64 = compressedForGemini.includes(",") ? compressedForGemini.split(",")[1] : compressedForGemini;
 
     const rawGeminiText = await callGeminiAi(fallbackPrompt || LOT_SCANNER_PROMPT, cleanGeminiBase64, mediaType);
@@ -169,13 +169,14 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
         source: "Gemini AI", 
         cards: validCards.map(c => ({
           player_name: c.player_name || c.player || c.title || "Unknown Card",
-          sport: c.sport || "MLB",
+          sport: c.sport || "NBA",
           year: c.year || "",
           set_name: c.set_name || c.set || "",
           card_number: c.card_number || c.cardNumber || "",
           parallel_or_variant: c.parallel_or_variant || c.parallel || "Base",
           is_graded: Boolean(c.is_graded || c.grade),
           grade: c.grade || null,
+          grading_company: c.grading_company || (c.grade ? String(c.grade).split(" ")[0] : null),
           ebay_search_query: c.ebay_search_query || `${c.player_name || c.player || ''} ${c.set_name || c.set || ''}`,
           estimated_value_aud: c.estimated_value_aud || convertUsdToAud(c.estimated_value || c.price),
           value_confidence: "High"
@@ -217,13 +218,14 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
         if (playerCandidate && !["PSA", "BGS", "SGC"].includes(String(playerCandidate).toUpperCase())) {
           return {
             player_name: playerCandidate,
-            sport: obj.sport || "MLB",
+            sport: obj.sport || "NBA",
             year: obj.year || "",
             set_name: set || "",
             card_number: obj.card_number || "",
             parallel_or_variant: obj.parallel || "Base",
             is_graded: Boolean(obj.grade),
             grade: obj.grade || null,
+            grading_company: obj.grading_company || null,
             ebay_search_query: `${playerCandidate} ${set || ''}`.trim(),
             estimated_value_aud: convertUsdToAud(price),
             value_confidence: "High",
@@ -246,18 +248,17 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       throw new Error("CardSight backup also returned no card details.");
     } catch (cardSightErr) {
       console.error("Both engines failed to identify the card photo:", cardSightErr);
-      throw cardSightErr;
+      throw new Error("Rate limit reached or clear card features not detected. Please wait 10 seconds and try again.");
     }
   }
 }
-// Dedicated CardSight Price Verification Helper
+
+// Dedicated CardSight Price Verification Helper with Gemini Fallback
 async function verifyPriceWithCardSight(card) {
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
-
-    // Use the card's original base64 photo if available
     const imageSource = card._rawBase64 || card.previewUrl;
-    
+
     if (!imageSource) {
       throw new Error("No image data available on this card row to verify.");
     }
@@ -320,6 +321,28 @@ async function verifyPriceWithCardSight(card) {
       };
     }
 
+    // 2. Fallback: If CardSight has no comps for this specific card, ask Gemini AI to estimate
+    console.info("CardSight returned no pricing comps. Fallback to Gemini valuation estimate...");
+    const pricePrompt = `Estimate the realistic market value in AUD for this card: ${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''} ${card.grade ? 'Grade: ' + card.grade : 'Raw'}. Return ONLY a JSON object: {"estimated_value_aud": 120.00}`;
+
+    const geminiPriceText = await callGeminiAi(pricePrompt);
+    let parsedPrice = null;
+    try {
+      const cleanJson = String(geminiPriceText).replaceAll("```json", "").replaceAll("```", "").trim();
+      parsedPrice = JSON.parse(cleanJson);
+    } catch (e) {
+      const numericMatch = String(geminiPriceText).match(/\d+(\.\d+)?/);
+      if (numericMatch) parsedPrice = { estimated_value_aud: parseFloat(numericMatch[0]) };
+    }
+
+    if (parsedPrice && parsedPrice.estimated_value_aud) {
+      return {
+        success: true,
+        priceAud: parsedPrice.estimated_value_aud,
+        source: "Gemini Estimated",
+      };
+    }
+
     return {
       success: false,
       error: "CardSight identified the card but has no active price comps in its database.",
@@ -329,6 +352,7 @@ async function verifyPriceWithCardSight(card) {
     return { success: false, error: err.message || "Price verification unavailable." };
   }
 }
+
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 3000) {
   if (!supabaseClient) {
@@ -351,7 +375,6 @@ async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jp
       });
 
       if (error) {
-        // If rate limited, throw to enter exponential backoff delay
         throw error;
       }
 
@@ -367,7 +390,6 @@ async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jp
     }
   }
 }
-
 // ===== Formula engine, ported 1:1 from the user's Excel model =====
 async function generateAiMonthlyTargets(cards = [], pokemonCards = []) {
   const sportsSummary = [...(cards || []), ...(pokemonCards || [])]
