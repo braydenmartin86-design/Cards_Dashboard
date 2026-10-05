@@ -41,7 +41,29 @@
     window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFndXl2eGVkbGp5aHRsbHJjdnZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4NzEzNjAsImV4cCI6MjEwMjQ0NzM2MH0.IhLG61DKCneb0gYLgl70bjbGpc9yHZf4O-rqHNAIbGs";
   </script>
 
-  <!-- Main Application Logic -->
-  <script type="text/babel" src="./app.js"></script>
+  <!-- Main Application Logic: classic scripts sharing one global scope, so ORDER MATTERS.
+       Core first, then tabs, then the app shell; main.js mounts the app and must be last. -->
+  <script type="text/babel" src="./js/lib.js"></script>
+  <script type="text/babel" src="./js/api.js"></script>
+  <script type="text/babel" src="./js/constants.js"></script>
+  <script type="text/babel" src="./js/engine.js"></script>
+  <script type="text/babel" src="./js/storage.js"></script>
+  <script type="text/babel" src="./js/shared.js"></script>
+  <script type="text/babel" src="./js/tabs/home.js"></script>
+  <script type="text/babel" src="./js/tabs/portfolio.js"></script>
+  <script type="text/babel" src="./js/tabs/sales.js"></script>
+  <script type="text/babel" src="./js/tabs/box-breaks.js"></script>
+  <script type="text/babel" src="./js/tabs/grade-check.js"></script>
+  <script type="text/babel" src="./js/tabs/grading-tracker.js"></script>
+  <script type="text/babel" src="./js/tabs/lot-scanner.js"></script>
+  <script type="text/babel" src="./js/tabs/targets.js"></script>
+  <script type="text/babel" src="./js/tabs/sell-playbook.js"></script>
+  <script type="text/babel" src="./js/tabs/tax-summary.js"></script>
+  <script type="text/babel" src="./js/tabs/content.js"></script>
+  <script type="text/babel" src="./js/tabs/buy-evaluator.js"></script>
+  <script type="text/babel" src="./js/tabs/tips.js"></script>
+  <script type="text/babel" src="./js/sync.js"></script>
+  <script type="text/babel" src="./js/app.js"></script>
+  <script type="text/babel" src="./js/main.js"></script>
 </body>
 </html>
