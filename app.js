@@ -250,6 +250,51 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
     }
   }
 }
+// Dedicated CardSight Price Verification Helper
+async function verifyPriceWithCardSight(card) {
+  try {
+    const anonKey = window.SUPABASE_ANON_KEY;
+    const searchQuery = card.ebay_search_query || `${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''}`.trim();
+
+    // Call Edge Proxy using text search endpoint or single card identify endpoint
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": anonKey,
+        "Authorization": `Bearer ${anonKey}`,
+      },
+      body: JSON.stringify({
+        query: searchQuery,
+        endpoint: "/search/card",
+      }),
+    });
+
+    if (!response.ok) throw new Error(`CardSight Proxy returned ${response.status}`);
+
+    const data = await response.json();
+    const result = data.data || data.results || data.cards || (Array.isArray(data) ? data : [data]);
+    
+    // Extract raw USD pricing from top result
+    const topMatch = Array.isArray(result) ? result[0] : result;
+    const rawPriceUsd = topMatch?.estimated_value || topMatch?.market_price || topMatch?.pricing?.market_price || null;
+
+    if (!rawPriceUsd) {
+      throw new Error("No live pricing comps found for this search query.");
+    }
+
+    const priceAud = convertUsdToAud(rawPriceUsd);
+    return {
+      success: true,
+      priceAud: priceAud,
+      priceUsd: rawPriceUsd,
+      details: topMatch,
+    };
+  } catch (err) {
+    console.warn("CardSight price verification failed:", err);
+    return { success: false, error: err.message };
+  }
+}
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 2000) {
   if (!supabaseClient) {
@@ -4044,6 +4089,7 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   const [saveFlash, setSaveFlash] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [lotLink, setLotLink] = useState("");
+  const [verifyingIndex, setVerifyingIndex] = useState(null);
 
   function saveScan() {
     if (!results || results.length === 0) return;
@@ -4115,46 +4161,66 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setImages((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-// Inside LotScanner:
+  async function scanLot() {
+    if (images.length === 0) return;
+    setLoadedScanId(null);
+    setSaveName("");
+    setLotLink("");
+    setScanning(true);
+    setError(null);
+    setResults(null);
+    setAddedState({});
 
-async function scanLot() {
-  if (images.length === 0) return;
-  setLoadedScanId(null);
-  setSaveName("");
-  setLotLink("");
-  setScanning(true);
-  setError(null);
-  setResults(null);
-  setAddedState({});
+    try {
+      const firstImage = images[0];
+      const engineResponse = await callDualEngineIdentify(
+        firstImage.base64, 
+        firstImage.mediaType, 
+        LOT_SCANNER_PROMPT
+      );
 
-  try {
-    const firstImage = images[0];
-    const engineResponse = await callDualEngineIdentify(
-      firstImage.base64, 
-      firstImage.mediaType, 
-      LOT_SCANNER_PROMPT
-    );
+      const taggedCards = engineResponse.cards.map((c) => ({
+        ...c,
+        player_name: c.player_name || c.player || "Unknown Player",
+        _engineSource: engineResponse.source,
+      }));
 
-    // Attach engine source tag & normalize player name field for compatibility
-    const taggedCards = engineResponse.cards.map((c) => ({
-      ...c,
-      player_name: c.player_name || c.player || "Unknown Player",
-      _engineSource: engineResponse.source,
-    }));
-
-    setResults(taggedCards);
-  } catch (e) {
-    console.error(e);
-    setError("Couldn't identify the cards in that photo — try a clearer shot.");
-  } finally {
-    setScanning(false);
+      setResults(taggedCards);
+    } catch (e) {
+      console.error(e);
+      setError("Couldn't identify the cards in that photo — try a clearer shot.");
+    } finally {
+      setScanning(false);
+    }
   }
-}
 
   function updateCardValue(idx, newValue) {
     setResults((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, estimated_value_aud: newValue === "" ? null : Number(newValue), value_confidence: "Manual" } : c))
     );
+  }
+
+  async function handleVerifyCard(index, card) {
+    setVerifyingIndex(index);
+
+    const res = await verifyPriceWithCardSight(card);
+
+    if (res.success && res.priceAud) {
+      setResults((prevResults) => {
+        const updated = [...prevResults];
+        updated[index] = {
+          ...updated[index],
+          estimated_value_aud: res.priceAud,
+          _priceSource: "CardSight Verified",
+          value_confidence: "Verified High",
+        };
+        return updated;
+      });
+    } else {
+      alert(`CardSight Valuation: ${res.error || "Could not find live comp price."}`);
+    }
+
+    setVerifyingIndex(null);
   }
 
   function addToBuyEvaluator(card, idx) {
@@ -4334,6 +4400,8 @@ async function scanLot() {
                   key={i}
                   card={card}
                   added={addedState[i]}
+                  isVerifying={verifyingIndex === i}
+                  onVerify={() => handleVerifyCard(i, card)}
                   onAddBuy={() => addToBuyEvaluator(card, i)}
                   onAddTarget={() => addToMonthlyTargets(card, i)}
                   onValueChange={(v) => updateCardValue(i, v)}
@@ -4347,7 +4415,7 @@ async function scanLot() {
   );
 }
 
-function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
+function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTarget, onValueChange }) {
   const [copyState, setCopyState] = useState("idle");
   const ebayUrl = card.ebay_search_query ? `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(card.ebay_search_query)}` : null;
   const point130Url = card.ebay_search_query ? `https://130point.com/sales/?search=${encodeURIComponent(card.ebay_search_query)}` : null;
@@ -4360,24 +4428,40 @@ function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
 
   return (
     <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22" }}>
-      {/* ⚡ STEP 3 BADGE ADDED HERE */}
-      {card._engineSource && (
-        <span
-          className="mono"
-          style={{
-            fontSize: 9.5,
-            padding: "2px 6px",
-            borderRadius: 4,
-            background: card._engineSource === "CardSight AI" ? "#2FA89A22" : "#C9A22722",
-            color: card._engineSource === "CardSight AI" ? "#2FA89A" : "#C9A227",
-            border: `1px solid ${card._engineSource === "CardSight AI" ? "#2FA89A40" : "#C9A22740"}`,
-            display: "inline-block",
-            marginBottom: 8,
-          }}
-        >
-          ⚡ Powered by {card._engineSource}
-        </span>
-      )}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+        {card._engineSource && (
+          <span
+            className="mono"
+            style={{
+              fontSize: 9.5,
+              padding: "2px 6px",
+              borderRadius: 4,
+              background: card._engineSource.includes("CardSight") ? "#2FA89A22" : "#C9A22722",
+              color: card._engineSource.includes("CardSight") ? "#2FA89A" : "#C9A227",
+              border: `1px solid ${card._engineSource.includes("CardSight") ? "#2FA89A40" : "#C9A22740"}`,
+              display: "inline-block",
+            }}
+          >
+            ⚡ Powered by {card._engineSource}
+          </span>
+        )}
+        {card._priceSource && (
+          <span
+            className="mono"
+            style={{
+              fontSize: 9.5,
+              padding: "2px 6px",
+              borderRadius: 4,
+              background: "#4E8B6B22",
+              color: "#4E8B6B",
+              border: "1px solid #4E8B6B40",
+              display: "inline-block",
+            }}
+          >
+            ✓ {card._priceSource}
+          </span>
+        )}
+      </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div>
@@ -4413,6 +4497,15 @@ function LotScannerCard({ card, added, onAddBuy, onAddTarget, onValueChange }) {
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <button
+          className="btnSecondary"
+          style={{ fontSize: 11.5, padding: "5px 10px", borderColor: "#2FA89A66", color: "#2FA89A" }}
+          onClick={onVerify}
+          disabled={isVerifying}
+        >
+          {isVerifying ? "Verifying..." : "⚡ Verify Price (CardSight)"}
+        </button>
+
         <button className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }} onClick={copy}>
           {copyState === "copied" ? <Check size={12} /> : <Copy size={12} />} {copyState === "copied" ? "Copied" : "Copy search"}
         </button>
