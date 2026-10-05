@@ -67,8 +67,10 @@ function ContentCreationTab({ cards, contentPlan, setContentPlan }) {
   // ... rest of ContentCreationTab code ...
 }
 // ===== Dual-Engine API Configuration =====
-const CARDSIGHT_API_KEY = "YOUR_CARDSIGHT_API_KEY"; // Insert your free key from cardsight.ai
-const CARDSIGHT_BASE_URL = "https://api.cardsight.ai/v1";
+// Note: Store SUPABASE_URL and SUPABASE_ANON_KEY in window or global state if already set, or define here
+const SUPABASE_URL = window.SUPABASE_URL || "https://your-project-ref.supabase.co"; 
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "your-supabase-anon-key"; 
+const CARDSIGHT_API_KEY = "YOUR_CARDSIGHT_API_KEY"; // Optional if stored in Supabase Secrets
 const USD_TO_AUD_RATE = 1.44; // Currency conversion multiplier
 
 // Central Currency Converter
@@ -77,27 +79,28 @@ function convertUsdToAud(usdAmount) {
   return Math.round(Number(usdAmount) * USD_TO_AUD_RATE * 100) / 100;
 }
 
-// Unified Dual-Engine Call (CardSight AI Primary -> Gemini AI Fallback)
+// Unified Dual-Engine Call via Supabase Edge Function Proxy (CardSight AI Primary -> Gemini AI Fallback)
 async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fallbackPrompt = "") {
-  // Attempt Primary Call via CardSight AI
   try {
-    if (!CARDSIGHT_API_KEY) throw new Error("No CardSight API Key provided");
-
-    const response = await fetch(`${CARDSIGHT_BASE_URL}/identify/card`, {
+    // Call Supabase Edge Function proxy (bypasses browser CORS restriction)
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": CARDSIGHT_API_KEY,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({
         image: `data:${mediaType};base64,${base64Image}`,
-        include_pricing: true,
+        endpoint: "/identify/card",
+        api_key: typeof CARDSIGHT_API_KEY !== "undefined" ? CARDSIGHT_API_KEY : null,
       }),
     });
 
-    if (!response.ok) throw new Error(`CardSight status ${response.status}`);
+    if (!response.ok) throw new Error(`Supabase Edge Proxy status ${response.status}`);
 
     const data = await response.json();
+    if (data.error) throw new Error(data.error);
+
     const rawCards = Array.isArray(data.cards) ? data.cards : [data];
 
     // Convert returned pricing to AUD
@@ -110,14 +113,14 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       parallel_or_variant: c.parallel || "Base",
       is_graded: Boolean(c.is_graded),
       grade: c.grade || null,
-      ebay_search_query: c.ebay_search_query || `${c.player_name} ${c.set_name}`,
+      ebay_search_query: c.ebay_search_query || `${c.player_name || ''} ${c.set_name || ''}`,
       estimated_value_aud: convertUsdToAud(c.estimated_value || c.price),
       value_confidence: "High",
     }));
 
     return { source: "CardSight AI", cards: convertedCards };
   } catch (err) {
-    console.warn("CardSight AI limit reached or error. Falling back to Gemini...", err);
+    console.warn("CardSight AI proxy failed. Falling back to Gemini...", err);
 
     // Fallback to Gemini AI
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
