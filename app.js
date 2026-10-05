@@ -30,15 +30,19 @@ const Line = RC.Line || (() => null);
 const ResponsiveContainer = RC.ResponsiveContainer || (({ children }) => children);
 const YAxis = RC.YAxis || (() => null);
 
-// Supabase Init
+// Explicit Supabase Constants & Initialization
+window.SUPABASE_URL = "https://aguyvxedljyhtllrcvvf.supabase.co";
+window.SUPABASE_ANON_KEY = "c4593ac09a3a12df469ac2cb865bd48bc30f1d6088e4147ba9fb8352bd65ca3a";
+
 let supabaseClient = null;
 try {
-  if (window.supabase && window.SUPABASE_URL && window.SUPABASE_URL !== "https://your-supabase-url.supabase.co") {
+  if (window.supabase) {
     supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   }
 } catch (e) {
   console.warn("Supabase init fallback:", e);
 }
+
 // 1. Helper function for AI Content Generation
 async function generateContentIdeasFromPortfolio(cards, currentIdeasCount = 4) {
   const sellNowCards = cards.filter(c => ["Sell PSA 10", "Sell PSA 9", "Sell Raw First"].includes(c.sellDecision));
@@ -47,7 +51,7 @@ async function generateContentIdeasFromPortfolio(cards, currentIdeasCount = 4) {
   const prompt = `
 Generate ${currentIdeasCount} short, high-engagement social media content ideas for a sports card trader based on this portfolio data:
 - Cards ready to sell now: ${sellNowCards.map(c => `${c.player} (${c.sport})`).join(", ") || "Various"}
-- High profit cards: ${topProfits.map(c => `${c.player} (Est Profit: $${c.expectedListProfit})`).join(", ")}
+- High profit cards: ${topProfits.map(c => `${c.player} (Est Profit:$${c.expectedListProfit})`).join(", ")}
 
 Return ONLY a valid JSON array of objects with keys: "id" (unique string), "title", "angle", "suggestedCard".
 `;
@@ -66,9 +70,10 @@ Return ONLY a valid JSON array of objects with keys: "id" (unique string), "titl
 function ContentCreationTab({ cards, contentPlan, setContentPlan }) {
   // ... rest of ContentCreationTab code ...
 }
+
 // ===== Dual-Engine API Configuration =====
-const SUPABASE_URL = "https://aguyvxedljyhtllrcvvf.supabase.co"; 
-const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY; // Pulled from your existing Supabase init
+const SUPABASE_URL = window.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
 const USD_TO_AUD_RATE = 1.44; // Central USD to AUD conversion multiplier
 
 // Central Currency Converter
@@ -79,8 +84,7 @@ function convertUsdToAud(usdAmount) {
 
 async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fallbackPrompt = "") {
   try {
-    // Safely get the anon key from client or global scope
-    const anonKey = window.SUPABASE_ANON_KEY || (supabaseClient && supabaseClient.supabaseKey);
+    const anonKey = window.SUPABASE_ANON_KEY;
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
@@ -134,6 +138,7 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
     return { source: "Gemini AI (Fallback)", cards: finalArray };
   }
 }
+
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 3, delay = 2000) {
   if (!supabaseClient) {
