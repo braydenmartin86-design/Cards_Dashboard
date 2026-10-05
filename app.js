@@ -255,7 +255,6 @@ async function verifyPriceWithCardSight(card) {
   try {
     const anonKey = window.SUPABASE_ANON_KEY;
 
-    // Use the card's preview/base64 image or fall back to client compression
     if (!card._rawBase64 && !card.previewUrl) {
       throw new Error("No image data available for this card to verify.");
     }
@@ -282,7 +281,7 @@ async function verifyPriceWithCardSight(card) {
     const wrapper = await response.json();
     const data = wrapper.raw || wrapper;
 
-    // Helper to extract pricing across nested CardSight objects
+    // Deep search helper for pricing
     function findPrice(obj) {
       if (!obj || typeof obj !== "object") return null;
 
@@ -302,18 +301,34 @@ async function verifyPriceWithCardSight(card) {
 
     const rawPriceUsd = findPrice(data);
 
-    if (!rawPriceUsd) {
-      throw new Error("CardSight identified the card image but returned no pricing comps.");
+    if (rawPriceUsd) {
+      const priceAud = convertUsdToAud(rawPriceUsd);
+      return {
+        success: true,
+        priceAud: priceAud,
+        priceUsd: rawPriceUsd,
+        source: "CardSight Verified",
+      };
     }
 
-    const priceAud = convertUsdToAud(rawPriceUsd);
-    return {
-      success: true,
-      priceAud: priceAud,
-      priceUsd: rawPriceUsd,
-    };
+    // ⚡ Fallback: If CardSight has no comps, ask Gemini AI to estimate based on exact card details
+    console.info("CardSight returned no pricing comps. Requesting Gemini valuation estimate...");
+    const pricePrompt = `Estimate the realistic market value in AUD for this sports card: ${card.year || ''} ${card.set_name || ''} ${card.player_name || ''} ${card.parallel_or_variant || ''} ${card.grade ? 'Grade: ' + card.grade : 'Raw'}. Return ONLY the numeric dollar value (e.g. 150.00).`;
+    
+    const geminiPriceText = await callGeminiAi(pricePrompt);
+    const numericMatch = String(geminiPriceText).match(/\d+(\.\d+)?/);
+
+    if (numericMatch) {
+      return {
+        success: true,
+        priceAud: parseFloat(numericMatch[0]),
+        source: "Gemini Estimated",
+      };
+    }
+
+    throw new Error("No recent price comps found in CardSight database.");
   } catch (err) {
-    console.warn("CardSight price verification failed:", err);
+    console.warn("CardSight price verification notice:", err);
     return { success: false, error: err.message };
   }
 }
