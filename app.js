@@ -111,63 +111,53 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
     }
 
-    // Inspect and unpack all potential CardSight JSON wrapper shapes
-    let rawCards = [];
-    if (Array.isArray(data.cards)) rawCards = data.cards;
-    else if (Array.isArray(data.detected_cards)) rawCards = data.detected_cards;
-    else if (Array.isArray(data.results)) rawCards = data.results;
-    else if (Array.isArray(data.matches)) rawCards = data.matches;
-    else if (data.data) rawCards = Array.isArray(data.data) ? data.data : [data.data];
-    else if (data.card) rawCards = [data.card];
-    else if (typeof data === "object") rawCards = [data];
+    // Unpack CardSight official schema: result.data.detections or result.detections
+    const rootData = data.data || data;
+    let detections = rootData.detections || rootData.cards || rootData.results || [];
+    
+    // Fallback if data itself is a single detection object
+    if (!Array.isArray(detections) && typeof detections === "object") {
+      detections = [detections];
+    }
 
-    // Deep object field resolver helper
-    const resolveField = (obj, ...keys) => {
-      for (const key of keys) {
-        if (obj && obj[key] != null) return obj[key];
-      }
-      return null;
-    };
+    if (detections.length === 0 && (rootData.card || rootData.name)) {
+      detections = [rootData];
+    }
 
-    const convertedCards = rawCards.map((item) => {
-      // Unpack nested objects if present (e.g., item.card, item.details, item.metadata)
-      const details = item.card || item.details || item.metadata || item;
-      const pricing = item.pricing || item.market_data || details.pricing || {};
+    const convertedCards = detections.map((det) => {
+      const c = det.card || det.details || det;
+      const slab = det.slab || {};
+      const pricing = det.pricing || c.pricing || {};
 
-      const playerName = resolveField(details, "player_name", "player", "name", "title", "subject") || 
-                         resolveField(item, "player_name", "player", "name", "title") || 
-                         "Unknown Card";
+      const playerName = c.name || c.player_name || c.player || det.title || "Unknown Card";
+      const rawPrice = pricing.estimated_value || pricing.market_price || c.price || null;
 
-      const rawPrice = resolveField(pricing, "market_price", "estimated_value", "price", "avg_price") || 
-                       resolveField(details, "estimated_value", "price") || 
-                       resolveField(item, "estimated_value", "price");
-
-      const sport = resolveField(details, "sport", "category") || resolveField(item, "sport") || "MLB";
-      const year = resolveField(details, "year", "release_year") || resolveField(item, "year") || "";
-      const setName = resolveField(details, "set_name", "set", "release") || resolveField(item, "set_name", "set") || "";
-      const cardNumber = resolveField(details, "card_number", "cardNumber", "number") || resolveField(item, "card_number") || "";
-      const parallel = resolveField(details, "parallel", "variant", "parallel_or_variant") || resolveField(item, "parallel") || "Base";
-      const isGraded = Boolean(resolveField(details, "is_graded", "isGraded", "grade") || resolveField(item, "is_graded"));
-      const grade = resolveField(details, "grade") || resolveField(item, "grade") || null;
+      // Detect if graded via slab object or card boolean
+      const isGraded = Boolean(slab.company || c.is_graded || c.grade);
+      const gradeString = slab.company && slab.grade ? `${slab.company} ${slab.grade}` : (c.grade || null);
 
       return {
         player_name: playerName,
-        sport: sport,
-        year: year,
-        set_name: setName,
-        card_number: cardNumber,
-        parallel_or_variant: parallel,
+        sport: c.sport || "NBA",
+        year: c.year || "",
+        set_name: c.set || c.set_name || "",
+        card_number: c.card_number || c.cardNumber || "",
+        parallel_or_variant: c.parallel || c.variant || "Base",
         is_graded: isGraded,
-        grade: grade,
-        ebay_search_query: item.ebay_search_query || `${playerName !== "Unknown Card" ? playerName : ""} ${setName}`.trim(),
+        grade: gradeString,
+        ebay_search_query: `${c.year || ''} ${c.set || ''} ${playerName} ${c.parallel || ''}`.trim(),
         estimated_value_aud: convertUsdToAud(rawPrice),
-        value_confidence: playerName !== "Unknown Card" ? "High" : "Low",
+        value_confidence: det.confidence && det.confidence > 0.8 ? "High" : "Medium",
       };
-    });
+    }).filter((card) => card.player_name && card.player_name !== "Unknown Card");
+
+    if (convertedCards.length === 0) {
+      throw new Error("No valid card detections found in CardSight payload");
+    }
 
     return { source: "CardSight AI", cards: convertedCards };
   } catch (err) {
-    console.warn("CardSight AI proxy failed. Switching to Gemini Fallback...", err);
+    console.warn("CardSight AI extraction issue. Falling back to Gemini...", err);
 
     // Fallback to Gemini AI
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
