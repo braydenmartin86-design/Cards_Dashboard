@@ -91,7 +91,6 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       cleanBase64 = cleanBase64.split(",")[1];
     }
 
-    // Call CardSight API
     const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
       method: "POST",
       headers: {
@@ -112,46 +111,65 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
       throw new Error(data.error || `Supabase Edge Proxy status ${response.status}`);
     }
 
-    // Extract card array from various CardSight response shapes
+    // Inspect and unpack all potential CardSight JSON wrapper shapes
     let rawCards = [];
     if (Array.isArray(data.cards)) rawCards = data.cards;
     else if (Array.isArray(data.detected_cards)) rawCards = data.detected_cards;
     else if (Array.isArray(data.results)) rawCards = data.results;
-    else if (data.card || data.title || data.player_name) rawCards = [data.card || data];
+    else if (Array.isArray(data.matches)) rawCards = data.matches;
+    else if (data.data) rawCards = Array.isArray(data.data) ? data.data : [data.data];
+    else if (data.card) rawCards = [data.card];
+    else if (typeof data === "object") rawCards = [data];
 
-    // Map CardSight fields reliably
-    const convertedCards = rawCards.map((c) => {
-      const details = c.details || c.card_details || c;
-      const pricing = c.pricing || c.market_data || {};
-      
-      const playerName = details.player_name || details.player || c.title || details.name || null;
-      const rawPrice = pricing.market_price || pricing.estimated_value || c.estimated_value || c.price || null;
+    // Deep object field resolver helper
+    const resolveField = (obj, ...keys) => {
+      for (const key of keys) {
+        if (obj && obj[key] != null) return obj[key];
+      }
+      return null;
+    };
+
+    const convertedCards = rawCards.map((item) => {
+      // Unpack nested objects if present (e.g., item.card, item.details, item.metadata)
+      const details = item.card || item.details || item.metadata || item;
+      const pricing = item.pricing || item.market_data || details.pricing || {};
+
+      const playerName = resolveField(details, "player_name", "player", "name", "title", "subject") || 
+                         resolveField(item, "player_name", "player", "name", "title") || 
+                         "Unknown Card";
+
+      const rawPrice = resolveField(pricing, "market_price", "estimated_value", "price", "avg_price") || 
+                       resolveField(details, "estimated_value", "price") || 
+                       resolveField(item, "estimated_value", "price");
+
+      const sport = resolveField(details, "sport", "category") || resolveField(item, "sport") || "MLB";
+      const year = resolveField(details, "year", "release_year") || resolveField(item, "year") || "";
+      const setName = resolveField(details, "set_name", "set", "release") || resolveField(item, "set_name", "set") || "";
+      const cardNumber = resolveField(details, "card_number", "cardNumber", "number") || resolveField(item, "card_number") || "";
+      const parallel = resolveField(details, "parallel", "variant", "parallel_or_variant") || resolveField(item, "parallel") || "Base";
+      const isGraded = Boolean(resolveField(details, "is_graded", "isGraded", "grade") || resolveField(item, "is_graded"));
+      const grade = resolveField(details, "grade") || resolveField(item, "grade") || null;
 
       return {
         player_name: playerName,
-        sport: details.sport || "MLB",
-        year: details.year || "",
-        set_name: details.set_name || details.set || "",
-        card_number: details.card_number || details.cardNumber || "",
-        parallel_or_variant: details.parallel || details.variant || "Base",
-        is_graded: Boolean(details.is_graded || details.isGraded || details.grade),
-        grade: details.grade || null,
-        ebay_search_query: c.ebay_search_query || `${playerName || ''} ${details.set_name || ''}`,
+        sport: sport,
+        year: year,
+        set_name: setName,
+        card_number: cardNumber,
+        parallel_or_variant: parallel,
+        is_graded: isGraded,
+        grade: grade,
+        ebay_search_query: item.ebay_search_query || `${playerName !== "Unknown Card" ? playerName : ""} ${setName}`.trim(),
         estimated_value_aud: convertUsdToAud(rawPrice),
-        value_confidence: playerName ? "High" : "Low",
+        value_confidence: playerName !== "Unknown Card" ? "High" : "Low",
       };
-    }).filter(c => c.player_name && c.player_name !== "Unknown Card");
-
-    // If CardSight failed to recognize cards in a multi-card lot, trigger Gemini fallback
-    if (convertedCards.length === 0) {
-      throw new Error("CardSight returned no identifiable cards for this lot layout.");
-    }
+    });
 
     return { source: "CardSight AI", cards: convertedCards };
   } catch (err) {
-    console.warn("CardSight AI could not parse lot image. Triggering Gemini Fallback...", err);
+    console.warn("CardSight AI proxy failed. Switching to Gemini Fallback...", err);
 
-    // Fallback to Gemini AI (which excels at multi-card lot images)
+    // Fallback to Gemini AI
     const rawGeminiText = await callGeminiAi(fallbackPrompt, base64Image, mediaType);
     let parsedGemini = [];
     try {
