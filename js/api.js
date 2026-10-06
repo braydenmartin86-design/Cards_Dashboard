@@ -691,13 +691,69 @@ async function fetchPriceTrend(cardId, { parallelId, gradeId, graded } = {}) {
 
 // Plain-English question to CardSight's AI, with earlier turns for follow-ups.
 async function askCardSight(question, history = []) {
+  // CardSight's AI is unreliable on "what has X sold for" questions (it often gives up or can't
+  // find the card), so those are answered straight from its sold listings when possible.
+  // A follow-up like "What about PSA 10?" after a price question is a price question too.
+  const followUpOnPrice = /\b(psa|bgs|sgc|cgc|tag|raw|graded|ungraded|gem)\b/i.test(question) && history.some((t) => t.role === "user" && PRICE_QUESTION.test(t.content));
+  const isPriceQuestion = PRICE_QUESTION.test(question) || followUpOnPrice;
+  if (isPriceQuestion) {
+    try {
+      const comps = await answerFromSoldComps(question, history);
+      if (comps && comps.foundSales) return comps.text;
+    } catch (e) {
+      console.warn("Sold-comps answer failed, asking CardSight's AI:", e.message || e);
+    }
+  }
   const data = await callCardSightProxy({
     endpoint: "/ai/query",
     method: "POST",
     body: { query: question, conversationHistory: history },
   });
   if (!data.answer) throw new Error(data.error || "CardSight didn't return an answer.");
+  if (!CARDSIGHT_AI_GAVE_UP.test(data.answer)) return data.answer;
+  // CardSight's AI often runs out of steps on grade-specific questions. If the question is
+  // about one card, answer it from CardSight's sold listings instead.
+  if (!isPriceQuestion) {
+    try {
+      const fallback = await answerFromSoldComps(question, history);
+      if (fallback) return fallback.text;
+    } catch (e) {
+      console.warn("Sold-comps fallback failed:", e.message || e);
+    }
+  }
   return data.answer;
+}
+
+const CARDSIGHT_AI_GAVE_UP = /more iterations|try a more specific|technical difficult|currently unavailable/i;
+const PRICE_QUESTION = /\b(sold|sell|sells|selling|price|prices|priced|worth|value|comps?|going for|cost)\b/i;
+
+// Answers a question about one card from CardSight's sold listings. Returns null when the
+// question isn't about a specific card, else { text, foundSales }.
+async function answerFromSoldComps(question, history = []) {
+  const earlier = history.filter((t) => t.role === "user").slice(-2).map((t) => t.content);
+  const context = earlier.length ? `Earlier questions in this conversation (for follow-ups like "what about PSA 10?"): ${earlier.map((q) => `"${q}"`).join(", ")}\n` : "";
+  const prompt = `${context}Extract the trading card this question is about. Question: "${question}"
+Return ONLY JSON: {"is_specific_card": true|false, "player_name": "", "year": "", "set_name": "", "parallel_or_variant": "Base", "card_number": "", "grade": "" , "sport": ""}
+- set_name without the year or brand words like "Panini" (e.g. "Prizm", "Obsidian Flames").
+- grade like "PSA 10" or "SGC 9.5", empty if not mentioned. sport "Pokémon" for Pokémon cards.
+- is_specific_card is false for general market questions.`;
+  const text = String(await callGeminiAi(prompt)).replace(/```json|```/g, "").trim();
+  const card = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  if (!card.is_specific_card || !card.player_name) return null;
+
+  const tiers = card.grade
+    ? [{ key: "own", grade: card.grade }]
+    : [{ key: "raw", grade: null }, { key: "psa9", grade: "PSA 9" }, { key: "psa10", grade: "PSA 10" }];
+  const results = await findCompsForTiers(card, tiers);
+  const name = [card.year, card.set_name, card.player_name, /^base$/i.test(card.parallel_or_variant || "") ? "" : card.parallel_or_variant, card.card_number ? `#${String(card.card_number).replace(/^#/, "")}` : ""]
+    .filter(Boolean)
+    .join(" ");
+  const lines = [`Most recent sold comps from CardSight's sales data for ${name}:`, ""];
+  for (const r of results) {
+    lines.push(`${r.grade || "Raw"}: ${r.priceAud != null ? `avg A$${r.priceAud.toFixed(2)} from the last ${r.sales.length} sale${r.sales.length === 1 ? "" : "s"}` : "no matching sales found"}${r.priceAud != null && !r.highConfidence ? ` (low confidence — ${r.reasons.join(", ")})` : ""}`);
+    for (const s of r.sales) lines.push(`  • ${new Date(s.date).toLocaleDateString()} · A$${convertUsdToAud(s.priceUsd).toFixed(2)} · ${s.title}`);
+  }
+  return { text: lines.join("\n"), foundSales: results.some((r) => r.sales.length > 0) };
 }
 
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing

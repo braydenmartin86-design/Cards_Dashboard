@@ -623,9 +623,13 @@ function CompUpdater({ card, onUpdate }) {
   const [trend, setTrend] = useState(null);
   const [trendNote, setTrendNote] = useState(null);
   const [applied, setApplied] = useState(false);
+  // Per tier: { use, ticked: [bool per sale], manual: "" }. High-confidence tiers start ticked;
+  // the rest can be ticked after checking the listings, or given a value typed in by hand.
+  const [choices, setChoices] = useState({});
 
   useEffect(() => {
     setDetails(compSearchDefaults(card));
+    setChoices({});
     setFound(null);
     setTrend(null);
     setApplied(false);
@@ -646,6 +650,7 @@ function CompUpdater({ card, onUpdate }) {
     try {
       const results = await findCompsForTiers({ ...details, sport: card.sport }, tiers);
       setFound(results);
+      setChoices(Object.fromEntries(results.map((r) => [r.key, { use: r.highConfidence, ticked: r.sales.map(() => true), manual: "" }])));
       // Price trend for the tier this card is actually in.
       const trendTier = results.find((r) => (card.grade ? r.grade === card.grade : r.key === "raw")) || results[0];
       const cardId = trendTier.cardId || results.map((r) => r.cardId).find(Boolean);
@@ -667,15 +672,32 @@ function CompUpdater({ card, onUpdate }) {
     }
   }
 
-  const applicable = (found || []).filter((r) => r.highConfidence && TIER_FIELDS[r.key]);
+  // The value a tier would apply: a typed-in value wins, otherwise the average of ticked sales.
+  function tierValue(r) {
+    const c = choices[r.key] || {};
+    const manual = Number(c.manual);
+    if (String(c.manual || "").trim() !== "" && manual > 0) return { aud: Math.round(manual * 100) / 100, manual: true };
+    const picked = r.sales.filter((_, i) => (c.ticked || [])[i]);
+    if (!picked.length) return null;
+    const usd = picked.reduce((s, x) => s + x.priceUsd, 0) / picked.length;
+    return { aud: convertUsdToAud(Math.round(usd * 100) / 100), manual: false, count: picked.length };
+  }
+
+  function updateChoice(key, patch) {
+    setApplied(false);
+    setChoices((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), ...patch } }));
+  }
+
+  const applicable = (found || []).filter((r) => TIER_FIELDS[r.key] && (choices[r.key] || {}).use && tierValue(r));
 
   function apply() {
     const today = new Date().toISOString().slice(0, 10);
     const patch = { compSearch: details, compsUpdatedAt: today };
     for (const r of applicable) {
       const f = TIER_FIELDS[r.key];
-      patch[f.avg] = r.priceAud;
-      patch[f.history] = appendHistoryIfChanged(card[f.history], card[f.avg], r.priceAud, today);
+      const value = tierValue(r).aud;
+      patch[f.avg] = value;
+      patch[f.history] = appendHistoryIfChanged(card[f.history], card[f.avg], value, today);
     }
     if (trend && trend.points.length >= 2) patch.priceTrend = { ...trend, fetchedAt: today };
     onUpdate({ ...card, ...patch, id: card.id });
@@ -720,7 +742,7 @@ function CompUpdater({ card, onUpdate }) {
             ))}
           </div>
           <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 8, lineHeight: 1.5 }}>
-            Searches the last {COMPS_PER_TIER} sales for {card.grade ? card.grade : "Raw, PSA 9 and PSA 10"}. Only high-confidence results can be applied — that needs the card #, so add it from the back of the card.
+            Searches the last {COMPS_PER_TIER} sales for {card.grade ? card.grade : "Raw, PSA 9 and PSA 10"}. High-confidence results are ticked for you (that needs the card #, so add it from the back of the card). Low-confidence ones can be ticked after checking the listings, or you can type in a value.
           </div>
           <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={lookUp} disabled={loading || !details.player_name}>
             {loading ? "Searching sold listings…" : "Find recent comps"}
@@ -729,23 +751,41 @@ function CompUpdater({ card, onUpdate }) {
 
           {found && (
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-              {found.map((r) => (
-                <div key={r.key + (r.grade || "")} style={{ border: `1px solid ${r.highConfidence ? "#4E8B6B55" : "#2C303B"}`, borderRadius: 6, padding: "8px 10px" }}>
+              {found.map((r) => {
+                const c = choices[r.key] || {};
+                const value = tierValue(r);
+                const canApply = Boolean(TIER_FIELDS[r.key]);
+                return (
+                <div key={r.key + (r.grade || "")} style={{ border: `1px solid ${c.use && value ? "#4E8B6B55" : "#2C303B"}`, borderRadius: 6, padding: "8px 10px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 12.5 }}>
+                    <label style={{ fontWeight: 600, fontSize: 12.5, color: "#EDEAE1", display: "flex", alignItems: "center", gap: 6, margin: 0, cursor: canApply ? "pointer" : "default" }}>
+                      {canApply && (
+                        <input type="checkbox" checked={Boolean(c.use)} onChange={(e) => updateChoice(r.key, { use: e.target.checked })} style={{ width: "auto", margin: 0 }} />
+                      )}
                       {r.grade || "Raw"}
                       {r.grade && TIER_FIELDS[r.key] && TIER_FIELDS[r.key].label !== r.grade ? ` → ${TIER_FIELDS[r.key].label} column` : ""}
-                    </span>
-                    <span style={{ fontWeight: 700, color: "#C9A227" }}>{r.priceAud != null ? fmtMoney(r.priceAud) : "—"}</span>
+                    </label>
+                    <span style={{ fontWeight: 700, color: "#C9A227" }}>{value ? fmtMoney(value.aud) : "—"}</span>
                   </div>
                   <div style={{ fontSize: 11, color: r.highConfidence ? "#4E8B6B" : "#C9A227", margin: "2px 0 4px" }}>
-                    {r.highConfidence
-                      ? `✓ High confidence · avg of last ${r.sales.length} sales`
-                      : `⚠️ Not confident enough to apply — ${r.reasons.join(", ")}`}
-                    {!TIER_FIELDS[r.key] && " · this grade has no market-value column"}
+                    {r.highConfidence ? `✓ High confidence` : `⚠️ Low confidence — ${r.reasons.join(", ")}. Check the listings before using it.`}
+                    {value && (value.manual ? " · using your value" : ` · avg of ${value.count} ticked sale${value.count === 1 ? "" : "s"}`)}
+                    {!canApply && " · this grade has no market-value column"}
                   </div>
                   {r.sales.map((s, i) => (
-                    <div key={i} style={{ fontSize: 11, color: "#8B90A0", lineHeight: 1.6 }}>
+                    <div key={i} style={{ fontSize: 11, color: "#8B90A0", lineHeight: 1.6, display: "flex", gap: 6, alignItems: "baseline" }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean((c.ticked || [])[i])}
+                        onChange={(e) => {
+                          const ticked = [...(c.ticked || r.sales.map(() => true))];
+                          ticked[i] = e.target.checked;
+                          updateChoice(r.key, { ticked });
+                        }}
+                        title="Count this sale in the average"
+                        style={{ width: "auto", margin: 0, flexShrink: 0 }}
+                      />
+                      <span>
                       {new Date(s.date).toLocaleDateString()} · A${convertUsdToAud(s.priceUsd).toFixed(2)}
                       {s.title && <span style={{ color: "#6B7180" }}> · {s.title.length > 70 ? s.title.slice(0, 70) + "…" : s.title}</span>}
                       {s.url && (
@@ -753,18 +793,34 @@ function CompUpdater({ card, onUpdate }) {
                           listing
                         </a>
                       )}
+                      </span>
                     </div>
                   ))}
                   {r.note && <div style={{ fontSize: 11, color: "#6B7180" }}>{r.note}</div>}
                   {!r.highConfidence && <TierSearchLinks details={details} grade={r.grade} />}
+                  {canApply && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11, color: "#8B90A0" }}>
+                      <span>Or set it yourself: A$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="e.g. from eBay sold"
+                        value={c.manual || ""}
+                        onChange={(e) => updateChoice(r.key, { manual: e.target.value, use: e.target.value.trim() !== "" ? true : c.use })}
+                        style={{ width: 140, padding: "4px 7px", fontSize: 12 }}
+                      />
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               {trendNote && <div style={{ fontSize: 11, color: "#6B7180" }}>{trendNote}</div>}
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={apply} disabled={applicable.length === 0 || applied}>
-                  {applied ? "Applied ✓" : `Apply ${applicable.length} high-confidence comp${applicable.length === 1 ? "" : "s"}`}
+                  {applied ? "Applied ✓" : `Apply ${applicable.length} value${applicable.length === 1 ? "" : "s"}`}
                 </button>
-                {applicable.length === 0 && <span style={{ fontSize: 11, color: "#6B7180" }}>Nothing confident enough to apply — check the sales above or the eBay sold links and update manually.</span>}
+                {applicable.length === 0 && <span style={{ fontSize: 11, color: "#6B7180" }}>Tick a grade to use its sales, or type in a value from eBay sold.</span>}
               </div>
             </div>
           )}
