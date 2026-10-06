@@ -53,6 +53,78 @@ function ModalHeader({ title, onClose }) {
   );
 }
 
+// "Ask CardSight": plain-English questions to CardSight's AI, with follow-ups. `suggestions`
+// are one-click starter questions.
+function AskCardSight({ title = "Ask CardSight", suggestions = [], placeholder = "Ask anything about cards, prices or players…" }) {
+  const [question, setQuestion] = useState("");
+  const [turns, setTurns] = useState([]); // [{ role: "user" | "assistant", content }]
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function ask(text) {
+    const q = String(text || question).trim();
+    if (!q || asking) return;
+    setAsking(true);
+    setError(null);
+    setQuestion("");
+    const history = turns;
+    setTurns([...history, { role: "user", content: q }]);
+    try {
+      const answer = await askCardSight(q, history);
+      setTurns((prev) => [...prev, { role: "assistant", content: answer }]);
+    } catch (e) {
+      setError(e.message || String(e));
+      setTurns(history);
+      setQuestion(q);
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  return (
+    <div style={{ border: "1px solid #2FA89A44", borderRadius: 10, padding: "14px 16px", background: "#191B22", marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div className="oswald" style={{ fontSize: 15, fontWeight: 600, color: "#2FA89A" }}>✨ {title}</div>
+        {turns.length > 0 && (
+          <button className="btnSecondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => setTurns([])}>
+            New question
+          </button>
+        )}
+      </div>
+      {turns.map((t, i) => (
+        <div key={i} style={{ fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 8, color: t.role === "user" ? "#EDEAE1" : "#C6CAD4", fontWeight: t.role === "user" ? 600 : 400 }}>
+          {t.role === "user" ? "You: " : ""}
+          {t.content}
+        </div>
+      ))}
+      {asking && <div style={{ fontSize: 12, color: "#8B90A0", marginBottom: 8 }}>Thinking…</div>}
+      {error && <div style={{ fontSize: 12, color: "#B4472E", marginBottom: 8 }}>{error}</div>}
+      {turns.length === 0 && suggestions.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+          {suggestions.map((s) => (
+            <button key={s} className="filterBtn" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={() => ask(s)} disabled={asking}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") ask();
+          }}
+          placeholder={turns.length ? "Ask a follow-up…" : placeholder}
+        />
+        <button className="btnPrimary" onClick={() => ask()} disabled={asking || !question.trim()} style={{ whiteSpace: "nowrap" }}>
+          Ask
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SectionTitle({ children }) {
   return <div style={{ fontSize: 11, color: "#6B7180", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>{children}</div>;
 }

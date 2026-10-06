@@ -61,6 +61,10 @@ function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, co
         <Stat label="Overall ROI" value={fmtPct(portfolioTotals.overallROI)} color={portfolioTotals.overallROI >= 0 ? "#4E8B6B" : "#B4472E"} />
       </div>
 
+      <AskCardSight
+        suggestions={["Which basketball rookies are trending up in price this month?", "What are the hottest card sets right now?", "Which Pokémon cards have risen most in the last 30 days?"]}
+      />
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
         <DashCard title="⚡ Needs your attention" onViewAll={() => setTab("portfolio")} count={actionItems.length}>
           {actionItems.length === 0 ? (

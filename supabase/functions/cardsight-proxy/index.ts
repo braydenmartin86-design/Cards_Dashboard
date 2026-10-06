@@ -3,15 +3,19 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // Forwards requests from the dashboard to the CardSight AI API, keeping the CardSight key
 // server-side. Two request shapes are accepted:
 //   - multipart/form-data with `file` (the photo) and `endpoint` = "/identify/card"
-//   - JSON { endpoint: "/pricing/search", method: "GET", query: { ... } }
+//   - JSON { endpoint, method: "GET", query: { ... } } for price searches and trends
+//   - JSON { endpoint: "/ai/query", method: "POST", body: { ... } } for AI questions
 // Only the endpoints in ALLOWED are forwarded, since anyone can call this function with the
 // public anon key and it would otherwise relay any request on your CardSight account.
 
 const CARDSIGHT_BASE = "https://api.cardsight.ai/v1";
 const ALLOWED = [
   /^\/identify\/card$/, // backup card identification when Gemini is unavailable
-  /^\/pricing\/search$/, // sold-listing search used by "Verify Price"
+  /^\/pricing\/search$/, // sold-listing search used by "Verify Price" and "Update comps"
+  /^\/pricing\/[0-9a-f-]{36}\/timeseries$/i, // price trend for a card in My Cards / Pokémon
+  /^\/ai\/query$/, // "Ask CardSight" on Home and Monthly Targets (POST)
 ];
+const POST_ALLOWED = [/^\/ai\/query$/];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,14 +63,25 @@ serve(async (req) => {
       const body = await req.json();
       endpoint = String(body.endpoint || "");
       if (!ALLOWED.some((re) => re.test(endpoint))) return json({ error: `Endpoint not allowed: ${endpoint}` }, 400);
-      if ((body.method || "GET").toUpperCase() !== "GET") return json({ error: "Only GET is supported for JSON requests." }, 400);
+      const method = String(body.method || "GET").toUpperCase();
 
       const qs = new URLSearchParams();
       for (const [k, v] of Object.entries(body.query || {})) {
         if (v !== undefined && v !== null) qs.set(k, String(v));
       }
       const url = `${CARDSIGHT_BASE}${endpoint}${qs.toString() ? `?${qs}` : ""}`;
-      upstream = await fetch(url, { headers: { "X-API-Key": apiKey } });
+      if (method === "POST") {
+        if (!POST_ALLOWED.some((re) => re.test(endpoint))) return json({ error: `POST not allowed for ${endpoint}` }, 400);
+        upstream = await fetch(url, {
+          method: "POST",
+          headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify(body.body || {}),
+        });
+      } else if (method === "GET") {
+        upstream = await fetch(url, { headers: { "X-API-Key": apiKey } });
+      } else {
+        return json({ error: `Unsupported method: ${method}` }, 400);
+      }
     }
 
     const text = await upstream.text();

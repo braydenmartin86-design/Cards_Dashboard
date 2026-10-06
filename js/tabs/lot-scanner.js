@@ -15,7 +15,8 @@ Instructions:
 8. If a serial number is visible (e.g., "11/50"), include the print run in the parallel (e.g., "Gold /50").
 9. If you can't read the set or year with confidence, give your best guess and set "value_confidence" to "Low".
 10. For each detected card, return an object in a JSON array with the following fields:
-   - "player_name": Full name of the athlete
+   - "printed_name": The name text exactly as printed on the card or grading label (e.g., "YAO"), or null if no name is legible. Fill this in BEFORE deciding the player.
+   - "player_name": Full name of the athlete, which must match "printed_name" when one is legible
    - "sport": e.g., "NFL", "NBA", "MLB", "AFL", "WWE", "Soccer", "MMA"
    - "year": Release year of the card set (e.g., "2025-26")
    - "set_name": Brand and product set name (e.g., "Topps Chrome", "Panini Prizm")
@@ -497,6 +498,15 @@ function cardSearchText(card, exclusions) {
   return words.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
+// True when the name printed on the card shares no word with the player Gemini chose
+// (e.g. the card reads "YAO" but the player came back as someone else on the same team).
+function printedNameMismatch(card) {
+  if (!card.printed_name || !card.player_name) return false;
+  const printed = normalizeCardText(card.printed_name).split(" ").filter((t) => t.length > 1);
+  const player = normalizeCardText(card.player_name);
+  return printed.length > 0 && !printed.some((t) => player.includes(t));
+}
+
 function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTarget, onValueChange, onDetailsChange }) {
   const [copyState, setCopyState] = useState("idle");
   const [editing, setEditing] = useState(false);
@@ -559,6 +569,11 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
             {[card.year, card.set_name, card.parallel_or_variant].filter(Boolean).join(" ")}
             {card.card_number ? ` · ${card.card_number}` : ""}
           </div>
+          {printedNameMismatch(card) && (
+            <div style={{ fontSize: 11.5, color: "#C9A227", marginTop: 3 }}>
+              ⚠️ The card reads "{card.printed_name}" — check the player before verifying.
+            </div>
+          )}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           {card.is_graded && (

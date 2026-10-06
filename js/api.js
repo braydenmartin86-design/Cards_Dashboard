@@ -136,6 +136,7 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
         source: "Gemini AI", 
         cards: validCards.map(c => ({
           player_name: c.player_name || c.player || c.title || "Unknown Card",
+          printed_name: c.printed_name || null,
           sport: c.sport || "NBA",
           year: c.year || "",
           set_name: c.set_name || c.set || "",
@@ -279,8 +280,8 @@ function wantedGrade(card) {
 
 // Market value from sold listings: average of the 5 most recent (or of however many exist).
 const COMPS_TO_AVERAGE = 5;
-function summarizeSales(sales, label, pricedAs) {
-  const used = sales.slice(0, COMPS_TO_AVERAGE);
+function summarizeSales(sales, label, pricedAs, count = COMPS_TO_AVERAGE) {
+  const used = sales.slice(0, count);
   const priceUsd = Math.round((used.reduce((s, r) => s + Number(r.price), 0) / used.length) * 100) / 100;
   const lastDate = new Date(used[0].date).toLocaleDateString();
   return {
@@ -344,7 +345,8 @@ function cardProfile(card) {
     describing,
     grade: wantedGrade(card),
     variant,
-    isBase: !variant,
+    // A serial-numbered card with no parallel name still isn't a base card.
+    isBase: !variant && !printRun,
     variantTokens: variant.split(" ").filter((t) => t.length > 2),
     nameTokens: normalizeCardText(card.player_name).split(" ").filter((t) => t.length > 1),
     setTokens: normalizeCardText(card.set_name).split(" ").filter((t) => t.length > 2 && !/^\d+$/.test(t) && !SET_FILLER_WORDS.has(t)),
@@ -565,6 +567,100 @@ async function verifyPriceWithCardSight(card) {
     console.warn("CardSight price verification notice:", err.message || err);
     return { success: false, error: err.message || "Price verification unavailable." };
   }
+}
+
+// ===== Comp updates for My Cards / Pokémon =====
+// Looks up the last 3 sales for each requested grade tier of one card (raw / PSA 9 / PSA 10,
+// or just the card's own grade). One merged set of searches serves every tier.
+// `details`: { player_name, year, set_name, card_number, parallel_or_variant }
+// `tiers`:   [{ key: "raw" | "psa9" | "psa10", grade: null | "PSA 9" | "SGC 10" | ... }]
+const COMPS_PER_TIER = 3;
+
+function mostCommon(values) {
+  const counts = {};
+  for (const v of values) if (v) counts[v] = (counts[v] || 0) + 1;
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || null;
+}
+
+async function findCompsForTiers(details, tiers) {
+  const tierCard = (grade) => ({
+    ...details,
+    is_graded: Boolean(grade),
+    grade: grade || null,
+    grading_company: grade ? String(grade).split(/\s+/)[0] : null,
+  });
+  const queries = [...new Set(tiers.flatMap((t) => cardSearchQueries(tierCard(t.grade)).primary))];
+  let results = await fetchSoldListings(queries);
+  let perTier = tiers.map((t) => ({ tier: t, search: filterSoldListings(tierCard(t.grade), results, queries[queries.length - 1]) }));
+  const fallback = cardSearchQueries(tierCard(null)).fallback;
+  if (perTier.some((x) => x.search.sales.length === 0) && fallback && !queries.includes(fallback)) {
+    results = await fetchSoldListings([fallback], results);
+    perTier = tiers.map((t) => ({ tier: t, search: filterSoldListings(tierCard(t.grade), results, fallback) }));
+  }
+
+  const numberKnown = Boolean(cardProfile(details).number);
+  return perTier.map(({ tier, search }) => {
+    const sales = search.sales;
+    const used = sales.slice(0, COMPS_PER_TIER);
+    const catalogIds = [...new Set(used.map((r) => r.matched_card && r.matched_card.card_id).filter(Boolean))];
+    // "High confidence" = safe to write into the card automatically: the card number is known
+    // (so every accepted sale had to show it), at least 2 sales from different sellers, and
+    // CardSight links them all to the same catalogue card.
+    const reasons = [];
+    if (!numberKnown) reasons.push("no card number to match on");
+    if (used.length < 2) reasons.push(used.length === 0 ? "no matching sales" : "only 1 matching sale");
+    if (catalogIds.length > 1) reasons.push("sales matched to different catalogue cards");
+    const summary = used.length ? summarizeSales(sales, "CardSight", null, COMPS_PER_TIER) : null;
+    return {
+      key: tier.key,
+      grade: tier.grade,
+      priceUsd: summary ? summary.priceUsd : null,
+      priceAud: summary ? summary.priceAud : null,
+      sales: summary ? summary.sales : [],
+      highConfidence: reasons.length === 0,
+      reasons,
+      note: used.length ? null : describeNoSales([search]),
+      cardId: mostCommon(sales.map((r) => r.matched_card && r.matched_card.card_id)),
+      parallelId: mostCommon(sales.map((r) => r.parallel_id)),
+      gradeId: mostCommon(sales.map((r) => r.grade && r.grade.grade_id)),
+    };
+  });
+}
+
+// Weekly median sold price over the last 12 weeks for one card (and grade/parallel), as
+// [{ date, value }] in AUD — the same shape the card's own price history uses.
+async function fetchPriceTrend(cardId, { parallelId, gradeId, graded } = {}) {
+  const query = { interval: "weekly", periods: 12, listing_type: "auction" };
+  query.parallel_id = parallelId || "null";
+  if (!graded) query.grade_id = "null";
+  else if (gradeId) query.grade_id = gradeId;
+  const data = await callCardSightProxy({ endpoint: `/pricing/${cardId}/timeseries`, method: "GET", query });
+
+  let candles = (data.raw && data.raw.candles) || [];
+  if (graded) {
+    const series = (data.graded || []).flatMap((c) => c.grades || []);
+    const match = series.find((g) => g.grade_id === gradeId) || series[0];
+    candles = (match && match.candles) || [];
+  }
+  return candles
+    .map((c) => {
+      const types = c.types || {};
+      const stats = types.auction || types.both || Object.values(types)[0] || {};
+      const usd = stats.median ?? stats.mean;
+      return usd != null && (stats.count == null || stats.count > 0) ? { date: c.period_start, value: convertUsdToAud(usd) } : null;
+    })
+    .filter(Boolean);
+}
+
+// Plain-English question to CardSight's AI, with earlier turns for follow-ups.
+async function askCardSight(question, history = []) {
+  const data = await callCardSightProxy({
+    endpoint: "/ai/query",
+    method: "POST",
+    body: { query: question, conversationHistory: history },
+  });
+  if (!data.answer) throw new Error(data.error || "CardSight didn't return an answer.");
+  return data.answer;
 }
 
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing

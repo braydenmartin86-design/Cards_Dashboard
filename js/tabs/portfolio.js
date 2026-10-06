@@ -547,6 +547,204 @@ function SearchCopyBlock({ card }) {
   );
 }
 
+// ===== Comp updates from CardSight =====
+
+// Starting point for the comp search, split out of the card's free-text "Card / set" field
+// (e.g. "2024 Prizm Silver" -> year 2024, set Prizm, parallel Silver). Once corrected and
+// saved, the card's own `compSearch` is used instead.
+function compSearchDefaults(card) {
+  const player_name = card.player || card.name || "";
+  if (card.compSearch) return { ...card.compSearch, player_name: card.compSearch.player_name || player_name };
+  const text = String(card.card || "");
+  const yearMatch = text.match(/\b(19|20)\d{2}(?:[-/]\d{2,4})?\b/);
+  const rest = (yearMatch ? text.replace(yearMatch[0], " ") : text).replace(/\s+/g, " ").trim();
+  const words = rest.split(" ");
+  const firstParallelWord = words.findIndex((w) => PARALLEL_WORDS.test(normalizeCardText(w)));
+  let set_name = rest;
+  let parallel = "Base";
+  if (firstParallelWord > 0) {
+    set_name = words.slice(0, firstParallelWord).join(" ");
+    parallel = words.slice(firstParallelWord).join(" ");
+  }
+  if (card.numbered && card.outOf && !/\/\s*\d/.test(parallel)) {
+    parallel = `${parallel === "Base" ? "" : parallel} /${card.outOf}`.trim();
+  }
+  return { player_name, year: yearMatch ? yearMatch[0] : "", set_name, parallel_or_variant: parallel, card_number: card.cardNum || "" };
+}
+
+// Which market-value column a grade feeds (same grade groups the formula engine uses).
+function tierKeyForGrade(grade) {
+  const g = String(grade || "").toLowerCase();
+  if (PSA10_GRADES.includes(g)) return "psa10";
+  if (PSA9_GRADES.includes(g)) return "psa9";
+  return null;
+}
+
+const TIER_FIELDS = {
+  raw: { avg: "rawAvg", history: "rawHistory", label: "Raw" },
+  psa9: { avg: "psa9Avg", history: "psa9History", label: "PSA 9" },
+  psa10: { avg: "psa10Avg", history: "psa10History", label: "PSA 10" },
+};
+
+function CompUpdater({ card, onUpdate }) {
+  const [open, setOpen] = useState(false);
+  const [details, setDetails] = useState(() => compSearchDefaults(card));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [found, setFound] = useState(null);
+  const [trend, setTrend] = useState(null);
+  const [trendNote, setTrendNote] = useState(null);
+  const [applied, setApplied] = useState(false);
+
+  useEffect(() => {
+    setDetails(compSearchDefaults(card));
+    setFound(null);
+    setTrend(null);
+    setApplied(false);
+  }, [card.id]);
+
+  // Graded cards only look up their own grade; raw cards get Raw, PSA 9 and PSA 10.
+  const tiers = card.grade
+    ? [{ key: tierKeyForGrade(card.grade) || "own", grade: card.grade }]
+    : [{ key: "raw", grade: null }, { key: "psa9", grade: "PSA 9" }, { key: "psa10", grade: "PSA 10" }];
+
+  async function lookUp() {
+    setLoading(true);
+    setError(null);
+    setFound(null);
+    setTrend(null);
+    setTrendNote(null);
+    setApplied(false);
+    try {
+      const results = await findCompsForTiers(details, tiers);
+      setFound(results);
+      // Price trend for the tier this card is actually in.
+      const trendTier = results.find((r) => (card.grade ? r.grade === card.grade : r.key === "raw")) || results[0];
+      const cardId = trendTier.cardId || results.map((r) => r.cardId).find(Boolean);
+      if (cardId) {
+        try {
+          const points = await fetchPriceTrend(cardId, { parallelId: trendTier.parallelId, gradeId: trendTier.gradeId, graded: Boolean(card.grade) });
+          setTrend({ points, cardId, label: card.grade || "Raw" });
+          if (points.length < 2) setTrendNote("Not enough recent sales for a trend line.");
+        } catch (e) {
+          setTrendNote(`Price trend unavailable: ${e.message}`);
+        }
+      } else {
+        setTrendNote("CardSight couldn't link these sales to a catalogue card, so there's no price trend.");
+      }
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const applicable = (found || []).filter((r) => r.highConfidence && TIER_FIELDS[r.key]);
+
+  function apply() {
+    const today = new Date().toISOString().slice(0, 10);
+    const patch = { compSearch: details, compsUpdatedAt: today };
+    for (const r of applicable) {
+      const f = TIER_FIELDS[r.key];
+      patch[f.avg] = r.priceAud;
+      patch[f.history] = appendHistoryIfChanged(card[f.history], card[f.avg], r.priceAud, today);
+    }
+    if (trend && trend.points.length >= 2) patch.priceTrend = { ...trend, fetchedAt: today };
+    onUpdate({ ...card, ...patch, id: card.id });
+    setApplied(true);
+  }
+
+  const savedTrend = card.priceTrend && card.priceTrend.points && card.priceTrend.points.length >= 2 ? card.priceTrend : null;
+  const shownTrend = trend && trend.points.length >= 2 ? trend : savedTrend;
+
+  return (
+    <div style={{ border: "1px solid #2C303B", borderRadius: 8, padding: "10px 12px", marginBottom: 16, background: "#14161C" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px", borderColor: "#2FA89A66", color: "#2FA89A" }} onClick={() => setOpen((v) => !v)}>
+          🔄 Update comps from CardSight {open ? "▲" : "▼"}
+        </button>
+        {card.compsUpdatedAt && <span style={{ fontSize: 11, color: "#6B7180" }}>Last updated {card.compsUpdatedAt}</span>}
+      </div>
+
+      {shownTrend && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 11, color: "#8B90A0", marginBottom: 4 }}>
+            CardSight price trend · {shownTrend.label} · weekly median sold price (A$)
+          </div>
+          <TrendSparkline history={shownTrend.points} color="#2FA89A" />
+        </div>
+      )}
+
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 8 }}>
+            {[
+              ["player_name", "Player / name"],
+              ["year", "Year"],
+              ["set_name", "Set (e.g. Prizm)"],
+              ["parallel_or_variant", "Parallel (Base if none)"],
+              ["card_number", "Card #"],
+            ].map(([field, label]) => (
+              <div key={field}>
+                <label style={{ fontSize: 10.5 }}>{label}</label>
+                <input value={details[field] ?? ""} onChange={(e) => setDetails({ ...details, [field]: e.target.value })} style={{ padding: "5px 8px", fontSize: 12.5 }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 8, lineHeight: 1.5 }}>
+            Searches the last {COMPS_PER_TIER} sales for {card.grade ? card.grade : "Raw, PSA 9 and PSA 10"}. Only high-confidence results can be applied — that needs the card #, so add it from the back of the card.
+          </div>
+          <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={lookUp} disabled={loading || !details.player_name}>
+            {loading ? "Searching sold listings…" : "Find recent comps"}
+          </button>
+          {error && <div style={{ fontSize: 12, color: "#B4472E", marginTop: 8 }}>{error}</div>}
+
+          {found && (
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+              {found.map((r) => (
+                <div key={r.key + (r.grade || "")} style={{ border: `1px solid ${r.highConfidence ? "#4E8B6B55" : "#2C303B"}`, borderRadius: 6, padding: "8px 10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: 12.5 }}>
+                      {r.grade || "Raw"}
+                      {r.grade && TIER_FIELDS[r.key] && TIER_FIELDS[r.key].label !== r.grade ? ` → ${TIER_FIELDS[r.key].label} column` : ""}
+                    </span>
+                    <span style={{ fontWeight: 700, color: "#C9A227" }}>{r.priceAud != null ? fmtMoney(r.priceAud) : "—"}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: r.highConfidence ? "#4E8B6B" : "#C9A227", margin: "2px 0 4px" }}>
+                    {r.highConfidence
+                      ? `✓ High confidence · avg of last ${r.sales.length} sales`
+                      : `⚠️ Not confident enough to apply — ${r.reasons.join(", ")}`}
+                    {!TIER_FIELDS[r.key] && " · this grade has no market-value column"}
+                  </div>
+                  {r.sales.map((s, i) => (
+                    <div key={i} style={{ fontSize: 11, color: "#8B90A0", lineHeight: 1.6 }}>
+                      {new Date(s.date).toLocaleDateString()} · A${convertUsdToAud(s.priceUsd).toFixed(2)}
+                      {s.title && <span style={{ color: "#6B7180" }}> · {s.title.length > 70 ? s.title.slice(0, 70) + "…" : s.title}</span>}
+                      {s.url && (
+                        <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "#2FA89A", marginLeft: 6 }}>
+                          listing
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                  {r.note && <div style={{ fontSize: 11, color: "#6B7180" }}>{r.note}</div>}
+                </div>
+              ))}
+              {trendNote && <div style={{ fontSize: 11, color: "#6B7180" }}>{trendNote}</div>}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={apply} disabled={applicable.length === 0 || applied}>
+                  {applied ? "Applied ✓" : `Apply ${applicable.length} high-confidence comp${applicable.length === 1 ? "" : "s"}`}
+                </button>
+                {applicable.length === 0 && <span style={{ fontSize: 11, color: "#6B7180" }}>Nothing confident enough to apply — use the sales above to update manually.</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player" }) {
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState(card);
@@ -694,6 +892,7 @@ function save() {
         )}
 
         <SearchCopyBlock card={card} />
+        <CompUpdater card={card} onUpdate={onUpdate} />
 
         {!edit ? (
           <>

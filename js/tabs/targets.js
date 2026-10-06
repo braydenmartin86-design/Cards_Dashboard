@@ -229,6 +229,12 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
         <span style={{ color: "#C9A227" }}> "Speculative"</span> = pre-rookie or not yet drafted — cheaper entry, real risk it doesn't pan out.
       </div>
 
+      <AskCardSight
+        title="Research a target with CardSight"
+        placeholder="e.g. What's a good Cooper Flagg rookie under $100?"
+        suggestions={["Best rookie cards under $100 to buy right now?", "Which rookies' card prices are rising fastest?", "Is now a good time to buy Victor Wembanyama rookies?"]}
+      />
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <div>

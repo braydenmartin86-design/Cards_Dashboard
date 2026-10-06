@@ -67,10 +67,12 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
     belowAvg: "",
   });
 
+  // Cards you still hold. Listed and sold cards belong to My Sales, so they're left out.
   const allCards = useMemo(() => {
+    const held = (c) => c.status !== "Sold" && c.status !== "Listed";
     const combined = [
-      ...cards.map((c) => ({ ...c, _src: "cards" })),
-      ...pokemonCards.map((c) => ({ ...c, _src: "pokemon" })),
+      ...cards.filter(held).map((c) => ({ ...c, _src: "cards" })),
+      ...pokemonCards.filter(held).map((c) => ({ ...c, _src: "pokemon" })),
     ];
     return combined.sort((a, b) => (a.player || "").localeCompare(b.player || ""));
   }, [cards, pokemonCards]);
