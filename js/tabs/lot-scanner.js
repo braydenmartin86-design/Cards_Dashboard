@@ -8,11 +8,13 @@ Instructions:
 1. Identify EVERY card present in the image individually.
 2. IGNORE background elements like sticky notes, handwritten timestamps, coin tags, top loaders, magnetic cases, or tabletop textures.
 3. Inspect fine visual details carefully: parallel patterns (e.g., Orange Basketball/Geometric, Refractor, Silver Prizm, Cracked Ice, Holo), serial numbering, card numbers, RC logos, autographs, and set years.
-4. Identify the set from what is printed on the card, not from the player or design style: read the manufacturer and product logo on the card face (e.g., "Topps Chrome", "Panini Prizm", "Donruss", "Select", "Mosaic", "Hoops", "Upper Deck"). Topps and Panini are different manufacturers — never call a Topps card "Panini" or vice versa. Never use a generic set name like "Panini Basketball".
-5. For graded slabs, copy the year, set, card number, parallel and grade exactly as printed on the grading label — the label is more reliable than the card design.
-6. If a serial number is visible (e.g., "11/50"), include the print run in the parallel (e.g., "Gold /50").
-7. If you can't read the set or year with confidence, give your best guess and set "value_confidence" to "Low".
-8. For each detected card, return an object in a JSON array with the following fields:
+4. Read the player's name from the text printed on the card (or the grading label). Never infer the player from the team, jersey or photo — two players on the same team are easy to confuse. If the printed name is only a surname (e.g. "YAO"), use the player it belongs to. If you can't read a name, give your best guess and set "value_confidence" to "Low".
+5. Only fill "card_number" if the number is actually visible in the photo (usually only on grading labels, since raw cards print it on the back). Otherwise use null — never guess a card number.
+6. Identify the set from what is printed on the card, not from the player or design style: read the manufacturer and product logo on the card face (e.g., "Topps Chrome", "Panini Prizm", "Donruss", "Select", "Mosaic", "Hoops", "Upper Deck"). Topps and Panini are different manufacturers — never call a Topps card "Panini" or vice versa. Never use a generic set name like "Panini Basketball".
+7. For graded slabs, copy the year, set, card number, parallel and grade exactly as printed on the grading label — the label is more reliable than the card design.
+8. If a serial number is visible (e.g., "11/50"), include the print run in the parallel (e.g., "Gold /50").
+9. If you can't read the set or year with confidence, give your best guess and set "value_confidence" to "Low".
+10. For each detected card, return an object in a JSON array with the following fields:
    - "player_name": Full name of the athlete
    - "sport": e.g., "NFL", "NBA", "MLB", "AFL", "WWE", "Soccer", "MMA"
    - "year": Release year of the card set (e.g., "2025-26")
@@ -394,15 +396,43 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   );
 }
 
+// Search text built from the card's details rather than Gemini's free-form phrase, so it names
+// the exact card: year, set, player, card number, parallel and grade. eBay only shows listings
+// containing every word, so a long parallel name (worded differently by many sellers) is
+// dropped when the card number already pins the card down. `exclusions` adds eBay's "-word"
+// filters to hide graded copies of a raw card, autographs and patches.
+function cardSearchText(card, exclusions) {
+  const p = cardProfile(card);
+  if (!card.player_name) return card.ebay_search_query || "";
+  const variantWords = p.number && p.variant.split(" ").length > 2 ? "" : p.variant;
+  const words = [
+    p.year,
+    card.set_name,
+    card.player_name,
+    p.number,
+    variantWords,
+    p.isAuto && !/\bauto\b/.test(variantWords) ? "auto" : "",
+    p.grade ? `${p.grade.company || ""} ${p.grade.value}` : "",
+  ];
+  if (exclusions) {
+    if (!p.grade) words.push("-psa -bgs -sgc -cgc");
+    if (!p.isAuto) words.push("-auto");
+    if (!p.isRelic) words.push("-patch");
+  }
+  return words.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
 function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTarget, onValueChange, onDetailsChange }) {
   const [copyState, setCopyState] = useState("idle");
   const [editing, setEditing] = useState(false);
+  const ebaySearch = cardSearchText(card, true);
+  const plainSearch = cardSearchText(card, false);
   // Opens sold listings (not current ones), for checking comps by hand.
-  const ebayUrl = card.ebay_search_query ? `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(card.ebay_search_query)}&LH_Sold=1&LH_Complete=1` : null;
-  const point130Url = card.ebay_search_query ? `https://130point.com/sales/?search=${encodeURIComponent(card.ebay_search_query)}` : null;
+  const ebayUrl = ebaySearch ? `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(ebaySearch)}&LH_Sold=1&LH_Complete=1` : null;
+  const point130Url = plainSearch ? `https://130point.com/sales/?search=${encodeURIComponent(plainSearch)}` : null;
 
   async function copy() {
-    const ok = await copyToClipboard(card.ebay_search_query || "");
+    const ok = await copyToClipboard(ebaySearch);
     setCopyState(ok ? "copied" : "failed");
     setTimeout(() => setCopyState("idle"), 2000);
   }
@@ -498,7 +528,8 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
             </div>
           ))}
           <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#6B7180" }}>
-            Fix anything Gemini read wrong, then Verify Price searches with these details.
+            Fix anything Gemini read wrong, then Verify Price and the eBay link use these details. For raw cards the card # is
+            usually on the back — adding it gives the most exact matches.
           </div>
         </div>
       )}
