@@ -30,6 +30,9 @@ Instructions:
 
 IMPORTANT: Return ONLY the raw JSON array. Do not include markdown code blocks like \`\`\`json or any conversational intro/outro text.`;
 
+// Selling fees assumed when working out the recommended offer (matches the Buy Evaluator).
+const LOT_SELLING_FEE_PCT = 0.13;
+
 function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   const [images, setImages] = useState([]);
   const [scanning, setScanning] = useState(false);
@@ -44,6 +47,16 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   const [saveName, setSaveName] = useState("");
   const [lotLink, setLotLink] = useState("");
   const [verifyingIndex, setVerifyingIndex] = useState(null);
+  const [verifyAllProgress, setVerifyAllProgress] = useState(null);
+  const [verifyAllSummary, setVerifyAllSummary] = useState(null);
+  // Profit you want on what you pay for a lot; remembered in this browser.
+  const [targetProfitPct, setTargetProfitPct] = useState(() => {
+    try {
+      return localStorage.getItem("cardflip_ev_lot_target_profit") || "20";
+    } catch (e) {
+      return "20";
+    }
+  });
 
   function saveScan() {
     if (!results || results.length === 0) return;
@@ -53,7 +66,8 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
       name,
       dateSaved: new Date().toISOString().slice(0, 10),
       link: lotLink.trim() || null,
-      results,
+      // Older scans stored the full photo on every card; drop it so the save fits in storage.
+      results: results.map(({ _rawBase64, ...card }) => card),
       lotCost,
       lotShipping,
     };
@@ -77,6 +91,7 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setAddedState({});
     setImages([]);
     setShowSavedList(false);
+    setVerifyAllSummary(null);
   }
 
   function deleteScan(targetScan) {
@@ -124,6 +139,7 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   setError(null);
   setResults(null);
   setAddedState({});
+  setVerifyAllSummary(null);
 
   try {
     const firstImage = images[0];
@@ -133,11 +149,11 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
       LOT_SCANNER_PROMPT
     );
 
-    // Store the base image source on each card for targeted CardSight re-verification
+    // The photo isn't stored on each card: Verify Price searches by the card's details, and a
+    // copy of the photo per card made saved scans too big for browser storage.
     const taggedCards = engineResponse.cards.map((c) => ({
       ...c,
       player_name: c.player_name || c.player || "Unknown Player",
-      _rawBase64: firstImage.base64,
       _engineSource: engineResponse.source,
     }));
 
@@ -177,11 +193,10 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     );
   }
 
-  async function handleVerifyCard(index, card) {
+  // Prices one card and stores the result on it. Returns the verification result.
+  async function verifyCard(index, card) {
     setVerifyingIndex(index);
-
     const res = await verifyPriceWithCardSight(card);
-
     if (res.success && res.priceAud) {
       setResults((prevResults) => {
         const updated = [...prevResults];
@@ -196,11 +211,35 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
         };
         return updated;
       });
-    } else {
+    }
+    setVerifyingIndex(null);
+    return res;
+  }
+
+  async function handleVerifyCard(index, card) {
+    const res = await verifyCard(index, card);
+    if (!(res.success && res.priceAud)) {
       alert(`CardSight Valuation: ${res.error || "Could not find live comp price."}`);
     }
+  }
 
-    setVerifyingIndex(null);
+  // One click for the whole lot. Cards run one at a time to stay under CardSight's rate limit;
+  // a card that fails is skipped (keeping its old value) and counted instead of interrupting.
+  async function verifyAll() {
+    if (!results || results.length === 0 || verifyAllProgress) return;
+    const cards = results;
+    const summary = { done: 0, total: cards.length, soldComps: 0, estimates: 0, failed: 0 };
+    setVerifyAllProgress({ ...summary });
+    for (let i = 0; i < cards.length; i++) {
+      const res = await verifyCard(i, cards[i]);
+      summary.done += 1;
+      if (!(res.success && res.priceAud)) summary.failed += 1;
+      else if (res.confidence === "AI estimate") summary.estimates += 1;
+      else summary.soldComps += 1;
+      setVerifyAllProgress({ ...summary });
+    }
+    setVerifyAllProgress(null);
+    setVerifyAllSummary(summary);
   }
 
   function addToBuyEvaluator(card, idx) {
@@ -233,6 +272,20 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
 
   const totalGrossValue = useMemo(() => (results || []).reduce((s, c) => s + (Number(c.estimated_value_aud) || 0), 0), [results]);
   const potentialProfit = lotCost !== "" ? totalGrossValue - Number(lotCost) - (Number(lotShipping) || 0) : null;
+
+  // Recommended offer: the most you can pay and still make your target profit on what you pay,
+  // after selling fees and shipping — the same rule the Buy Evaluator uses (13% fees).
+  const profitRate = Math.max(0, Number(targetProfitPct) || 0) / 100;
+  const netAfterSelling = totalGrossValue * (1 - LOT_SELLING_FEE_PCT) - (Number(lotShipping) || 0);
+  const recommendedOffer = Math.max(0, netAfterSelling / (1 + profitRate));
+  const verifiedCount = (results || []).filter((c) => c._priceSource && !c._priceSource.startsWith("Gemini")).length;
+
+  function updateTargetProfit(value) {
+    setTargetProfitPct(value);
+    try {
+      localStorage.setItem("cardflip_ev_lot_target_profit", value);
+    } catch (e) {}
+  }
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -348,8 +401,30 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
 
           {results.length > 0 && (
             <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "16px 18px", marginBottom: 16, background: "#191B22" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12, alignItems: "end" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+                <button className="btnPrimary" type="button" onClick={verifyAll} disabled={Boolean(verifyAllProgress) || verifyingIndex != null}>
+                  ⚡ {verifyAllProgress ? `Verifying ${verifyAllProgress.done + 1} of ${verifyAllProgress.total}…` : "Verify all prices"}
+                </button>
+                <span style={{ fontSize: 12, color: "#8B90A0" }}>
+                  {verifyAllProgress
+                    ? "Checking CardSight sold listings one card at a time."
+                    : verifyAllSummary
+                    ? `Done: ${verifyAllSummary.soldComps} priced from sold listings, ${verifyAllSummary.estimates} AI estimate${verifyAllSummary.estimates === 1 ? "" : "s"}${verifyAllSummary.failed ? `, ${verifyAllSummary.failed} couldn't be priced` : ""}.`
+                    : `${verifiedCount} of ${results.length} cards priced from sold listings.`}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
                 <MiniStat label="Est. gross value" value={fmtMoney(totalGrossValue)} />
+                <MiniStat label="Recommended offer" value={fmtMoney(recommendedOffer)} color="#C9A227" emphasis />
+                <Field label="Target profit on what you pay (%)">
+                  <input type="number" step="1" min="0" value={targetProfitPct} onChange={(e) => updateTargetProfit(e.target.value)} />
+                </Field>
+              </div>
+              <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 12, lineHeight: 1.5 }}>
+                The most you can pay and still make {Number(targetProfitPct) || 0}% profit, after {Math.round(LOT_SELLING_FEE_PCT * 100)}% selling fees
+                {Number(lotShipping) ? " and shipping" : ""}.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
                 <Field label="What will you pay for the lot?">
                   <input type="number" step="0.01" placeholder="0.00" value={lotCost} onChange={(e) => setLotCost(e.target.value)} />
                 </Field>
@@ -364,7 +439,7 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
                 />
               </div>
               <div style={{ fontSize: 11, color: "#C9A227", lineHeight: 1.6 }}>
-                ⚠️ These values are AI best-guesses from general hobby knowledge, not live sold prices. Verify anything expensive via search links before committing to buy.
+                ⚠️ Cards marked ✓ CardSight are priced from recent sold listings; everything else is an AI best-guess. Check the listing titles on expensive cards before committing to buy.
               </div>
             </div>
           )}
@@ -488,7 +563,9 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           {card.is_graded && (
             <span className="mono" style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 999, background: "#8B6FD622", color: "#8B6FD6", display: "inline-block", marginBottom: 6 }}>
-              {card.grading_company} {card.grade}
+              {card.grading_company && !String(card.grade || "").toUpperCase().startsWith(String(card.grading_company).toUpperCase())
+                ? `${card.grading_company} ${card.grade}`
+                : card.grade}
             </span>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 3, justifyContent: "flex-end" }}>
@@ -534,7 +611,7 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
         </div>
       )}
 
-      {(card._sales || card._priceNote) && (
+      {((card._sales && card._sales.length > 0) || card._priceNote) && (
         <div style={{ fontSize: 11, color: "#8B90A0", background: "#14161C", border: "1px solid #2C303B", borderRadius: 6, padding: "8px 10px", marginBottom: 10, lineHeight: 1.6 }}>
           {card._pricedAs && <div style={{ color: "#A7ADBB", marginBottom: 2 }}>Priced as: {card._pricedAs}</div>}
           {card._sales &&

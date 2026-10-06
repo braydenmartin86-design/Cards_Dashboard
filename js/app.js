@@ -541,7 +541,10 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
 
         {tab === "gradingtracker" && <GradingTracker cards={cards} pokemonCards={pokemonCards} onUpdateCardIn={updateCardIn} />}
 
-        {tab === "lotscanner" && <LotScanner setTargets={setTargets} setBuyList={setBuyList} savedScans={savedScans} setSavedScans={setSavedScans} />}
+        {/* Always mounted (just hidden on other tabs) so a scan in progress survives switching tabs. */}
+        <div style={{ display: tab === "lotscanner" ? "block" : "none" }}>
+          <LotScanner setTargets={setTargets} setBuyList={setBuyList} savedScans={savedScans} setSavedScans={setSavedScans} />
+        </div>
 
         {tab === "targets" && <MonthlyTargets targets={targets} setTargets={setTargets} />}
 
