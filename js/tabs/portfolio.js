@@ -926,6 +926,7 @@ function BulkCompRefresh({ cards, setCards }) {
   const [summary, setSummary] = useState(null);
   const [showSkipped, setShowSkipped] = useState(false);
   const stopRef = useRef(false);
+  const quota = useCardSightQuota();
 
   const held = cards.filter((c) => c.status === "Raw" || c.status === "Graded");
   const lastChecked = (c) => [c.compsUpdatedAt, c.compsCheckedAt].filter(Boolean).sort().pop();
@@ -938,7 +939,7 @@ function BulkCompRefresh({ cards, setCards }) {
   const stale = held.filter((c) => compsAgeDays(c) != null && compsAgeDays(c) >= STALE_COMPS_DAYS).length;
 
   async function run() {
-    if (!queue.length || progress) return;
+    if (!queue.length || progress || cardSightQuota) return;
     stopRef.current = false;
     setSummary(null);
     const result = { updated: [], skipped: [], failed: [] };
@@ -960,6 +961,10 @@ function BulkCompRefresh({ cards, setCards }) {
           result.skipped.push({ card, why: why || "no confident match" });
         }
       } catch (e) {
+        if (isQuotaError(e)) {
+          result.quotaStopped = queue.length - i;
+          break;
+        }
         result.failed.push({ card, why: e.message || String(e) });
       }
     }
@@ -983,7 +988,13 @@ function BulkCompRefresh({ cards, setCards }) {
           </>
         ) : (
           <>
-            <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={run} disabled={!queue.length}>
+            <button
+              className="btnPrimary"
+              style={{ fontSize: 12.5, padding: "7px 14px" }}
+              onClick={run}
+              disabled={!queue.length || Boolean(quota)}
+              title={quota ? "Paused — CardSight's monthly API calls are used up" : ""}
+            >
               🔄 Update all comps ({queue.length})
             </button>
             <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, fontSize: 12, color: "#A7ADBB", cursor: "pointer" }}>
@@ -1008,6 +1019,9 @@ function BulkCompRefresh({ cards, setCards }) {
           {" · "}
           {summary.skipped.length} not confident enough
           {summary.failed.length ? ` · ${summary.failed.length} failed` : ""}
+          {summary.quotaStopped ? (
+            <span style={{ color: "#C9A227" }}> · stopped: CardSight's monthly calls ran out with {summary.quotaStopped} card{summary.quotaStopped === 1 ? "" : "s"} left</span>
+          ) : null}
           {summary.skipped.length + summary.failed.length > 0 && (
             <button type="button" onClick={() => setShowSkipped((v) => !v)} style={{ background: "transparent", border: "none", color: "#2FA89A", fontSize: 12, cursor: "pointer", marginLeft: 8 }}>
               {showSkipped ? "Hide" : "Show"} which

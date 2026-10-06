@@ -281,7 +281,61 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
 // CardSight. Only completed auctions that clearly match the same card are kept, and the market
 // value is the average of the 3 most recent sales, or the most recent sale if fewer exist.
 
+// ===== CardSight quota =====
+// When the account's monthly API calls run out, CardSight answers every request with an
+// "account is inactive" error. Once that's seen, CardSight calls are paused (for this browser,
+// until tomorrow or until "Check again") so bulk updates and target checks stop straight away
+// instead of failing card by card.
+const CARDSIGHT_QUOTA_KEY = "cardflip_ev_cardsight_quota_v1";
+const CARDSIGHT_QUOTA_PATTERN = /inactive|run out of monthly|monthly api calls|quota|subscription/i;
+const QUOTA_ERROR_CODE = "CARDSIGHT_QUOTA";
+
+let cardSightQuota = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CARDSIGHT_QUOTA_KEY) || "null");
+    if (saved && saved.date === new Date().toISOString().slice(0, 10)) return saved;
+  } catch (e) {}
+  return null;
+})();
+const cardSightQuotaListeners = new Set();
+
+function onCardSightQuotaChange(listener) {
+  cardSightQuotaListeners.add(listener);
+  return () => cardSightQuotaListeners.delete(listener);
+}
+
+function setCardSightQuota(value) {
+  cardSightQuota = value;
+  try {
+    if (value) localStorage.setItem(CARDSIGHT_QUOTA_KEY, JSON.stringify(value));
+    else localStorage.removeItem(CARDSIGHT_QUOTA_KEY);
+  } catch (e) {}
+  cardSightQuotaListeners.forEach((l) => l(value));
+}
+
+function quotaError() {
+  const err = new Error("CardSight's monthly API calls are used up, so CardSight lookups are paused until your quota resets.");
+  err.code = QUOTA_ERROR_CODE;
+  return err;
+}
+
+function isQuotaError(e) {
+  return Boolean(e && e.code === QUOTA_ERROR_CODE);
+}
+
+// Clears the pause and makes one cheap call to see if the quota is back.
+async function recheckCardSightQuota() {
+  setCardSightQuota(null);
+  try {
+    await callCardSightProxy({ endpoint: "/pricing/search", method: "GET", query: { q: "Michael Jordan", limit: 1 } });
+    return true;
+  } catch (e) {
+    return !isQuotaError(e);
+  }
+}
+
 async function callCardSightProxy(body, attempt = 0) {
+  if (cardSightQuota) throw quotaError();
   const anonKey = window.SUPABASE_ANON_KEY;
   const isForm = body instanceof FormData;
   const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
@@ -308,6 +362,10 @@ async function callCardSightProxy(body, attempt = 0) {
   } catch (e) {}
   if (!response.ok) {
     const detail = wrapper && (wrapper.error || wrapper.message);
+    if ((response.status === 402 || response.status === 403) && CARDSIGHT_QUOTA_PATTERN.test(String(detail || ""))) {
+      setCardSightQuota({ date: new Date().toISOString().slice(0, 10), message: String(detail) });
+      throw quotaError();
+    }
     throw new Error(`CardSight returned status ${response.status}${detail ? `: ${detail}` : ""}`);
   }
   // Older proxy versions wrapped identify replies as { raw: ... }. Pricing replies have their
@@ -611,15 +669,21 @@ async function verifyPriceWithCardSight(card) {
     }
 
     // 1. Search CardSight's sold listings using the details Gemini read off the card.
-    const queries = cardSearchQueries(card);
-    let results = await fetchSoldListings(queries.primary);
-    let search = filterSoldListings(card, results, queries.primary[queries.primary.length - 1]);
-    if (search.sales.length === 0 && queries.fallback && !queries.primary.includes(queries.fallback)) {
-      results = await fetchSoldListings([queries.fallback], results);
-      search = filterSoldListings(card, results, queries.fallback);
+    let noSalesReason;
+    try {
+      const queries = cardSearchQueries(card);
+      let results = await fetchSoldListings(queries.primary);
+      let search = filterSoldListings(card, results, queries.primary[queries.primary.length - 1]);
+      if (search.sales.length === 0 && queries.fallback && !queries.primary.includes(queries.fallback)) {
+        results = await fetchSoldListings([queries.fallback], results);
+        search = filterSoldListings(card, results, queries.fallback);
+      }
+      if (search.sales.length > 0) return summarizeSales(search.sales, "CardSight", queries.label);
+      noSalesReason = describeNoSales([search]);
+    } catch (e) {
+      if (!isQuotaError(e)) throw e;
+      noSalesReason = "CardSight's monthly API calls are used up.";
     }
-    if (search.sales.length > 0) return summarizeSales(search.sales, "CardSight", queries.label);
-    const noSalesReason = describeNoSales([search]);
 
     // 2. Last resort: no sold comps, so ask Gemini AI for an estimate (labelled as such).
     console.info(`${noSalesReason} Falling back to a Gemini valuation estimate...`);
@@ -755,6 +819,7 @@ async function askCardSight(question, history = []) {
       const comps = await answerFromSoldComps(question, history);
       if (comps && comps.foundSales) return comps.text;
     } catch (e) {
+      if (isQuotaError(e)) throw e;
       console.warn("Sold-comps answer failed, asking CardSight's AI:", e.message || e);
     }
   }

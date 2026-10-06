@@ -163,6 +163,41 @@ function AskCardSight({ title = "Ask CardSight", suggestions = [], placeholder =
   );
 }
 
+// The current CardSight quota pause (null when lookups are allowed), kept up to date.
+function useCardSightQuota() {
+  const [quota, setQuota] = useState(cardSightQuota);
+  useEffect(() => onCardSightQuotaChange(setQuota), []);
+  return quota;
+}
+
+// Shown across the app while CardSight lookups are paused because the monthly quota ran out.
+function CardSightQuotaBanner() {
+  const quota = useCardSightQuota();
+  const [checking, setChecking] = useState(false);
+  const [stillOut, setStillOut] = useState(false);
+  if (!quota) return null;
+
+  async function checkAgain() {
+    setChecking(true);
+    setStillOut(false);
+    const ok = await recheckCardSightQuota();
+    setChecking(false);
+    if (!ok) setStillOut(true);
+  }
+
+  return (
+    <div style={{ marginTop: 14, border: "1px solid #C9A22766", background: "#C9A22714", borderRadius: 10, padding: "10px 14px", fontSize: 12.5, color: "#EDEAE1", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <span style={{ flex: 1, minWidth: 240, lineHeight: 1.5 }}>
+        <b style={{ color: "#C9A227" }}>⚠️ CardSight's monthly API calls are used up</b> — comp searches, bulk updates, target alerts and Ask CardSight are paused. Verify Price falls back to a Gemini estimate, and you can still enter eBay sold prices by hand.
+        {stillOut && <span style={{ color: "#C9A227" }}> Still out of calls — try again after your quota resets.</span>}
+      </span>
+      <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={checkAgain} disabled={checking}>
+        {checking ? "Checking…" : "Check again"}
+      </button>
+    </div>
+  );
+}
+
 // Header badge showing the US$ → A$ rate CardSight prices are converted at.
 function ExchangeRateBadge() {
   const [rate, setRate] = useState(exchangeRate);

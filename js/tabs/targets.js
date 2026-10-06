@@ -52,6 +52,10 @@ Trends allowed: "Improving", "Stable".
 // listings — a hit means "now's a buying window", not "this exact card is for sale".
 
 const TARGET_ALERT_WINDOW_DAYS = 30;
+// How often targets are re-checked automatically (in days); "off" only checks on demand.
+// Each check is 1–2 CardSight lookups per target, so this is the main quota lever.
+const TARGET_ALERT_FREQUENCIES = { daily: 1, weekly: 7, off: 0 };
+const TARGET_ALERT_FREQUENCY_KEY = "cardflip_ev_target_alert_frequency";
 const TARGET_HINT_FILLER = /\b(rookies?|rc|cards?|singles?|any|or|and|the|of|look|for|parallels?|base)\b/gi;
 
 function targetSearchQueries(t) {
@@ -283,27 +287,56 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [priceCheck, setPriceCheck] = useState(null); // { done, total } while running, or { summary }
   const checkingRef = useRef(false);
+  const quota = useCardSightQuota();
+  const [alertFrequency, setAlertFrequency] = useState(() => {
+    try {
+      return localStorage.getItem(TARGET_ALERT_FREQUENCY_KEY) || "daily";
+    } catch (e) {
+      return "daily";
+    }
+  });
+
+  function changeAlertFrequency(value) {
+    setAlertFrequency(value);
+    try {
+      localStorage.setItem(TARGET_ALERT_FREQUENCY_KEY, value);
+    } catch (e) {}
+  }
 
   // Checks recent sold prices for watched targets that have a target price. Runs automatically
-  // once a day when this tab opens (only targets not yet checked today), or for all on demand.
+  // when this tab opens (daily or weekly, per the setting; only targets due a check), or for
+  // all on demand. Stops as soon as CardSight's monthly calls run out.
   async function runPriceChecks(force) {
-    if (checkingRef.current) return;
-    const today = new Date().toISOString().slice(0, 10);
-    const due = (targets || []).filter((t) => t.status === "Watching" && targetHasPrice(t) && (force || !t.priceCheck || t.priceCheck.date !== today));
+    if (checkingRef.current || cardSightQuota) return;
+    const everyDays = TARGET_ALERT_FREQUENCIES[alertFrequency];
+    if (!force && !everyDays) return;
+    const isDue = (t) => !t.priceCheck || (Date.now() - new Date(t.priceCheck.date).getTime()) / 86400000 >= everyDays;
+    const due = (targets || []).filter((t) => t.status === "Watching" && targetHasPrice(t) && (force || isDue(t)));
     if (!due.length) return;
     checkingRef.current = true;
     let failed = 0;
+    let checked = 0;
+    let quotaHit = false;
     for (let i = 0; i < due.length; i++) {
       setPriceCheck({ done: i, total: due.length });
       try {
         const result = await checkTargetPrice(due[i]);
         setTargets((prev) => prev.map((t) => (t.id === due[i].id ? { ...t, priceCheck: result } : t)));
+        checked += 1;
       } catch (e) {
+        if (isQuotaError(e)) {
+          quotaHit = true;
+          break;
+        }
         failed += 1;
       }
     }
     checkingRef.current = false;
-    setPriceCheck({ summary: `Checked ${due.length - failed} target${due.length - failed === 1 ? "" : "s"}${failed ? `, ${failed} failed` : ""}.` });
+    setPriceCheck({
+      summary:
+        `Checked ${checked} target${checked === 1 ? "" : "s"}${failed ? `, ${failed} failed` : ""}.` +
+        (quotaHit ? ` Stopped — CardSight's monthly calls ran out with ${due.length - checked - failed} left.` : ""),
+    });
   }
 
   useEffect(() => {
@@ -403,12 +436,33 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
       />
 
       <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "10px 14px", background: "#191B22", marginBottom: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <button className="btnSecondary" style={{ fontSize: 12.5 }} onClick={() => runPriceChecks(true)} disabled={Boolean(priceCheck && priceCheck.total)}>
+        <button
+          className="btnSecondary"
+          style={{ fontSize: 12.5 }}
+          onClick={() => runPriceChecks(true)}
+          disabled={Boolean(priceCheck && priceCheck.total) || Boolean(quota)}
+          title={quota ? "Paused — CardSight's monthly API calls are used up" : ""}
+        >
           🔔 {priceCheck && priceCheck.total ? `Checking ${priceCheck.done + 1} of ${priceCheck.total}…` : "Check target prices now"}
         </button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, fontSize: 12, color: "#A7ADBB" }}>
+          Auto-check
+          <select value={alertFrequency} onChange={(e) => changeAlertFrequency(e.target.value)} style={{ width: "auto", padding: "4px 8px", fontSize: 12 }}>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
         <span style={{ fontSize: 11.5, color: "#8B90A0", lineHeight: 1.5, flex: 1, minWidth: 220 }}>
           {priceCheck && priceCheck.summary ? `${priceCheck.summary} ` : ""}
-          Watched targets with a target price are checked against the last {TARGET_ALERT_WINDOW_DAYS} days of sold listings once a day when you open this tab.{" "}
+          {alertFrequency === "off"
+            ? `Auto-check is off — tap the button to compare watched targets with the last ${TARGET_ALERT_WINDOW_DAYS} days of sold listings.`
+            : `Watched targets with a target price are checked against the last ${TARGET_ALERT_WINDOW_DAYS} days of sold listings ${alertFrequency === "weekly" ? "once a week" : "once a day"} when you open this tab.`}{" "}
+          {(() => {
+            const n = (targets || []).filter((t) => t.status === "Watching" && targetHasPrice(t)).length;
+            const perMonth = alertFrequency === "daily" ? n * 30 : alertFrequency === "weekly" ? n * 4 : 0;
+            return perMonth ? `Uses about ${perMonth}–${perMonth * 2} CardSight calls a month for ${n} target${n === 1 ? "" : "s"}. ` : "";
+          })()}
           {(targets || []).filter(targetInBuyWindow).length > 0 && (
             <span style={{ color: "#4E8B6B", fontWeight: 600 }}>{(targets || []).filter(targetInBuyWindow).length} in a buying window now.</span>
           )}

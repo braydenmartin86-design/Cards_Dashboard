@@ -458,6 +458,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
       <GlobalStyle />
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
         <Header tab={tab} setTab={setTab} onAdd={() => setShowAdd(true)} onExport={exportAllData} onImport={importAllData} backupStatus={backupStatus} />
+        <CardSightQuotaBanner />
 
         {pendingImport && (
           <div className="modalOverlay" onClick={cancelImport}>
