@@ -724,6 +724,13 @@ async function askCardSight(question, history = []) {
   return data.answer;
 }
 
+// eBay's sold-listings search. Used for each sale CardSight reports, because its link goes to the
+// original listing, and eBay replaces ended listings with a generic product page that doesn't show
+// what the card sold for.
+function ebaySoldUrl(text) {
+  return `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(String(text || "").replace(/\s+/g, " ").trim())}&LH_Sold=1&LH_Complete=1`;
+}
+
 const CARDSIGHT_AI_GAVE_UP = /more iterations|try a more specific|technical difficult|currently unavailable/i;
 const PRICE_QUESTION = /\b(sold|sell|sells|selling|price|prices|priced|worth|value|comps?|going for|cost)\b/i;
 
@@ -751,7 +758,12 @@ Return ONLY JSON: {"is_specific_card": true|false, "player_name": "", "year": ""
   const lines = [`Most recent sold comps from CardSight's sales data for ${name}:`, ""];
   for (const r of results) {
     lines.push(`${r.grade || "Raw"}: ${r.priceAud != null ? `avg A$${r.priceAud.toFixed(2)} from the last ${r.sales.length} sale${r.sales.length === 1 ? "" : "s"}` : "no matching sales found"}${r.priceAud != null && !r.highConfidence ? ` (low confidence — ${r.reasons.join(", ")})` : ""}`);
-    for (const s of r.sales) lines.push(`  • ${new Date(s.date).toLocaleDateString()} · A$${convertUsdToAud(s.priceUsd).toFixed(2)} · ${s.title}`);
+    for (const s of r.sales) {
+      const links = [s.url ? `[listing](${s.url})` : "", `[eBay sold](${ebaySoldUrl(s.title)})`].filter(Boolean).join(" · ");
+      lines.push(`  • ${new Date(s.date).toLocaleDateString()} · A$${convertUsdToAud(s.priceUsd).toFixed(2)} · ${s.title} · ${links}`);
+    }
+    const search = `${name} ${r.grade || "-psa -bgs -sgc -cgc"}`.replace(/#/g, "");
+    lines.push(`  [Search all ${r.grade || "raw"} sold on eBay](${ebaySoldUrl(search)})`, "");
   }
   return { text: lines.join("\n"), foundSales: results.some((r) => r.sales.length > 0) };
 }

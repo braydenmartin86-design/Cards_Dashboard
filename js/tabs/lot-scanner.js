@@ -639,6 +639,11 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
                     listing
                   </a>
                 )}
+                {s.title && (
+                  <a href={ebaySoldUrl(s.title)} target="_blank" rel="noreferrer" title="eBay sold search for this title (shows the sold price)" style={{ color: "#2FA89A", marginLeft: 6 }}>
+                    eBay sold
+                  </a>
+                )}
               </div>
             ))}
           {card._priceNote && <div>{card._priceNote}</div>}

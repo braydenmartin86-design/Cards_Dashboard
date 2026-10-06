@@ -53,6 +53,40 @@ function ModalHeader({ title, onClose }) {
   );
 }
 
+// Light markdown for chat answers: [text](url) and bare URLs become links, **bold** is bold,
+// and "## " headings lose their hashes.
+function RichText({ text }) {
+  return String(text || "")
+    .split("\n")
+    .map((line, li) => {
+      const heading = /^\s*#{1,6}\s+/.test(line);
+      const clean = line.replace(/^\s*#{1,6}\s+/, "");
+      const parts = [];
+      const re = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)|\*\*([^*]+)\*\*/g;
+      let last = 0;
+      let m;
+      while ((m = re.exec(clean))) {
+        if (m.index > last) parts.push(clean.slice(last, m.index));
+        if (m[2] || m[3]) {
+          parts.push(
+            <a key={m.index} href={m[2] || m[3]} target="_blank" rel="noreferrer" style={{ color: "#2FA89A" }}>
+              {m[1] || "link"}
+            </a>
+          );
+        } else {
+          parts.push(<strong key={m.index}>{m[4]}</strong>);
+        }
+        last = re.lastIndex;
+      }
+      if (last < clean.length) parts.push(clean.slice(last));
+      return (
+        <div key={li} style={heading ? { fontWeight: 700, color: "#EDEAE1", marginTop: 4 } : undefined}>
+          {parts.length ? parts : " "}
+        </div>
+      );
+    });
+}
+
 // "Ask CardSight": plain-English questions to CardSight's AI, with follow-ups. `suggestions`
 // are one-click starter questions.
 function AskCardSight({ title = "Ask CardSight", suggestions = [], placeholder = "Ask about a specific card, e.g. 2023 Prizm Victor Wembanyama #136 recent sales" }) {
@@ -93,8 +127,7 @@ function AskCardSight({ title = "Ask CardSight", suggestions = [], placeholder =
       </div>
       {turns.map((t, i) => (
         <div key={i} style={{ fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 8, color: t.role === "user" ? "#EDEAE1" : "#C6CAD4", fontWeight: t.role === "user" ? 600 : 400 }}>
-          {t.role === "user" ? "You: " : ""}
-          {t.content}
+          {t.role === "user" ? `You: ${t.content}` : <RichText text={t.content} />}
         </div>
       ))}
       {turns.length > 0 && turns[turns.length - 1].role === "assistant" && /more specific|more iterations|technical difficult|currently unavailable/i.test(turns[turns.length - 1].content) && (
