@@ -272,104 +272,165 @@ function wantedGrade(card) {
   return null;
 }
 
-// Market value from sold listings: average of the 3 most recent, or the most recent if fewer.
+// Market value from sold listings: average of the 5 most recent (or of however many exist).
+const COMPS_TO_AVERAGE = 5;
 function summarizeSales(sales, label, pricedAs) {
-  const used = sales.slice(0, sales.length >= 3 ? 3 : 1);
+  const used = sales.slice(0, COMPS_TO_AVERAGE);
   const priceUsd = Math.round((used.reduce((s, r) => s + Number(r.price), 0) / used.length) * 100) / 100;
   const lastDate = new Date(used[0].date).toLocaleDateString();
   return {
     success: true,
     priceUsd,
     priceAud: convertUsdToAud(priceUsd),
-    source: used.length === 3 ? `${label} · avg of last 3 sales` : `${label} · last sale ${lastDate}`,
+    source: used.length === 1 ? `${label} · last sale ${lastDate}` : `${label} · avg of last ${used.length} sales`,
     confidence: "Sold comps",
     pricedAs,
     sales: used.map((r) => ({ date: r.date, priceUsd: Number(r.price), title: r.title, url: r.url })),
   };
 }
 
+// Sellers often list many copies of one card at once. CardSight doesn't say who sold what, so
+// sales on the same day with near-identical titles are treated as one seller's batch, and only
+// the first is counted.
+function onePerSellerPerDay(sales) {
+  const kept = [];
+  for (const sale of sales) {
+    const day = String(sale.date).slice(0, 10);
+    const tokens = new Set(normalizeCardText(sale.title).split(" ").filter(Boolean));
+    const sameBatch = kept.some((k) => {
+      if (k.day !== day) return false;
+      const shared = [...tokens].filter((t) => k.tokens.has(t)).length;
+      return shared / (tokens.size + k.tokens.size - shared) >= 0.8;
+    });
+    if (!sameBatch) kept.push({ day, tokens, sale });
+  }
+  return kept.map((k) => k.sale);
+}
+
 function escapeRegExp(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Search queries for a card, most specific first. The broader one only widens which listings
-// come back; every result still has to pass the same strict filter.
+const AUTO_WORDS = /\b(auto|autos|autograph|autographs|autographed|au|signature|signatures|sig|signed|rpa)\b/;
+const RELIC_WORDS = /\b(patch|patches|relic|relics|jersey|memorabilia|swatch|rpa)\b/;
+const JUNK_WORDS = /\b(lot|lots|bundle|reprint|reprints|rp|custom|facsimile|proxy)\b/;
+const SET_FILLER_WORDS = new Set(["panini", "nba", "nfl", "mlb", "basketball", "football", "baseball", "soccer", "trading", "card", "cards"]);
+
+// What to match listings against, from the details Gemini read off the card.
+function cardProfile(card) {
+  // Gemini sometimes describes base cards as "Rookie Card Base" — that isn't a parallel name.
+  const variant = normalizeCardText(card.parallel_or_variant)
+    .replace(/\b(rookie card|rookie|rc|base card|base|card|parallel|variant)\b/g, " ")
+    .replace(/\b\d+\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const describing = normalizeCardText([card.set_name, card.parallel_or_variant].join(" "));
+  return {
+    grade: wantedGrade(card),
+    variant,
+    isBase: !variant,
+    variantTokens: variant.split(" ").filter((t) => t.length > 2),
+    nameTokens: normalizeCardText(card.player_name).split(" ").filter((t) => t.length > 1),
+    setTokens: normalizeCardText(card.set_name).split(" ").filter((t) => t.length > 2 && !/^\d+$/.test(t) && !SET_FILLER_WORDS.has(t)),
+    number: normalizeCardText(String(card.card_number || "").replace(/^#/, "")),
+    year: String(card.year || "").slice(0, 4),
+    isAuto: AUTO_WORDS.test(describing),
+    isRelic: RELIC_WORDS.test(describing),
+  };
+}
+
+// Search queries, most specific first. The broader one only widens which listings come back;
+// every result still has to pass the same strict filter.
 function cardSearchQueries(card) {
-  const grade = wantedGrade(card);
-  const variant = String(card.parallel_or_variant || "").trim();
-  const isBase = !variant || /^base( card)?$/i.test(variant);
-  const number = String(card.card_number || "").replace(/^#/, "").trim();
-  const year = String(card.year || "").slice(0, 4);
+  const p = cardProfile(card);
   const join = (parts) => parts.join(" ").replace(/\s+/g, " ").trim();
   const full = join([
-    year,
+    p.year,
     card.set_name,
     card.player_name,
-    number ? `#${number}` : "",
-    isBase ? "" : variant,
-    grade ? `${grade.company || ""} ${grade.value}` : "",
+    p.number ? `#${p.number}` : "",
+    p.variant,
+    p.grade ? `${p.grade.company || ""} ${p.grade.value}` : "",
   ]);
-  const broad = join([year, card.set_name, card.player_name, isBase ? "" : variant]);
+  const broad = join([p.year, card.set_name, card.player_name, p.variant]);
   return [...new Set([full, broad])];
 }
 
-// Fuzzy-search sold listing titles, then keep only listings that clearly are this card —
-// same player, year, card number, parallel and grade.
-async function searchSoldListingsByTitle(card, q) {
-  const grade = wantedGrade(card);
-  const variant = String(card.parallel_or_variant || "").trim();
-  const isBase = !variant || /^base( card)?$/i.test(variant);
-  const number = String(card.card_number || "").replace(/^#/, "").trim();
-  const year = String(card.year || "").slice(0, 4);
+function listingCardNumber(r) {
+  const m = String(r.title || "").match(/#\s*([A-Za-z0-9-]+)/);
+  if (m) return normalizeCardText(m[1]);
+  return r.matched_card && r.matched_card.number ? normalizeCardText(r.matched_card.number) : "";
+}
 
+// Fuzzy-search sold listing titles, then keep only listings that clearly are this card —
+// same player, year, set, card number, parallel, grade, and auto/relic status.
+async function searchSoldListingsByTitle(card, q) {
+  const p = cardProfile(card);
   const data = await callCardSightProxy({
     endpoint: "/pricing/search",
     method: "GET",
     query: { q, listing_type: "auction", limit: 100 },
   });
 
-  const nameTokens = normalizeCardText(card.player_name).split(" ").filter((t) => t.length > 1);
-  const variantTokens = normalizeCardText(variant).split(" ").filter((t) => t.length > 2);
-  const gradeInTitle = grade
-    ? new RegExp(`\\b${grade.company ? escapeRegExp(grade.company) + "\\s*(?:gem\\s*(?:mint|mt)\\s*)?" : ""}${escapeRegExp(grade.value)}\\b`, "i")
+  const gradeInTitle = p.grade
+    ? new RegExp(`\\b${p.grade.company ? escapeRegExp(p.grade.company) + "\\s*(?:gem\\s*(?:mint|mt)\\s*)?" : ""}${escapeRegExp(p.grade.value)}\\b`, "i")
     : null;
+  const mostOf = (tokens, hay) => tokens.filter((t) => hay.includes(t)).length >= Math.ceil((tokens.length * 2) / 3);
 
-  const sales = (data.results || []).filter((r) => {
+  // Same player, year and set — the pool used to work out the card number when it's unknown.
+  const sameCardFamily = (data.results || []).filter((r) => {
     if (!r || !(Number(r.price) > 0) || !r.date || r.listing_type === "fixed") return false;
+    const title = normalizeCardText(r.title);
+    if (!p.nameTokens.length || !p.nameTokens.every((t) => title.includes(t))) return false;
+    const set = (r.matched_card && r.matched_card.set) || {};
+    if (p.year && !title.includes(p.year) && !String(set.year || "").includes(p.year)) return false;
+    if (p.setTokens.length && !mostOf(p.setTokens, `${title} ${normalizeCardText(set.release)} ${normalizeCardText(set.name)}`)) return false;
+    return true;
+  });
+
+  // Gemini can't see the number on the front of a raw card. Inserts and autographs from the
+  // same set have their own numbers, so lock onto the number most of this card's sales share.
+  let number = p.number;
+  if (!number) {
+    const counts = {};
+    for (const r of sameCardFamily) {
+      const n = listingCardNumber(r);
+      if (n) counts[n] = (counts[n] || 0) + 1;
+    }
+    number = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || "";
+  }
+
+  const sales = sameCardFamily.filter((r) => {
     const rawTitle = r.title || "";
     const title = normalizeCardText(rawTitle);
-    if (!nameTokens.length || !nameTokens.every((t) => title.includes(t))) return false;
+    if (JUNK_WORDS.test(title)) return false;
+    if (AUTO_WORDS.test(title) !== p.isAuto) return false;
+    if (RELIC_WORDS.test(title) !== p.isRelic) return false;
 
-    const matchedYear = String((r.matched_card && r.matched_card.set && r.matched_card.set.year) || "");
-    if (year && !title.includes(year) && !matchedYear.includes(year)) return false;
-
-    if (number) {
-      const m = rawTitle.match(/#\s*([A-Za-z0-9-]+)/);
-      if (m && normalizeCardText(m[1]) !== normalizeCardText(number)) return false;
-    }
+    const n = listingCardNumber(r);
+    if (number && n && n !== number) return false;
 
     const slabGrade = r.grade && r.grade.grade_value;
     const looksSlabbed = slabGrade || /\b(psa|bgs|sgc|cgc|beckett|tag)\s*\d/i.test(rawTitle);
-    if (!grade) {
+    if (!p.grade) {
       if (looksSlabbed) return false;
     } else if (slabGrade) {
-      if (String(r.grade.grade_value) !== grade.value) return false;
-      if (grade.company && normalizeCardText(r.grade.company_name) !== normalizeCardText(grade.company)) return false;
+      if (String(r.grade.grade_value) !== p.grade.value) return false;
+      if (p.grade.company && normalizeCardText(r.grade.company_name) !== normalizeCardText(p.grade.company)) return false;
     } else if (!gradeInTitle.test(rawTitle)) {
       return false;
     }
 
-    if (isBase) {
+    if (p.isBase) {
       // Base cards aren't serial-numbered; "/99"-style titles are parallels.
       if (r.parallel_name || /\/\s*\d{1,4}\b/.test(rawTitle)) return false;
-    } else {
-      const hay = `${normalizeCardText(r.parallel_name)} ${title}`;
-      if (!variantTokens.every((t) => hay.includes(t))) return false;
+    } else if (!mostOf(p.variantTokens, `${normalizeCardText(r.parallel_name)} ${title}`)) {
+      return false;
     }
     return true;
   }).sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  return { q, sales };
+  return { q, sales: onePerSellerPerDay(sales) };
 }
 
 async function verifyPriceWithCardSight(card) {
