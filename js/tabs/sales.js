@@ -226,6 +226,8 @@ function AddManualListingModal({ onClose, onAdd }) {
       card: details.trim() || "Manual Listing",
       sport,
       status: "Listed",
+      // The engine works cost out from `paid`, so the cost basis has to live there.
+      paid: costVal,
       totalCost: costVal,
       listedPrice: listVal,
       listingUrl: listingUrl.trim() || null,
@@ -289,6 +291,92 @@ function AddManualListingModal({ onClose, onAdd }) {
   );
 }
 
+// ===== Sales performance =====
+// Where your profit actually comes from: sold cards grouped by platform or by sport, with real
+// fees (where you've entered them), ROI and how long cards took to sell.
+
+function daysBetween(from, to) {
+  if (!from || !to) return null;
+  const a = new Date(from);
+  const b = new Date(to);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+function SalesPerformance({ items }) {
+  const [groupBy, setGroupBy] = useState("platform");
+  const sold = items.filter((i) => i.status === "Sold" && Number(i.actualSellPrice) > 0);
+
+  const rows = useMemo(() => {
+    const groups = {};
+    for (const i of sold) {
+      const qty = Number(i.quantity) || 1;
+      const key = groupBy === "platform" ? i.sellingMethod || "Not set" : i.sport || "Other";
+      const g = (groups[key] = groups[key] || { key, count: 0, revenue: 0, fees: 0, cost: 0, profit: 0, days: [], estimatedFees: 0 });
+      const price = Number(i.actualSellPrice);
+      const fee = saleFeesUsed(i, i.feesPct);
+      g.count += qty;
+      g.revenue += price * qty;
+      g.fees += fee.amount * qty;
+      g.cost += (i.totalCost || 0) * qty;
+      g.profit += (i.realisedProfit ?? 0) * qty;
+      if (fee.source !== "actual") g.estimatedFees += 1;
+      const d = daysBetween(i.datePurchased, i.dateSold);
+      if (d != null) g.days.push(d);
+    }
+    return Object.values(groups)
+      .map((g) => ({ ...g, roi: g.cost > 0 ? g.profit / g.cost : null, avgDays: g.days.length ? Math.round(g.days.reduce((s, d) => s + d, 0) / g.days.length) : null }))
+      .sort((a, b) => b.profit - a.profit);
+  }, [sold, groupBy]);
+
+  if (!sold.length) return null;
+  const estimated = rows.reduce((s, r) => s + r.estimatedFees, 0);
+  const cols = "1.4fr 60px 90px 80px 90px 70px 80px";
+
+  return (
+    <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "12px 14px", background: "#191B22", marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        <div className="oswald" style={{ fontSize: 15, fontWeight: 600 }}>📊 Sales performance</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[["platform", "By platform"], ["sport", "By sport"]].map(([key, label]) => (
+            <button key={key} className={`filterBtn ${groupBy === key ? "active" : ""}`} style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={() => setGroupBy(key)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ minWidth: 560 }}>
+          <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, fontSize: 10.5, color: "#6B7180", textTransform: "uppercase", padding: "0 0 6px" }}>
+            <div>{groupBy === "platform" ? "Platform" : "Sport"}</div>
+            <div>Sold</div>
+            <div>Revenue</div>
+            <div>Fees</div>
+            <div>Profit</div>
+            <div>ROI</div>
+            <div>Avg days</div>
+          </div>
+          {rows.map((r) => (
+            <div key={r.key} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, fontSize: 12.5, padding: "6px 0", borderTop: "1px solid #24272F" }}>
+              <div style={{ fontWeight: 600 }}>{r.key}</div>
+              <div>{r.count}</div>
+              <div>{fmtMoney(r.revenue)}</div>
+              <div style={{ color: "#8B90A0" }}>{fmtMoney(r.fees)}</div>
+              <div style={{ color: r.profit >= 0 ? "#4E8B6B" : "#B4472E", fontWeight: 600 }}>{fmtMoney(r.profit)}</div>
+              <div style={{ color: r.roi == null ? "#6B7180" : r.roi >= 0 ? "#4E8B6B" : "#B4472E" }}>{fmtPct(r.roi)}</div>
+              <div style={{ color: "#8B90A0" }}>{r.avgDays != null ? `${r.avgDays}d` : "—"}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: "#6B7180", marginTop: 8, lineHeight: 1.5 }}>
+        Avg days = purchase date to sold date.
+        {estimated > 0 && ` ${estimated} sale${estimated === 1 ? " uses" : "s use"} estimated fees (the platform's fee formula, or your fee % if no platform is set) — enter the actual fees paid for exact profit.`}
+      </div>
+    </div>
+  );
+}
+
 function MySales({ items, onUpdate, onDelete, onAddManualSale }) {
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(50);
@@ -329,6 +417,8 @@ function MySales({ items, onUpdate, onDelete, onAddManualSale }) {
         <Stat label="Listed value" value={fmtMoney(totals.listedValue)} />
         <Stat label="Realised profit" value={`${totals.realised >= 0 ? "+" : ""}${fmtMoney(totals.realised)}`} color={totals.realised >= 0 ? "#4E8B6B" : "#B4472E"} />
       </div>
+
+      <SalesPerformance items={items} />
 
       <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
         <input

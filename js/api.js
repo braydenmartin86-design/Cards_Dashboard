@@ -36,12 +36,66 @@ Return ONLY a valid JSON array of objects with keys: "id" (unique string), "titl
 // ===== Dual-Engine API Configuration =====
 const SUPABASE_URL = window.SUPABASE_URL;
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
-const USD_TO_AUD_RATE = 1.44; // Central USD to AUD conversion multiplier
+// ===== USD → AUD exchange rate =====
+// CardSight prices are in US$. The live rate is fetched once a day (no API key needed) and
+// cached in this browser; until it arrives — or if both sources are down — the last cached
+// rate is used, and failing that the fixed fallback.
+const USD_TO_AUD_FALLBACK = 1.44;
+const EXCHANGE_RATE_CACHE_KEY = "cardflip_ev_usd_aud_v1";
+const EXCHANGE_RATE_SOURCES = [
+  { name: "European Central Bank (Frankfurter)", url: "https://api.frankfurter.dev/v1/latest?base=USD&symbols=AUD", read: (j) => j.rates && j.rates.AUD, date: (j) => j.date },
+  { name: "open.er-api.com", url: "https://open.er-api.com/v6/latest/USD", read: (j) => j.rates && j.rates.AUD, date: (j) => j.time_last_update_unix && new Date(j.time_last_update_unix * 1000).toISOString().slice(0, 10) },
+];
+
+let exchangeRate = (() => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(EXCHANGE_RATE_CACHE_KEY) || "null");
+    if (cached && cached.rate > 1 && cached.rate < 2.5) return { ...cached, status: "cached" };
+  } catch (e) {}
+  return { rate: USD_TO_AUD_FALLBACK, date: null, source: "fixed fallback", status: "fallback" };
+})();
+const exchangeRateListeners = new Set();
+
+function currentUsdToAudRate() {
+  return exchangeRate.rate;
+}
+
+function onExchangeRateChange(listener) {
+  exchangeRateListeners.add(listener);
+  return () => exchangeRateListeners.delete(listener);
+}
+
+async function loadLiveExchangeRate() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (exchangeRate.status === "cached" && exchangeRate.fetchedOn === today) {
+    exchangeRate = { ...exchangeRate, status: "live" };
+    exchangeRateListeners.forEach((l) => l(exchangeRate));
+    return;
+  }
+  for (const source of EXCHANGE_RATE_SOURCES) {
+    try {
+      const res = await fetch(source.url);
+      if (!res.ok) continue;
+      const json = await res.json();
+      const rate = Number(source.read(json));
+      if (!(rate > 1 && rate < 2.5)) continue;
+      exchangeRate = { rate, date: source.date(json) || today, source: source.name, fetchedOn: today, status: "live" };
+      try {
+        localStorage.setItem(EXCHANGE_RATE_CACHE_KEY, JSON.stringify(exchangeRate));
+      } catch (e) {}
+      exchangeRateListeners.forEach((l) => l(exchangeRate));
+      return;
+    } catch (e) {
+      console.warn(`Exchange rate from ${source.name} unavailable:`, e.message || e);
+    }
+  }
+}
+loadLiveExchangeRate();
 
 // Central Currency Converter
 function convertUsdToAud(usdAmount) {
   if (usdAmount == null || isNaN(usdAmount)) return null;
-  return Math.round(Number(usdAmount) * USD_TO_AUD_RATE * 100) / 100;
+  return Math.round(Number(usdAmount) * currentUsdToAudRate() * 100) / 100;
 }
 
 // Reliable Client-Side Image Compression (Keeps payloads under 300KB to prevent Supabase 413 errors)

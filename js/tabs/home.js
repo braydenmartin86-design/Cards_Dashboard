@@ -74,6 +74,10 @@ function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, co
 
       <AskCardSight suggestions={cardSightSuggestions} />
 
+      <TargetAlertsBanner targets={targets} setTab={setTab} />
+
+      <AgingStock cards={cards} pokemonCards={pokemonCards} setTab={setTab} />
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
         <DashCard title="⚡ Needs your attention" onViewAll={() => setTab("portfolio")} count={actionItems.length}>
           {actionItems.length === 0 ? (
@@ -160,6 +164,105 @@ function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, co
           <div style={{ fontSize: 11.5, color: "#6B7180" }}>{contentPlan.length} item{contentPlan.length === 1 ? "" : "s"} in the pipeline</div>
         </DashCard>
       </div>
+    </div>
+  );
+}
+
+// ===== Aging stock =====
+// Cards that have sat unsold the longest, how much money they tie up, and what to do with them.
+
+const AGE_BUCKETS = [
+  { label: "Under 30 days", min: 0, max: 30, color: "#4E8B6B" },
+  { label: "30–60 days", min: 30, max: 60, color: "#5C7A99" },
+  { label: "60–90 days", min: 60, max: 90, color: "#C9A227" },
+  { label: "90+ days", min: 90, max: Infinity, color: "#B4472E" },
+];
+const AGING_DAYS = 60;
+
+function daysHeld(card) {
+  if (!card.datePurchased) return null;
+  const d = new Date(card.datePurchased);
+  return isNaN(d.getTime()) ? null : Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+}
+
+// Today's market value for the version of the card you hold.
+function currentMarketValue(card) {
+  const g = String(card.grade || "").toLowerCase();
+  if (card.status === "Graded" || card.grade) {
+    if (PSA10_GRADES.includes(g)) return card.psa10Avg ?? null;
+    if (PSA9_GRADES.includes(g)) return card.psa9Avg ?? null;
+    return null;
+  }
+  return card.rawAvg ?? null;
+}
+
+function agingAdvice(card) {
+  const value = currentMarketValue(card);
+  const fees = card.feesPct || 0.13;
+  const breakEven = card.totalCost / (1 - fees);
+  const trend = card.priceTrend ? trendChangePct(card.priceTrend.points) : null;
+  const falling = trend != null && trend <= -0.05;
+  if (value == null) return { text: "No market value — update its comps to decide", color: "#6B7180" };
+  const profit = value * (1 - fees) - card.totalCost;
+  if (profit > 0) {
+    return { text: `Sell now at ~${fmtMoney(value)} — still ${fmtMoney(profit)} profit${falling ? ", and prices are falling" : ""}`, color: "#4E8B6B" };
+  }
+  if (falling) return { text: `Prices falling — cut it: list near ${fmtMoney(value)} (break-even ${fmtMoney(breakEven)})`, color: "#B4472E" };
+  return { text: `Below break-even (${fmtMoney(breakEven)}) — bundle it or move it at a card show`, color: "#C9A227" };
+}
+
+function AgingStock({ cards, pokemonCards, setTab }) {
+  const held = useMemo(
+    () =>
+      [...cards.map(computeCard), ...pokemonCards.map(computePokemonCard)]
+        .filter((c) => c.status === "Raw" || c.status === "Graded" || c.status === "Listed")
+        .map((c) => ({ ...c, _days: daysHeld(c) })),
+    [cards, pokemonCards]
+  );
+  const qty = (c) => Number(c.quantity) || 1;
+  const dated = held.filter((c) => c._days != null);
+  if (!dated.length) return null;
+
+  const buckets = AGE_BUCKETS.map((b) => {
+    const inBucket = dated.filter((c) => c._days >= b.min && c._days < b.max);
+    return { ...b, count: inBucket.reduce((s, c) => s + qty(c), 0), capital: inBucket.reduce((s, c) => s + c.totalCost * qty(c), 0) };
+  });
+  const old = dated.filter((c) => c._days >= AGING_DAYS).sort((a, b) => b._days - a._days);
+  const tiedUp = old.reduce((s, c) => s + c.totalCost * qty(c), 0);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <DashCard title="⏳ Aging stock" onViewAll={() => setTab("portfolio")} count={old.length}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 6 }}>
+          {buckets.map((b) => (
+            <MiniStat key={b.label} label={`${b.label} · ${b.count}`} value={fmtMoney(b.capital)} color={b.count ? b.color : undefined} />
+          ))}
+        </div>
+        {old.length === 0 ? (
+          <EmptyRow text={`Nothing held longer than ${AGING_DAYS} days — stock is turning over well.`} />
+        ) : (
+          <>
+            <div style={{ fontSize: 11.5, color: "#8B90A0", margin: "2px 0 4px" }}>
+              {fmtMoney(tiedUp)} tied up in {old.length} card{old.length === 1 ? "" : "s"} held {AGING_DAYS}+ days. Oldest first:
+            </div>
+            {old.slice(0, 6).map((c) => {
+              const advice = agingAdvice(c);
+              return (
+                <DashRow key={c.id} onClick={() => setTab(c.sport === "Pokémon" ? "pokemon" : "portfolio")}>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ fontWeight: 600 }}>{c.player}</span>
+                    <span style={{ color: "#6B7180", marginLeft: 6 }}>
+                      {c._days}d · cost {fmtMoney(c.totalCost)}
+                      {c.status === "Listed" ? " · listed" : ""}
+                    </span>
+                    <div style={{ fontSize: 11, color: advice.color }}>{advice.text}</div>
+                  </span>
+                </DashRow>
+              );
+            })}
+          </>
+        )}
+      </DashCard>
     </div>
   );
 }

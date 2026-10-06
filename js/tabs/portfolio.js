@@ -280,6 +280,11 @@ function CardRow({ card, onClick, gridCols }) {
               📍 {card.location}
             </span>
           )}
+          {compsAgeDays(card) != null && compsAgeDays(card) >= STALE_COMPS_DAYS && (
+            <span className="mono" title="Market values haven't been updated in a while" style={{ fontSize: 10, color: "#C9A227", marginLeft: 8 }}>
+              ⏱ comps {compsAgeDays(card)}d old
+            </span>
+          )}
         </div>
       </div>
       <div style={{ color: "#A7ADBB" }}>{card.status}{card.grade ? ` · ${card.grade}` : ""}</div>
@@ -614,8 +619,43 @@ const TIER_FIELDS = {
   psa10: { avg: "psa10Avg", history: "psa10History", label: "PSA 10" },
 };
 
-function CompUpdater({ card, onUpdate }) {
-  const [open, setOpen] = useState(false);
+// Grade tiers to look up: graded cards only their own grade; raw cards Raw, PSA 9 and PSA 10.
+function compTiersFor(grade) {
+  return grade
+    ? [{ key: tierKeyForGrade(grade) || "own", grade }]
+    : [{ key: "raw", grade: null }, { key: "psa9", grade: "PSA 9" }, { key: "psa10", grade: "PSA 10" }];
+}
+
+// Comp values found for a card, written into its market-value columns plus price history.
+// `values`: { raw?: aud, psa9?: aud, psa10?: aud }.
+function cardWithCompValues(card, values, details, trend) {
+  const today = new Date().toISOString().slice(0, 10);
+  const patch = { compsUpdatedAt: today };
+  if (details) patch.compSearch = details;
+  for (const [key, value] of Object.entries(values)) {
+    const f = TIER_FIELDS[key];
+    if (!f || value == null) continue;
+    patch[f.avg] = value;
+    patch[f.history] = appendHistoryIfChanged(card[f.history], card[f.avg], value, today);
+  }
+  if (trend && trend.points && trend.points.length >= 2) patch.priceTrend = { ...trend, fetchedAt: today };
+  return { ...card, ...patch, id: card.id };
+}
+
+// Days since a card's comps were last updated (null if never).
+function compsAgeDays(card) {
+  if (!card.compsUpdatedAt) return null;
+  return Math.max(0, Math.round((Date.now() - new Date(card.compsUpdatedAt).getTime()) / 86400000));
+}
+const STALE_COMPS_DAYS = 30;
+
+// Searches CardSight for recent comps on one card and lets you choose what to use: tick or untick
+// grades and individual sales, or type in up to 3 sold prices yourself. Shared by My Cards,
+// Pokémon, the Buy Evaluator and Grade Check — `onApply({ values, details, trend })` decides
+// where the chosen values go.
+// `card` needs player, card ("Card / set" text), cardNum, sport and optionally compSearch.
+function CompFinder({ card, grade, onApply, title = "🔄 Update comps from CardSight", applyNoun = "value", defaultOpen = false, savedTrend, updatedAt }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [details, setDetails] = useState(() => compSearchDefaults(card));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -623,22 +663,22 @@ function CompUpdater({ card, onUpdate }) {
   const [trend, setTrend] = useState(null);
   const [trendNote, setTrendNote] = useState(null);
   const [applied, setApplied] = useState(false);
-  // Per tier: { use, ticked: [bool per sale], manual: "" }. High-confidence tiers start ticked;
-  // the rest can be ticked after checking the listings, or given a value typed in by hand.
+  // Per tier: { use, ticked: [bool per sale], manual: ["", "", ""] }. High-confidence tiers start
+  // ticked; the rest can be ticked after checking the listings, or given values typed in by hand.
   const [choices, setChoices] = useState({});
 
+  // Fresh search fields whenever a different card is shown.
+  const identity = [card.id, card.player, card.card, card.cardNum].join("|");
   useEffect(() => {
     setDetails(compSearchDefaults(card));
     setChoices({});
     setFound(null);
     setTrend(null);
+    setTrendNote(null);
     setApplied(false);
-  }, [card.id]);
+  }, [identity]);
 
-  // Graded cards only look up their own grade; raw cards get Raw, PSA 9 and PSA 10.
-  const tiers = card.grade
-    ? [{ key: tierKeyForGrade(card.grade) || "own", grade: card.grade }]
-    : [{ key: "raw", grade: null }, { key: "psa9", grade: "PSA 9" }, { key: "psa10", grade: "PSA 10" }];
+  const tiers = compTiersFor(grade);
 
   async function lookUp() {
     setLoading(true);
@@ -652,12 +692,12 @@ function CompUpdater({ card, onUpdate }) {
       setFound(results);
       setChoices(Object.fromEntries(results.map((r) => [r.key, { use: r.highConfidence, ticked: r.sales.map(() => true), manual: ["", "", ""] }])));
       // Price trend for the tier this card is actually in.
-      const trendTier = results.find((r) => (card.grade ? r.grade === card.grade : r.key === "raw")) || results[0];
+      const trendTier = results.find((r) => (grade ? r.grade === grade : r.key === "raw")) || results[0];
       const cardId = trendTier.cardId || results.map((r) => r.cardId).find(Boolean);
       if (cardId) {
         try {
-          const points = await fetchPriceTrend(cardId, { parallelId: trendTier.parallelId, gradeId: trendTier.gradeId, graded: Boolean(card.grade) });
-          setTrend({ points, cardId, label: card.grade || "Raw" });
+          const points = await fetchPriceTrend(cardId, { parallelId: trendTier.parallelId, gradeId: trendTier.gradeId, graded: Boolean(grade) });
+          setTrend({ points, cardId, label: grade || "Raw" });
           if (points.length < 2) setTrendNote("Not enough recent sales for a trend line.");
         } catch (e) {
           setTrendNote(`Price trend unavailable: ${e.message}`);
@@ -694,35 +734,27 @@ function CompUpdater({ card, onUpdate }) {
   const applicable = (found || []).filter((r) => TIER_FIELDS[r.key] && (choices[r.key] || {}).use && tierValue(r));
 
   function apply() {
-    const today = new Date().toISOString().slice(0, 10);
-    const patch = { compSearch: details, compsUpdatedAt: today };
-    for (const r of applicable) {
-      const f = TIER_FIELDS[r.key];
-      const value = tierValue(r).aud;
-      patch[f.avg] = value;
-      patch[f.history] = appendHistoryIfChanged(card[f.history], card[f.avg], value, today);
-    }
-    if (trend && trend.points.length >= 2) patch.priceTrend = { ...trend, fetchedAt: today };
-    onUpdate({ ...card, ...patch, id: card.id });
+    const values = Object.fromEntries(applicable.map((r) => [r.key, tierValue(r).aud]));
+    onApply({ values, details, trend: trend && trend.points.length >= 2 ? trend : null });
     setApplied(true);
   }
 
-  const savedTrend = card.priceTrend && card.priceTrend.points && card.priceTrend.points.length >= 2 ? card.priceTrend : null;
-  const shownTrend = trend && trend.points.length >= 2 ? trend : savedTrend;
+  const kept = savedTrend && savedTrend.points && savedTrend.points.length >= 2 ? savedTrend : null;
+  const shownTrend = trend && trend.points.length >= 2 ? trend : kept;
 
   return (
     <div style={{ border: "1px solid #2C303B", borderRadius: 8, padding: "10px 12px", marginBottom: 16, background: "#14161C" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px", borderColor: "#2FA89A66", color: "#2FA89A" }} onClick={() => setOpen((v) => !v)}>
-          🔄 Update comps from CardSight {open ? "▲" : "▼"}
+        <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px", borderColor: "#2FA89A66", color: "#2FA89A" }} onClick={() => setOpen((v) => !v)}>
+          {title} {open ? "▲" : "▼"}
         </button>
-        {card.compsUpdatedAt && <span style={{ fontSize: 11, color: "#6B7180" }}>Last updated {card.compsUpdatedAt}</span>}
+        {updatedAt && <span style={{ fontSize: 11, color: "#6B7180" }}>Last updated {updatedAt}</span>}
       </div>
 
       {shownTrend && (
         <div style={{ marginTop: 10 }}>
           <div style={{ fontSize: 11, color: "#8B90A0", marginBottom: 4 }}>
-            CardSight price trend · {shownTrend.label} · weekly median sold price (A$)
+            CardSight price trend · {shownTrend.label} · weekly median sold price (A$){trendChangeText(shownTrend.points)}
           </div>
           <TrendSparkline history={shownTrend.points} color="#2FA89A" />
         </div>
@@ -740,14 +772,25 @@ function CompUpdater({ card, onUpdate }) {
             ].map(([field, label]) => (
               <div key={field}>
                 <label style={{ fontSize: 10.5 }}>{label}</label>
-                <input value={details[field] ?? ""} onChange={(e) => setDetails({ ...details, [field]: e.target.value })} style={{ padding: "5px 8px", fontSize: 12.5 }} />
+                <input
+                  value={details[field] ?? ""}
+                  onChange={(e) => setDetails({ ...details, [field]: e.target.value })}
+                  onKeyDown={(e) => {
+                    // Inside the Buy Evaluator's form, Enter would otherwise submit the whole form.
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (!loading && details.player_name) lookUp();
+                    }
+                  }}
+                  style={{ padding: "5px 8px", fontSize: 12.5 }}
+                />
               </div>
             ))}
           </div>
           <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 8, lineHeight: 1.5 }}>
-            Searches the last {COMPS_PER_TIER} sales for {card.grade ? card.grade : "Raw, PSA 9 and PSA 10"}. High-confidence results are ticked for you (that needs the card #, so add it from the back of the card). Low-confidence ones can be ticked after checking the listings, or you can type in a value.
+            Searches the last {COMPS_PER_TIER} sales for {grade ? grade : "Raw, PSA 9 and PSA 10"}. High-confidence results are ticked for you (that needs the card #, so add it from the back of the card). Low-confidence ones can be ticked after checking the listings, or you can type in prices yourself.
           </div>
-          <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={lookUp} disabled={loading || !details.player_name}>
+          <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={lookUp} disabled={loading || !details.player_name}>
             {loading ? "Searching sold listings…" : "Find recent comps"}
           </button>
           {error && <div style={{ fontSize: 12, color: "#B4472E", marginTop: 8 }}>{error}</div>}
@@ -759,84 +802,225 @@ function CompUpdater({ card, onUpdate }) {
                 const value = tierValue(r);
                 const canApply = Boolean(TIER_FIELDS[r.key]);
                 return (
-                <div key={r.key + (r.grade || "")} style={{ border: `1px solid ${c.use && value ? "#4E8B6B55" : "#2C303B"}`, borderRadius: 6, padding: "8px 10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <label style={{ fontWeight: 600, fontSize: 12.5, color: "#EDEAE1", display: "flex", alignItems: "center", gap: 6, margin: 0, cursor: canApply ? "pointer" : "default" }}>
-                      {canApply && (
-                        <input type="checkbox" checked={Boolean(c.use)} onChange={(e) => updateChoice(r.key, { use: e.target.checked })} style={{ width: "auto", margin: 0 }} />
-                      )}
-                      {r.grade || "Raw"}
-                      {r.grade && TIER_FIELDS[r.key] && TIER_FIELDS[r.key].label !== r.grade ? ` → ${TIER_FIELDS[r.key].label} column` : ""}
-                    </label>
-                    <span style={{ fontWeight: 700, color: "#C9A227" }}>{value ? fmtMoney(value.aud) : "—"}</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: r.highConfidence ? "#4E8B6B" : "#C9A227", margin: "2px 0 4px" }}>
-                    {r.highConfidence ? `✓ High confidence` : `⚠️ Low confidence — ${r.reasons.join(", ")}. Check the listings before using it.`}
-                    {value && (value.manual ? ` · avg of your ${value.count} sale${value.count === 1 ? "" : "s"}` : ` · avg of ${value.count} ticked sale${value.count === 1 ? "" : "s"}`)}
-                    {!canApply && " · this grade has no market-value column"}
-                  </div>
-                  {r.sales.map((s, i) => (
-                    <div key={i} style={{ fontSize: 11, color: "#8B90A0", lineHeight: 1.6, display: "flex", gap: 6, alignItems: "baseline" }}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean((c.ticked || [])[i])}
-                        onChange={(e) => {
-                          const ticked = [...(c.ticked || r.sales.map(() => true))];
-                          ticked[i] = e.target.checked;
-                          updateChoice(r.key, { ticked });
-                        }}
-                        title="Count this sale in the average"
-                        style={{ width: "auto", margin: 0, flexShrink: 0 }}
-                      />
-                      <span>
-                      {new Date(s.date).toLocaleDateString()} · A${convertUsdToAud(s.priceUsd).toFixed(2)}
-                      {s.title && <span style={{ color: "#6B7180" }}> · {s.title.length > 70 ? s.title.slice(0, 70) + "…" : s.title}</span>}
-                      {s.url && (
-                        <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "#2FA89A", marginLeft: 6 }}>
-                          listing
-                        </a>
-                      )}
-                      {s.title && (
-                        <a href={ebaySoldUrl(s.title)} target="_blank" rel="noreferrer" title="eBay sold search for this title (shows the sold price)" style={{ color: "#2FA89A", marginLeft: 6 }}>
-                          eBay sold
-                        </a>
-                      )}
-                      </span>
+                  <div key={r.key + (r.grade || "")} style={{ border: `1px solid ${c.use && value ? "#4E8B6B55" : "#2C303B"}`, borderRadius: 6, padding: "8px 10px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <label style={{ fontWeight: 600, fontSize: 12.5, color: "#EDEAE1", display: "flex", alignItems: "center", gap: 6, margin: 0, cursor: canApply ? "pointer" : "default" }}>
+                        {canApply && <input type="checkbox" checked={Boolean(c.use)} onChange={(e) => updateChoice(r.key, { use: e.target.checked })} style={{ width: "auto", margin: 0 }} />}
+                        {r.grade || "Raw"}
+                        {r.grade && TIER_FIELDS[r.key] && TIER_FIELDS[r.key].label !== r.grade ? ` → ${TIER_FIELDS[r.key].label} column` : ""}
+                      </label>
+                      <span style={{ fontWeight: 700, color: "#C9A227" }}>{value ? fmtMoney(value.aud) : "—"}</span>
                     </div>
-                  ))}
-                  {r.note && <div style={{ fontSize: 11, color: "#6B7180" }}>{r.note}</div>}
-                  {!r.highConfidence && <TierSearchLinks details={details} grade={r.grade} />}
-                  {canApply && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11, color: "#8B90A0", flexWrap: "wrap" }}>
-                      <span>Or enter the last 3 sold prices yourself (A$):</span>
-                      {[0, 1, 2].map((i) => (
+                    <div style={{ fontSize: 11, color: r.highConfidence ? "#4E8B6B" : "#C9A227", margin: "2px 0 4px" }}>
+                      {r.highConfidence ? `✓ High confidence` : `⚠️ Low confidence — ${r.reasons.join(", ")}. Check the listings before using it.`}
+                      {value && (value.manual ? ` · avg of your ${value.count} sale${value.count === 1 ? "" : "s"}` : ` · avg of ${value.count} ticked sale${value.count === 1 ? "" : "s"}`)}
+                      {!canApply && " · this grade has no market-value column"}
+                    </div>
+                    {r.sales.map((s, i) => (
+                      <div key={i} style={{ fontSize: 11, color: "#8B90A0", lineHeight: 1.6, display: "flex", gap: 6, alignItems: "baseline" }}>
                         <input
-                          key={i}
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder={i === 0 ? "Latest" : i === 1 ? "2nd" : "3rd"}
-                          value={(c.manual || [])[i] || ""}
+                          type="checkbox"
+                          checked={Boolean((c.ticked || [])[i])}
                           onChange={(e) => {
-                            const manual = [...(c.manual || ["", "", ""])];
-                            manual[i] = e.target.value;
-                            updateChoice(r.key, { manual, use: manual.some((v) => Number(v) > 0) ? true : c.use });
+                            const ticked = [...(c.ticked || r.sales.map(() => true))];
+                            ticked[i] = e.target.checked;
+                            updateChoice(r.key, { ticked });
                           }}
-                          style={{ width: 80, padding: "4px 7px", fontSize: 12 }}
+                          title="Count this sale in the average"
+                          style={{ width: "auto", margin: 0, flexShrink: 0 }}
                         />
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <span>
+                          {new Date(s.date).toLocaleDateString()} · A${convertUsdToAud(s.priceUsd).toFixed(2)}
+                          {s.title && <span style={{ color: "#6B7180" }}> · {s.title.length > 70 ? s.title.slice(0, 70) + "…" : s.title}</span>}
+                          {s.url && (
+                            <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "#2FA89A", marginLeft: 6 }}>
+                              listing
+                            </a>
+                          )}
+                          {s.title && (
+                            <a href={ebaySoldUrl(s.title)} target="_blank" rel="noreferrer" title="eBay sold search for this title (shows the sold price)" style={{ color: "#2FA89A", marginLeft: 6 }}>
+                              eBay sold
+                            </a>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                    {r.note && <div style={{ fontSize: 11, color: "#6B7180" }}>{r.note}</div>}
+                    {!r.highConfidence && <TierSearchLinks details={details} grade={r.grade} />}
+                    {canApply && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11, color: "#8B90A0", flexWrap: "wrap" }}>
+                        <span>Or enter the last 3 sold prices yourself (A$):</span>
+                        {[0, 1, 2].map((i) => (
+                          <input
+                            key={i}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder={i === 0 ? "Latest" : i === 1 ? "2nd" : "3rd"}
+                            value={(c.manual || [])[i] || ""}
+                            onChange={(e) => {
+                              const manual = [...(c.manual || ["", "", ""])];
+                              manual[i] = e.target.value;
+                              updateChoice(r.key, { manual, use: manual.some((v) => Number(v) > 0) ? true : c.use });
+                            }}
+                            onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+                            style={{ width: 80, padding: "4px 7px", fontSize: 12 }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
               {trendNote && <div style={{ fontSize: 11, color: "#6B7180" }}>{trendNote}</div>}
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={apply} disabled={applicable.length === 0 || applied}>
-                  {applied ? "Applied ✓" : `Apply ${applicable.length} value${applicable.length === 1 ? "" : "s"}`}
+                <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={apply} disabled={applicable.length === 0 || applied}>
+                  {applied ? "Applied ✓" : `Apply ${applicable.length} ${applyNoun}${applicable.length === 1 ? "" : "s"}`}
                 </button>
-                {applicable.length === 0 && <span style={{ fontSize: 11, color: "#6B7180" }}>Tick a grade to use its sales, or type in a value from eBay sold.</span>}
+                {applicable.length === 0 && <span style={{ fontSize: 11, color: "#6B7180" }}>Tick a grade to use its sales, or type in prices from eBay sold.</span>}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// " · up 12% over 12 weeks" from a trend's first and last points.
+function trendChangeText(points) {
+  const change = trendChangePct(points);
+  if (change == null) return "";
+  const pct = Math.round(Math.abs(change) * 100);
+  return pct < 2 ? " · flat" : ` · ${change > 0 ? "up" : "down"} ${pct}% over ${points.length} weeks`;
+}
+
+function trendChangePct(points) {
+  if (!points || points.length < 2) return null;
+  // Average the first and last 3 weeks so one odd week doesn't swing it.
+  const n = Math.min(3, Math.floor(points.length / 2));
+  const avg = (arr) => arr.reduce((s, p) => s + p.value, 0) / arr.length;
+  const start = avg(points.slice(0, n));
+  const end = avg(points.slice(-n));
+  return start > 0 ? (end - start) / start : null;
+}
+
+function CompUpdater({ card, onUpdate }) {
+  return (
+    <CompFinder
+      card={card}
+      grade={card.grade || null}
+      savedTrend={card.priceTrend}
+      updatedAt={card.compsUpdatedAt}
+      onApply={({ values, details, trend }) => onUpdate(cardWithCompValues(card, values, details, trend))}
+    />
+  );
+}
+
+// One click to refresh comps on every card you hold. Only high-confidence results are written
+// (anything else is listed for you to check by hand), cards run one at a time to stay under
+// CardSight's rate limit, and by default cards checked in the last 30 days are skipped to save quota.
+function BulkCompRefresh({ cards, setCards }) {
+  const [onlyStale, setOnlyStale] = useState(true);
+  const [progress, setProgress] = useState(null); // { done, total, current }
+  const [summary, setSummary] = useState(null);
+  const [showSkipped, setShowSkipped] = useState(false);
+  const stopRef = useRef(false);
+
+  const held = cards.filter((c) => c.status === "Raw" || c.status === "Graded");
+  const lastChecked = (c) => [c.compsUpdatedAt, c.compsCheckedAt].filter(Boolean).sort().pop();
+  const isDue = (c) => {
+    const d = lastChecked(c);
+    return !d || (Date.now() - new Date(d).getTime()) / 86400000 >= STALE_COMPS_DAYS;
+  };
+  const queue = onlyStale ? held.filter(isDue) : held;
+  const neverUpdated = held.filter((c) => !c.compsUpdatedAt).length;
+  const stale = held.filter((c) => compsAgeDays(c) != null && compsAgeDays(c) >= STALE_COMPS_DAYS).length;
+
+  async function run() {
+    if (!queue.length || progress) return;
+    stopRef.current = false;
+    setSummary(null);
+    const result = { updated: [], skipped: [], failed: [] };
+    for (let i = 0; i < queue.length; i++) {
+      if (stopRef.current) break;
+      const card = queue[i];
+      setProgress({ done: i, total: queue.length, current: card.player });
+      const today = new Date().toISOString().slice(0, 10);
+      try {
+        const found = await findCompsForTiers({ ...compSearchDefaults(card), sport: card.sport }, compTiersFor(card.grade || null));
+        const values = {};
+        for (const r of found) if (r.highConfidence && TIER_FIELDS[r.key]) values[r.key] = r.priceAud;
+        if (Object.keys(values).length) {
+          setCards((prev) => prev.map((c) => (c.id === card.id ? { ...cardWithCompValues(c, values, null, null), compsCheckedAt: today } : c)));
+          result.updated.push({ card, values });
+        } else {
+          setCards((prev) => prev.map((c) => (c.id === card.id ? { ...c, compsCheckedAt: today } : c)));
+          const why = [...new Set(found.flatMap((r) => r.reasons))].join(", ");
+          result.skipped.push({ card, why: why || "no confident match" });
+        }
+      } catch (e) {
+        result.failed.push({ card, why: e.message || String(e) });
+      }
+    }
+    setProgress(null);
+    setSummary(result);
+  }
+
+  if (!held.length) return null;
+
+  return (
+    <div style={{ marginTop: 16, border: "1px solid #2C303B", borderRadius: 10, padding: "12px 14px", background: "#191B22" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {progress ? (
+          <>
+            <button className="btnSecondary" style={{ fontSize: 12.5 }} onClick={() => (stopRef.current = true)}>
+              Stop
+            </button>
+            <span style={{ fontSize: 12.5, color: "#8B90A0" }}>
+              Updating {progress.done + 1} of {progress.total}: {progress.current}…
+            </span>
+          </>
+        ) : (
+          <>
+            <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={run} disabled={!queue.length}>
+              🔄 Update all comps ({queue.length})
+            </button>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, fontSize: 12, color: "#A7ADBB", cursor: "pointer" }}>
+              <input type="checkbox" checked={onlyStale} onChange={(e) => setOnlyStale(e.target.checked)} style={{ width: "auto", margin: 0 }} />
+              Skip cards checked in the last {STALE_COMPS_DAYS} days
+            </label>
+          </>
+        )}
+        <span style={{ fontSize: 11.5, color: stale ? "#C9A227" : "#6B7180", marginLeft: "auto" }}>
+          {stale ? `⏱ ${stale} card${stale === 1 ? "" : "s"} with comps over ${STALE_COMPS_DAYS} days old · ` : ""}
+          {neverUpdated} never updated
+        </span>
+      </div>
+      {!progress && !summary && (
+        <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6 }}>
+          Only high-confidence results are saved — cards need their card # for that. Each card uses about 4–5 CardSight lookups.
+        </div>
+      )}
+      {summary && (
+        <div style={{ fontSize: 12, color: "#A7ADBB", marginTop: 8, lineHeight: 1.6 }}>
+          <span style={{ color: "#4E8B6B", fontWeight: 600 }}>{summary.updated.length} updated</span>
+          {" · "}
+          {summary.skipped.length} not confident enough
+          {summary.failed.length ? ` · ${summary.failed.length} failed` : ""}
+          {summary.skipped.length + summary.failed.length > 0 && (
+            <button type="button" onClick={() => setShowSkipped((v) => !v)} style={{ background: "transparent", border: "none", color: "#2FA89A", fontSize: 12, cursor: "pointer", marginLeft: 8 }}>
+              {showSkipped ? "Hide" : "Show"} which
+            </button>
+          )}
+          {showSkipped && (
+            <div style={{ marginTop: 6, fontSize: 11.5, color: "#8B90A0" }}>
+              {[...summary.skipped, ...summary.failed].map(({ card, why }) => (
+                <div key={card.id}>
+                  {card.player} — {card.card} {card.cardNum}: <span style={{ color: "#6B7180" }}>{why}</span>
+                </div>
+              ))}
+              <div style={{ marginTop: 4, color: "#6B7180" }}>Open a card and use "Update comps" to check its sales and apply them by hand.</div>
             </div>
           )}
         </div>

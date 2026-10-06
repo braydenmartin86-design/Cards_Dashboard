@@ -163,6 +163,23 @@ function AskCardSight({ title = "Ask CardSight", suggestions = [], placeholder =
   );
 }
 
+// Header badge showing the US$ → A$ rate CardSight prices are converted at.
+function ExchangeRateBadge() {
+  const [rate, setRate] = useState(exchangeRate);
+  useEffect(() => onExchangeRateChange(setRate), []);
+  const live = rate.status === "live";
+  const title = live
+    ? `Live rate from ${rate.source}${rate.date ? `, ${rate.date}` : ""}. Refreshes daily.`
+    : rate.status === "cached"
+    ? `Last known rate from ${rate.source}${rate.date ? ` (${rate.date})` : ""} — today's couldn't be fetched yet.`
+    : "Couldn't fetch a live rate — using the fixed fallback.";
+  return (
+    <span className="mono" title={title} style={{ fontSize: 11, color: live ? "#8B90A0" : "#C9A227", whiteSpace: "nowrap" }}>
+      US$1 = A${rate.rate.toFixed(4)} {live ? "· live" : rate.status === "cached" ? "· cached" : "· fallback"}
+    </span>
+  );
+}
+
 function SectionTitle({ children }) {
   return <div style={{ fontSize: 11, color: "#6B7180", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>{children}</div>;
 }

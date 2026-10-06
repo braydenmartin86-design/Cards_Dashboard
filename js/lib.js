@@ -1,6 +1,6 @@
 // React hooks, Lucide icon proxy and Recharts aliases (CDN globals).
 
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
 // Safe icon proxy for browser CDN
 const IconProxy = new Proxy({}, {

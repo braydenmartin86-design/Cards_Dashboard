@@ -1,8 +1,11 @@
 // ===== Formula engine, ported 1:1 from the user's Excel model =====
 
-const AUD_TO_USD_APPROX = 0.65;
+// PSA's declared-value tiers are in US$, so AUD values are converted at the current rate.
+function audToUsd(aud) {
+  return (aud || 0) / currentUsdToAudRate();
+}
 function tieredPsaAuCost(declaredValueAUD) {
-  const usd = (declaredValueAUD || 0) * AUD_TO_USD_APPROX;
+  const usd = audToUsd(declaredValueAUD);
   if (usd <= 500) return 50;
   if (usd <= 1000) return 140;
   if (usd <= 1500) return 165;
@@ -31,7 +34,7 @@ function estimateGradingTurnaroundDays(service, declaredValueAUD) {
   if (!service) return null;
   const s = service.toLowerCase();
   if (s === "psa via australia" || s === "psa via aus") {
-    const usd = (declaredValueAUD || 0) * AUD_TO_USD_APPROX;
+    const usd = audToUsd(declaredValueAUD);
     if (usd <= 500) return 225; // 7-8 months
     if (usd <= 1000) return 68; // 2-2.5 months
     if (usd <= 1500) return 53; // 1.5-2 months
@@ -91,6 +94,27 @@ function estimateSellingFee(method, price) {
     default:
       return null; // ShipMyCards Marketplace / Other — unknown, leave for manual entry
   }
+}
+
+// What a sale actually put in your pocket. Uses the fees you entered; otherwise the selling
+// platform's own fee formula (e.g. no fees on Facebook / local); otherwise the card's flat fee %.
+function netSaleProceeds(c, fees) {
+  if (c.actualSellPrice == null) return null;
+  const price = Number(c.actualSellPrice);
+  const shipping = Number(c.consignmentShipping) || 0;
+  if (c.actualFeesPaid != null && c.actualFeesPaid !== "") return price - Number(c.actualFeesPaid) - shipping;
+  const platformFee = c.sellingMethod ? estimateSellingFee(c.sellingMethod, price) : null;
+  if (platformFee != null) return price - platformFee - shipping;
+  return price * (1 - fees);
+}
+
+// The fee a sale used, by the same rules as netSaleProceeds.
+function saleFeesUsed(c, fees) {
+  const price = Number(c.actualSellPrice) || 0;
+  if (c.actualFeesPaid != null && c.actualFeesPaid !== "") return { amount: Number(c.actualFeesPaid), source: "actual" };
+  const platformFee = c.sellingMethod ? estimateSellingFee(c.sellingMethod, price) : null;
+  if (platformFee != null) return { amount: platformFee, source: "platform" };
+  return { amount: price * (fees || 0.13), source: "flat" };
 }
 
 function computeCard(c) {
@@ -225,13 +249,7 @@ let sellDecision = "";
   const psa9BE = (totalCost + futureGCost) / (1 - fees);
   const psa10BE = (totalCost + futureGCost) / (1 - fees);
 
-  const hasActualFees = c.actualFeesPaid != null && c.actualFeesPaid !== "";
-  const netSale =
-    c.actualSellPrice != null
-      ? hasActualFees
-        ? c.actualSellPrice - Number(c.actualFeesPaid) - (Number(c.consignmentShipping) || 0)
-        : c.actualSellPrice * (1 - fees)
-      : null;
+  const netSale = netSaleProceeds(c, fees);
   const realisedProfit = netSale != null ? netSale - totalCost : null;
 
   let projectedNetSell = null;
@@ -406,13 +424,7 @@ function computePokemonCard(c) {
   const psa9BE = (totalCost + futureGCost) / (1 - fees);
   const psa10BE = (totalCost + futureGCost) / (1 - fees);
 
-  const hasActualFees = c.actualFeesPaid != null && c.actualFeesPaid !== "";
-  const netSale =
-    c.actualSellPrice != null
-      ? hasActualFees
-        ? c.actualSellPrice - Number(c.actualFeesPaid) - (Number(c.consignmentShipping) || 0)
-        : c.actualSellPrice * (1 - fees)
-      : null;
+  const netSale = netSaleProceeds(c, fees);
   const realisedProfit = netSale != null ? netSale - totalCost : null;
 
   const pkmnGrade = (c.grade || "").toLowerCase();

@@ -34,7 +34,70 @@ IMPORTANT: Return ONLY the raw JSON array. Do not include markdown code blocks l
 // Selling fees assumed when working out the recommended offer (matches the Buy Evaluator).
 const LOT_SELLING_FEE_PCT = 0.13;
 
-function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
+// Splits what you paid for a lot (plus shipping) across its cards by each card's share of the
+// lot's value, so profit per card is right when they sell. With no values, it's split evenly.
+function allocateLotCost(cards, totalCost) {
+  const values = cards.map((c) => Math.max(0, Number(c.estimated_value_aud) || 0));
+  const totalValue = values.reduce((s, v) => s + v, 0);
+  const shares = values.map((v) => (totalValue > 0 ? v / totalValue : 1 / cards.length));
+  const costs = shares.map((s) => Math.round(totalCost * s * 100) / 100);
+  // Put any rounding difference on the most valuable card so the costs add up exactly.
+  const diff = Math.round((totalCost - costs.reduce((s, c) => s + c, 0)) * 100) / 100;
+  if (diff && costs.length) {
+    const top = values.indexOf(Math.max(...values));
+    costs[top] = Math.round((costs[top] + diff) * 100) / 100;
+  }
+  return costs;
+}
+
+// A scanned card as a My Cards / Pokémon entry.
+function lotCardToCollectionCard(card, cost, lotName) {
+  const today = new Date().toISOString().slice(0, 10);
+  const grade = card.is_graded && card.grade ? String(card.grade).trim() : null;
+  const gradeKey = grade ? tierKeyForGrade(grade) : null;
+  const value = Number(card.estimated_value_aud) || null;
+  const parallel = /^base$/i.test(String(card.parallel_or_variant || "").trim()) ? "" : card.parallel_or_variant || "";
+  const printRun = (String(parallel).match(/\/\s*(\d{1,4})\b/) || [])[1];
+  const verified = card._priceSource && !card._priceSource.startsWith("Gemini");
+  return {
+    id: crypto.randomUUID(),
+    player: card.player_name || "Unknown card",
+    card: [card.year, card.set_name, parallel].filter(Boolean).join(" "),
+    cardNum: (card.card_number || "").toString().replace(/^#/, ""),
+    sport: SPORT_OPTIONS.includes(card.sport) ? card.sport : /pok[eé]mon/i.test(card.sport || "") ? "Pokémon" : "Other",
+    location: "In Hand",
+    rookie: /\b(rc|rookie)\b/i.test(`${card.parallel_or_variant || ""} ${card.set_name || ""}`),
+    numbered: Boolean(printRun),
+    outOf: printRun ? Number(printRun) : null,
+    quantity: 1,
+    shipMyCards: "No",
+    status: grade ? "Graded" : "Raw",
+    grade,
+    paid: cost,
+    shipping: 0,
+    feesPct: 0.137,
+    rawAvg: grade ? null : value,
+    psa9Avg: gradeKey === "psa9" ? value : null,
+    psa10Avg: gradeKey === "psa10" ? value : null,
+    gradingService: grade ? "Bought Graded" : "PSA via Australia",
+    psa10Prob: 0.35,
+    psa9Prob: 0.45,
+    // The scan's details are a better comp search than re-splitting the card text later.
+    compSearch: {
+      player_name: card.player_name || "",
+      year: card.year || "",
+      set_name: card.set_name || "",
+      parallel_or_variant: card.parallel_or_variant || "Base",
+      card_number: (card.card_number || "").toString().replace(/^#/, ""),
+    },
+    compsUpdatedAt: verified ? today : undefined,
+    fromLot: lotName || "Lot scan",
+    actualSellPrice: null,
+    datePurchased: today,
+  };
+}
+
+function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans, onAddToCollection }) {
   const [images, setImages] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
@@ -50,6 +113,8 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   const [verifyingIndex, setVerifyingIndex] = useState(null);
   const [verifyAllProgress, setVerifyAllProgress] = useState(null);
   const [verifyAllSummary, setVerifyAllSummary] = useState(null);
+  const [showAddLot, setShowAddLot] = useState(false);
+  const [lotAddedAt, setLotAddedAt] = useState(null);
   // Profit you want on what you pay for a lot; remembered in this browser.
   const [targetProfitPct, setTargetProfitPct] = useState(() => {
     try {
@@ -71,6 +136,7 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
       results: results.map(({ _rawBase64, ...card }) => card),
       lotCost,
       lotShipping,
+      addedToCollectionAt: lotAddedAt,
     };
     setSavedScans((prev) => {
       const exists = prev.some((s) => s.id === scan.id);
@@ -93,6 +159,8 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setImages([]);
     setShowSavedList(false);
     setVerifyAllSummary(null);
+    setShowAddLot(false);
+    setLotAddedAt(scan.addedToCollectionAt || null);
   }
 
   function deleteScan(targetScan) {
@@ -141,6 +209,8 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   setResults(null);
   setAddedState({});
   setVerifyAllSummary(null);
+  setShowAddLot(false);
+  setLotAddedAt(null);
 
   try {
     const firstImage = images[0];
@@ -280,6 +350,20 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   const netAfterSelling = totalGrossValue * (1 - LOT_SELLING_FEE_PCT) - (Number(lotShipping) || 0);
   const recommendedOffer = Math.max(0, netAfterSelling / (1 + profitRate));
   const verifiedCount = (results || []).filter((c) => c._priceSource && !c._priceSource.startsWith("Gemini")).length;
+
+  const lotTotalCost = (Number(lotCost) || 0) + (Number(lotShipping) || 0);
+  const lotAllocation = results && results.length && lotCost !== "" ? allocateLotCost(results, lotTotalCost) : null;
+
+  function addLotToCollection() {
+    if (!lotAllocation || lotAddedAt) return;
+    const lotName = saveName.trim() || `Lot scan ${new Date().toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`;
+    onAddToCollection(results.map((card, i) => lotCardToCollectionCard(card, lotAllocation[i], lotName)));
+    const today = new Date().toISOString().slice(0, 10);
+    setLotAddedAt(today);
+    setShowAddLot(false);
+    // Remember it on the saved scan so the same lot can't be added twice.
+    if (loadedScanId) setSavedScans((prev) => prev.map((s) => (s.id === loadedScanId ? { ...s, addedToCollectionAt: today } : s)));
+  }
 
   function updateTargetProfit(value) {
     setTargetProfitPct(value);
@@ -441,6 +525,48 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
               </div>
               <div style={{ fontSize: 11, color: "#C9A227", lineHeight: 1.6 }}>
                 ⚠️ Cards marked ✓ CardSight are priced from recent sold listings; everything else is an AI best-guess. Check the listing titles on expensive cards before committing to buy.
+              </div>
+
+              <div style={{ borderTop: "1px solid #24272F", marginTop: 12, paddingTop: 12 }}>
+                {lotAddedAt ? (
+                  <span style={{ fontSize: 12.5, color: "#4E8B6B" }}>✓ This lot was added to your collection on {lotAddedAt}.</span>
+                ) : (
+                  <>
+                    <button
+                      className="btnSecondary"
+                      type="button"
+                      onClick={() => setShowAddLot((v) => !v)}
+                      disabled={!lotAllocation}
+                      title={lotAllocation ? "" : "Enter what you paid for the lot first"}
+                      style={{ fontSize: 12.5 }}
+                    >
+                      📥 Bought it? Add all {results.length} cards to My Cards {showAddLot ? "▲" : "▼"}
+                    </button>
+                    {!lotAllocation && <span style={{ fontSize: 11, color: "#6B7180", marginLeft: 10 }}>Enter what you paid for the lot first.</span>}
+                    {showAddLot && lotAllocation && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 11.5, color: "#8B90A0", marginBottom: 6, lineHeight: 1.5 }}>
+                          The {fmtMoney(lotTotalCost)} you paid{Number(lotShipping) ? " (incl. shipping)" : ""} is split across the cards by each card's share of the lot's value, so each card's profit is right when it sells.
+                          {totalGrossValue <= 0 && " No card has a value yet, so it's split evenly."} Fix any values above first if they look wrong.
+                        </div>
+                        <div style={{ border: "1px solid #2C303B", borderRadius: 6, overflow: "hidden", marginBottom: 10 }}>
+                          {results.map((card, i) => (
+                            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: 8, padding: "5px 10px", fontSize: 12, borderTop: i ? "1px solid #24272F" : "none" }}>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {card.player_name} <span style={{ color: "#6B7180" }}>{[card.year, card.set_name, card.grade].filter(Boolean).join(" ")}</span>
+                              </span>
+                              <span style={{ color: "#8B90A0", textAlign: "right" }}>{card.estimated_value_aud ? `${fmtMoney(Number(card.estimated_value_aud))} value` : "no value"}</span>
+                              <span style={{ fontWeight: 600, textAlign: "right" }}>{fmtMoney(lotAllocation[i])} cost</span>
+                            </div>
+                          ))}
+                        </div>
+                        <button className="btnPrimary" type="button" onClick={addLotToCollection} style={{ fontSize: 12.5 }}>
+                          Add {results.length} cards
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}

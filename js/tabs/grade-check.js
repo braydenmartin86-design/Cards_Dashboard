@@ -46,6 +46,8 @@ Respond with ONLY valid JSON, no markdown fences, no commentary outside the JSON
 {"centering":"short assessment","corners":"short assessment","edges":"short assessment","surface":"short assessment","predictedGradeLow":number,"predictedGradeHigh":number,"psa10Prob":number,"psa9Prob":number,"belowProb":number,"confidence":"Low"|"Medium"|"High","keyIssues":["short phrase", "short phrase"],"obstruction":"none, or what's blocked and by what (toploader glare, sticker, etc.)","summary":"one or two sentences"}
 psa10Prob + psa9Prob + belowProb must sum to 1. predictedGradeLow/High are PSA-scale numbers (1-10). If a sticker or heavy glare blocks meaningful assessment of any area, confidence must be "Low" regardless of how clean the visible parts look.`;
 
+const TREND_PROJECTION_CAP = 0.2;
+
 function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
   const [images, setImages] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -94,6 +96,24 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
       psa9Avg: c.psa9Avg ?? "",
       psa10Avg: c.psa10Avg ?? "",
     }));
+  }
+
+  const linkedCard = linkedId ? allCards.find((c) => c.id === linkedId) : null;
+  const compsAge = linkedCard ? compsAgeDays(linkedCard) : null;
+
+  // Comps found from CardSight fill the form, and are saved to the linked card too.
+  function applyComps({ values, details, trend }) {
+    setForm((f) => ({
+      ...f,
+      rawAvg: values.raw ?? f.rawAvg,
+      psa9Avg: values.psa9 ?? f.psa9Avg,
+      psa10Avg: values.psa10 ?? f.psa10Avg,
+    }));
+    if (linkedCard && onUpdateCardIn) {
+      const { _src, ...card } = linkedCard;
+      const updated = cardWithCompValues(card, values, details, trend);
+      onUpdateCardIn(_src, card.id, updated);
+    }
   }
 
   async function handleFiles(fileList) {
@@ -164,15 +184,31 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
       gradedProfit = expectedRevenue - totalCostGraded;
     }
 
-    let recommendation = "Not enough data";
-    if (gradedProfit != null) {
-      if (gradedProfit <= 0) recommendation = "Don't grade";
-      else if (rawProfit != null && rawProfit >= gradedProfit) recommendation = "Sell raw instead";
-      else recommendation = "Worth grading";
+    const recommend = (graded) => {
+      if (graded == null) return "Not enough data";
+      if (graded <= 0) return "Don't grade";
+      if (rawProfit != null && rawProfit >= graded) return "Sell raw instead";
+      return "Worth grading";
+    };
+    const recommendation = recommend(gradedProfit);
+
+    // Grading takes months. If the card's price trend keeps going the way it has over the last
+    // 12 weeks, the graded sale happens at a different price than today's comps.
+    const waitDays = estimateGradingTurnaroundDays(form.gradingService, Math.max(psa9Avg ?? 0, psa10Avg ?? 0, rawAvg ?? 0));
+    const trendPoints = linkedCard && linkedCard.priceTrend && linkedCard.priceTrend.points;
+    const trendPct = trendChangePct(trendPoints);
+    let trendAdjusted = null;
+    if (trendPct != null && waitDays && expectedRevenue != null) {
+      const perDay = trendPct / (trendPoints.length * 7);
+      // Stretching 12 weeks of trend over many months gets unrealistic fast, so it's capped.
+      const projected = perDay * waitDays;
+      const moveByThen = Math.max(-TREND_PROJECTION_CAP, Math.min(TREND_PROJECTION_CAP, projected));
+      const profit = expectedRevenue * (1 + moveByThen) - totalCostGraded;
+      trendAdjusted = { moveByThen, capped: moveByThen !== projected, profit, recommendation: recommend(profit) };
     }
 
-    return { rawProfit, gradedProfit, expectedRevenue, gCost, totalCostGraded, recommendation };
-  }, [result, form]);
+    return { rawProfit, gradedProfit, expectedRevenue, gCost, totalCostGraded, recommendation, waitDays, trendAdjusted };
+  }, [result, form, linkedCard]);
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -225,13 +261,34 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
           </select>
         </Field>
       </div>
-      <div style={{ fontSize: 11.5, color: "#6B7180", marginTop: 10, marginBottom: 4 }}>Market comps (leave blank if unknown)</div>
+      <div style={{ fontSize: 11.5, color: "#6B7180", marginTop: 10, marginBottom: 4 }}>
+        Market comps (leave blank if unknown)
+        {linkedCard && (
+          <span style={{ marginLeft: 8, color: compsAge == null || compsAge >= STALE_COMPS_DAYS ? "#C9A227" : "#4E8B6B" }}>
+            {compsAge == null
+              ? "· these values were never updated from recent sales — refresh them below before deciding"
+              : compsAge >= STALE_COMPS_DAYS
+              ? `· ⏱ updated ${compsAge} days ago — worth refreshing below`
+              : `· updated ${compsAge === 0 ? "today" : `${compsAge} day${compsAge === 1 ? "" : "s"} ago`}`}
+          </span>
+        )}
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
         <Field label="Raw avg"><input type="number" step="0.01" value={form.rawAvg} onChange={(e) => setForm({ ...form, rawAvg: e.target.value })} /></Field>
         <Field label="PSA 9 avg"><input type="number" step="0.01" value={form.psa9Avg} onChange={(e) => setForm({ ...form, psa9Avg: e.target.value })} /></Field>
         <Field label="PSA 10 avg"><input type="number" step="0.01" value={form.psa10Avg} onChange={(e) => setForm({ ...form, psa10Avg: e.target.value })} /></Field>
         <Field label="PSA 8-or-below avg"><input type="number" step="0.01" placeholder="≈ raw" value={form.belowAvg} onChange={(e) => setForm({ ...form, belowAvg: e.target.value })} /></Field>
       </div>
+      {form.player.trim() && (
+        <CompFinder
+          card={linkedCard || { id: "gradecheck", player: form.player, card: form.card, cardNum: "", sport: "" }}
+          grade={null}
+          title="🔄 Get Raw / PSA 9 / PSA 10 comps from CardSight"
+          savedTrend={linkedCard && linkedCard.priceTrend}
+          updatedAt={linkedCard && linkedCard.compsUpdatedAt}
+          onApply={applyComps}
+        />
+      )}
 
       <button className="btnPrimary" onClick={analyze} disabled={images.length === 0 || analyzing} style={{ opacity: images.length === 0 || analyzing ? 0.5 : 1 }}>
         {analyzing ? "Analyzing…" : "Analyze grade"}
@@ -318,6 +375,27 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
                   <MiniStat label="Grading cost" value={fmtMoney(ev.gCost)} />
                   <MiniStat label="Sell raw now" value={ev.rawProfit != null ? fmtMoney(ev.rawProfit) : "—"} color={ev.rawProfit != null ? (ev.rawProfit >= 0 ? "#4E8B6B" : "#B4472E") : undefined} />
                   <MiniStat label="Expected profit if graded" value={ev.gradedProfit != null ? fmtMoney(ev.gradedProfit) : "—"} color={ev.gradedProfit != null ? (ev.gradedProfit >= 0 ? "#4E8B6B" : "#B4472E") : undefined} emphasis />
+                </div>
+                <div style={{ fontSize: 12, color: "#A7ADBB", lineHeight: 1.7 }}>
+                  {ev.waitDays ? (
+                    <div>
+                      ⏳ Expected wait with {form.gradingService}: about {ev.waitDays >= 60 ? `${Math.round(ev.waitDays / 30)} months` : `${ev.waitDays} days`} before you can sell graded — selling raw gets you paid now.
+                    </div>
+                  ) : null}
+                  {ev.trendAdjusted ? (
+                    <div>
+                      📈 Price trend: {trendChangeText(linkedCard.priceTrend.points).replace(/^ · /, "")}. If it keeps moving like that, prices would be about{" "}
+                      {ev.trendAdjusted.moveByThen >= 0 ? "+" : "−"}
+                      {Math.round(Math.abs(ev.trendAdjusted.moveByThen) * 100)}%{ev.trendAdjusted.capped ? " (capped)" : ""} by the time it's graded →{" "}
+                      <span style={{ fontWeight: 700, color: ev.trendAdjusted.profit >= 0 ? "#4E8B6B" : "#B4472E" }}>{fmtMoney(ev.trendAdjusted.profit)}</span> expected profit if graded.
+                      {ev.trendAdjusted.recommendation !== ev.recommendation && (
+                        <span style={{ color: "#C9A227" }}> With the trend, the call becomes "{ev.trendAdjusted.recommendation}".</span>
+                      )}
+                      <div style={{ fontSize: 11, color: "#6B7180" }}>Trends don't always continue — treat this as a warning sign, not a forecast.</div>
+                    </div>
+                  ) : linkedCard ? (
+                    <div style={{ fontSize: 11, color: "#6B7180" }}>No price trend saved for this card yet — "Get comps from CardSight" above fetches one when CardSight can match the card.</div>
+                  ) : null}
                 </div>
               </div>
             </>

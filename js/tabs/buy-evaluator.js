@@ -36,6 +36,22 @@ function newBuyTarget() {
   };
 }
 
+// Comp values from CompFinder written into a buy target's sale boxes (one average per grade).
+function buyCompPatch(values, details) {
+  const patch = { compSearch: details, compsUpdatedAt: new Date().toISOString().slice(0, 10) };
+  const boxes = { raw: ["rawSale1", "rawSale2"], psa9: ["psa9Sale1", "psa9Sale2"], psa10: ["psa10Sale1", "psa10Sale2"] };
+  for (const [key, value] of Object.entries(values)) {
+    if (!boxes[key]) continue;
+    patch[boxes[key][0]] = String(value);
+    patch[boxes[key][1]] = "";
+  }
+  return patch;
+}
+
+function buyGrade(t) {
+  return t.rawGraded === "Graded" && t.psaLevel ? t.psaLevel : null;
+}
+
 const GAP_ZONE_STYLE = {
   "AUTO-BUY": { color: "#4E8B6B", label: "🟢 Auto-buy zone" },
   CONDITIONAL: { color: "#C9A227", label: "🟡 Conditional zone" },
@@ -355,6 +371,16 @@ function BuyDetailModal({ t, onUpdate, onRemove, onWin, onClose }) {
           </div>
         )}
 
+        <CompFinder
+          card={t}
+          grade={buyGrade(t)}
+          title="🔄 Get comps from CardSight"
+          applyNoun="price"
+          defaultOpen={t.marketPrice <= 0}
+          updatedAt={t.compsUpdatedAt}
+          onApply={({ values, details }) => onUpdate(t.id, buyCompPatch(values, details))}
+        />
+
         <div style={{ fontSize: 11.5, color: "#6B7180", marginBottom: 6 }}>Recent sales — up to 2 each, average is used automatically</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
           <TierPriceInput label="Raw" sale1={t.rawSale1} sale2={t.rawSale2} onChange1={(v) => onUpdate(t.id, { rawSale1: v })} onChange2={(v) => onUpdate(t.id, { rawSale2: v })} />
@@ -479,7 +505,7 @@ function parseListingLocally(text) {
   const priceMatch = text.match(/(?:AU|US|EUR|GBP)?\s*\$\s*([\d,]+(?:\.\d{2})?)/i);
   const bidsMatch = text.match(/(\d+)\s*bids?/i);
   const watchersMatch = text.match(/(\d+)\s*watchers?/i);
-  const shippingMatch = text.match(/\+\s*\$?\s*([\d,]+(?:\.\d{2})?)\s*shipping/i);
+  const shippingMatch = text.match(/\+\s*(?:US|AU)?\s*\$?\s*([\d,]+(?:\.\d{2})?)\s*shipping/i);
   const cardNumMatch = text.match(/#(\d+|[A-Z0-9-]+)/i);
 
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -491,6 +517,10 @@ function parseListingLocally(text) {
   const playerMatch = rawTitle.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b/);
   const extractedPlayer = playerMatch ? playerMatch[1] : rawTitle.slice(0, 25);
 
+  // eBay shows "US $42.00" on US listings; those amounts are converted at the live rate.
+  const isUsd = /\bUS\s*\$/i.test(text) && !/\bAU\s*\$/i.test(text);
+  const toAud = (n) => (n == null ? n : isUsd ? convertUsdToAud(n) : n);
+
   return {
     player: extractedPlayer,
     sport: "NFL", // Default fallback
@@ -501,11 +531,11 @@ function parseListingLocally(text) {
     outOf: text.match(/\/(\d+)/)?.[1] ? parseInt(text.match(/\/(\d+)/)[1], 10) : null,
     bidders: bidsMatch ? parseInt(bidsMatch[1], 10) : null,
     watchers: watchersMatch ? parseInt(watchersMatch[1], 10) : null,
-    currentBidAUD: priceMatch ? parseFloat(priceMatch[1].replace(",", "")) : null,
-    originalCurrency: text.includes("US") ? "USD" : "AUD",
-    shippingAUD: shippingMatch ? parseFloat(shippingMatch[1].replace(",", "")) : 0,
+    currentBidAUD: priceMatch ? toAud(parseFloat(priceMatch[1].replace(",", ""))) : null,
+    originalCurrency: isUsd ? "USD" : "AUD",
+    shippingAUD: shippingMatch ? toAud(parseFloat(shippingMatch[1].replace(",", ""))) : 0,
     confidence: "Medium",
-    notes: "Extracted via instant local parser",
+    notes: isUsd ? `Extracted via instant local parser · converted from US$ at ${currentUsdToAudRate().toFixed(4)}` : "Extracted via instant local parser",
   };
 }
 
@@ -533,7 +563,8 @@ function ListingPasteExtractor({ onExtracted }) {
 
     // Step 2: Fall back to AI extraction if text is unstructured
     try {
-      const promptText = `${LISTING_EXTRACT_PROMPT}\n\nPasted listing:\n${pasteText}`;
+      const liveRate = currentUsdToAudRate().toFixed(2);
+      const promptText = `${LISTING_EXTRACT_PROMPT.replace("1 USD ≈ 1.5 AUD", `1 USD ≈ ${liveRate} AUD`)}\n\nPasted listing:\n${pasteText}`;
       const rawResponse = await callGeminiAi(promptText);
 
       let parsed = null;
@@ -701,8 +732,17 @@ function BuyModal({ onClose, onSave }) {
             <input type="checkbox" checked={form.isPokemonInsert} onChange={(e) => setForm({ ...form, isPokemonInsert: e.target.checked })} style={{ width: "auto" }} />
             Pokémon / insert (caps your budget at $25)
           </label>
+          {form.player.trim() && (
+            <CompFinder
+              card={form}
+              grade={buyGrade(form)}
+              title="🔄 Get comps from CardSight"
+              applyNoun="price"
+              onApply={({ values, details }) => setForm((f) => ({ ...f, ...buyCompPatch(values, details) }))}
+            />
+          )}
           <div style={{ fontSize: 11.5, color: "#6B7180", marginTop: -6, marginBottom: -2 }}>
-            Recent sales — up to 2 each, average used automatically. Fill in whichever tiers you have comps for.
+            Recent sales — up to 2 each, average used automatically. Fill in whichever tiers you have comps for, or get them from CardSight above.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             <TierPriceInput label="Raw" sale1={form.rawSale1} sale2={form.rawSale2} onChange1={(v) => setForm({ ...form, rawSale1: v })} onChange2={(v) => setForm({ ...form, rawSale2: v })} />

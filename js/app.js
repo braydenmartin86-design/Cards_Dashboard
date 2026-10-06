@@ -23,6 +23,10 @@ function App() {
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
 
+  // Re-render when the live USD→AUD rate arrives, so on-screen conversions use it.
+  const [, setFxTick] = useState(0);
+  useEffect(() => onExchangeRateChange(() => setFxTick((t) => t + 1)), []);
+
   // Prevent the mouse scroll wheel from silently changing a focused number input's value —
   // a common browser default that causes accidental edits while scrolling past a field.
   useEffect(() => {
@@ -317,6 +321,8 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
       // been run while just evaluating the auction, so it only becomes part of the card's
       // permanent record if the card is actually won, never before.
       gradeAnalysis: target.gradeAnalysis || null,
+      compSearch: target.compSearch || undefined,
+      compsUpdatedAt: target.compsUpdatedAt || undefined,
       actualSellPrice: null,
       datePurchased: target.purchaseDate || new Date().toISOString().slice(0, 10),
     };
@@ -514,6 +520,8 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
       enriched={isPokemon ? enrichedPokemonCards : enriched}
     />
 
+    <BulkCompRefresh key={isPokemon ? "pokemon" : "cards"} cards={activeCards} setCards={setActiveCards} />
+
     {/* 3. Card Table receives the specific category list with full EV & Grade Call logic */}
     <CardTable
       cards={isPokemon ? filteredPokemonCards : filtered}
@@ -543,7 +551,18 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
 
         {/* Always mounted (just hidden on other tabs) so a scan in progress survives switching tabs. */}
         <div style={{ display: tab === "lotscanner" ? "block" : "none" }}>
-          <LotScanner setTargets={setTargets} setBuyList={setBuyList} savedScans={savedScans} setSavedScans={setSavedScans} />
+          <LotScanner
+            setTargets={setTargets}
+            setBuyList={setBuyList}
+            savedScans={savedScans}
+            setSavedScans={setSavedScans}
+            onAddToCollection={(newCards) => {
+              const pkmn = newCards.filter((c) => c.sport === "Pokémon");
+              const sports = newCards.filter((c) => c.sport !== "Pokémon");
+              if (sports.length) setCards((prev) => [...sports, ...prev]);
+              if (pkmn.length) setPokemonCards((prev) => [...pkmn, ...prev]);
+            }}
+          />
         </div>
 
         {tab === "targets" && <MonthlyTargets targets={targets} setTargets={setTargets} />}
@@ -628,6 +647,7 @@ function Header({ tab, setTab, onAdd, onExport, onImport, backupStatus }) {
               {backupStatus.text}
             </span>
           )}
+          <ExchangeRateBadge />
           <SyncButton />
           <button className="btnSecondary" onClick={onExport} title="Download a backup of everything — cards, targets, sales, box breaks, content plan">
             <span style={{ marginRight: 6 }}>⬇️</span> Export

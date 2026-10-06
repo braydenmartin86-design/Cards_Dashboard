@@ -46,6 +46,137 @@ Trends allowed: "Improving", "Stable".
   }
 }
 
+// ===== Target price alerts =====
+// Checks CardSight's recent sold listings for each watched target with a target price, and flags
+// the ones the market is selling at or below that price. These are completed sales, not live
+// listings — a hit means "now's a buying window", not "this exact card is for sale".
+
+const TARGET_ALERT_WINDOW_DAYS = 30;
+const TARGET_HINT_FILLER = /\b(rookies?|rc|cards?|singles?|any|or|and|the|of|look|for|parallels?|base)\b/gi;
+
+function targetSearchQueries(t) {
+  const player = String(t.player || "").replace(/["“”]/g, "").trim();
+  const hint = cleanCardHint(t.cardToLookFor || "")
+    .replace(/\b(autos|autographs?)\b/gi, "auto")
+    .replace(TARGET_HINT_FILLER, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = hint.split(" ").filter(Boolean);
+  const queries = [`${player} ${hint}`.trim()];
+  if (words.length > 2) queries.push(`${player} ${words.slice(0, 2).join(" ")}`);
+  return [...new Set(queries)];
+}
+
+function summarizeTargetSales(sales, targetPrice) {
+  if (!sales.length) return null;
+  const aud = sales.map((r) => convertUsdToAud(Number(r.price))).sort((a, b) => a - b);
+  const median = aud.length % 2 ? aud[(aud.length - 1) / 2] : (aud[aud.length / 2 - 1] + aud[aud.length / 2]) / 2;
+  const target = Number(targetPrice) || null;
+  return {
+    count: sales.length,
+    median: Math.round(median * 100) / 100,
+    low: aud[0],
+    target,
+    belowTarget: target != null && median <= target,
+    countAtOrBelow: target != null ? aud.filter((v) => v <= target).length : 0,
+    sales: sales.slice(0, 3).map((r) => ({ date: r.date, priceUsd: Number(r.price), title: r.title, url: r.url })),
+  };
+}
+
+async function checkTargetPrice(t) {
+  const today = new Date().toISOString().slice(0, 10);
+  const nameTokens = normalizeCardText(t.player).split(" ").filter((w) => w.length > 1);
+  const wantsAuto = /\bauto/i.test(t.cardToLookFor || "");
+  const cutoff = Date.now() - TARGET_ALERT_WINDOW_DAYS * 86400000;
+  // Parallels sell for very different money, so unless the target names one, only base cards
+  // (no colour/finish words, no serial number) count. Named words are allowed.
+  const hintWords = new Set(normalizeCardText(t.cardToLookFor).split(" "));
+  const hintNamesParallel = PARALLEL_WORDS.test(normalizeCardText(t.cardToLookFor));
+  const isOtherVersion = (title, rawTitle) => {
+    const otherWords = title.split(" ").filter((w) => !hintWords.has(w) && !nameTokens.includes(w)).join(" ");
+    if (hintNamesParallel) return false;
+    return PARALLEL_WORDS.test(otherWords.replace(TEAM_COLOUR_NAMES, " ")) || /\/\s*\d{1,4}\b/.test(rawTitle);
+  };
+  let used = null;
+  let matches = [];
+  for (const q of targetSearchQueries(t)) {
+    const data = await callCardSightProxy({ endpoint: "/pricing/search", method: "GET", query: { q, listing_type: "auction", limit: 100 } });
+    matches = onePerSellerPerDay(
+      (data.results || [])
+        .filter((r) => Number(r.price) > 0 && r.date && new Date(r.date).getTime() >= cutoff)
+        .filter((r) => {
+          const title = normalizeCardText(r.title);
+          return (
+            nameTokens.every((w) => title.includes(w)) &&
+            !JUNK_WORDS.test(title) &&
+            AUTO_WORDS.test(title) === wantsAuto &&
+            !isOtherVersion(title, r.title || "")
+          );
+        })
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+    );
+    used = q;
+    if (matches.length) break;
+  }
+  const slabbed = (r) => (r.grade && r.grade.grade_value) || /\b(psa|bgs|sgc|cgc|beckett|tag)\s*\d/i.test(r.title || "");
+  // Graded alerts compare one grade only (PSA 10 unless the target says otherwise).
+  const grade = String(t.targetGrade || "PSA 10").trim();
+  const [company, value] = grade.split(/\s+/);
+  const gradeRe = new RegExp(`\\b${escapeRegExp(company)}\\s*(?:gem\\s*(?:mint|mt)\\s*)?${escapeRegExp(value || "")}\\b(?!\\.\\d)`, "i");
+  const isGrade = (r) =>
+    r.grade && r.grade.grade_value
+      ? String(r.grade.grade_value) === value && normalizeCardText(r.grade.company_name) === normalizeCardText(company)
+      : gradeRe.test(r.title || "");
+  return {
+    date: today,
+    query: used,
+    grade,
+    raw: Number(t.targetPriceRaw) > 0 ? summarizeTargetSales(matches.filter((r) => !slabbed(r)), t.targetPriceRaw) : null,
+    graded: Number(t.targetPriceGraded) > 0 ? summarizeTargetSales(matches.filter((r) => slabbed(r) && isGrade(r)), t.targetPriceGraded) : null,
+  };
+}
+
+function targetHasPrice(t) {
+  return Number(t.targetPriceRaw) > 0 || Number(t.targetPriceGraded) > 0;
+}
+
+function targetInBuyWindow(t) {
+  const pc = t.priceCheck;
+  return Boolean(t.status === "Watching" && pc && ((pc.raw && pc.raw.belowTarget) || (pc.graded && pc.graded.belowTarget)));
+}
+
+// Home-page banner for targets the market is selling at or below your target price.
+function TargetAlertsBanner({ targets, setTab }) {
+  const hits = (targets || []).filter(targetInBuyWindow);
+  if (!hits.length) return null;
+  return (
+    <div
+      onClick={() => setTab("targets")}
+      style={{ border: "1px solid #4E8B6B66", background: "#4E8B6B14", borderRadius: 10, padding: "10px 14px", marginBottom: 16, cursor: "pointer", fontSize: 13 }}
+    >
+      <span style={{ fontWeight: 700, color: "#4E8B6B" }}>🔔 Buying window: </span>
+      {hits.length} target{hits.length === 1 ? " is" : "s are"} selling at or below your target price —{" "}
+      {hits
+        .slice(0, 4)
+        .map((t) => t.player)
+        .join(", ")}
+      {hits.length > 4 ? "…" : ""}
+      <span style={{ color: "#8B90A0" }}> · view Monthly Targets →</span>
+    </div>
+  );
+}
+
+function TargetPriceCheckLine({ check, label }) {
+  if (!check) return null;
+  return (
+    <div style={{ fontSize: 11.5, color: check.belowTarget ? "#4E8B6B" : "#8B90A0" }}>
+      {check.belowTarget ? "🔔 " : ""}
+      {label}: recent sales median {fmtMoney(check.median)} (low {fmtMoney(check.low)}, {check.count} sale{check.count === 1 ? "" : "s"}) vs your target {fmtMoney(check.target)}
+      {check.belowTarget ? " — at or below target" : check.countAtOrBelow ? ` — ${check.countAtOrBelow} sold at or below target` : ""}
+    </div>
+  );
+}
+
 // ===== Monthly Targets =====
 
 const TARGET_TIER_STYLE = {
@@ -150,6 +281,34 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
   const [priceRangeFilter, setPriceRangeFilter] = useState("all");
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [priceCheck, setPriceCheck] = useState(null); // { done, total } while running, or { summary }
+  const checkingRef = useRef(false);
+
+  // Checks recent sold prices for watched targets that have a target price. Runs automatically
+  // once a day when this tab opens (only targets not yet checked today), or for all on demand.
+  async function runPriceChecks(force) {
+    if (checkingRef.current) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const due = (targets || []).filter((t) => t.status === "Watching" && targetHasPrice(t) && (force || !t.priceCheck || t.priceCheck.date !== today));
+    if (!due.length) return;
+    checkingRef.current = true;
+    let failed = 0;
+    for (let i = 0; i < due.length; i++) {
+      setPriceCheck({ done: i, total: due.length });
+      try {
+        const result = await checkTargetPrice(due[i]);
+        setTargets((prev) => prev.map((t) => (t.id === due[i].id ? { ...t, priceCheck: result } : t)));
+      } catch (e) {
+        failed += 1;
+      }
+    }
+    checkingRef.current = false;
+    setPriceCheck({ summary: `Checked ${due.length - failed} target${due.length - failed === 1 ? "" : "s"}${failed ? `, ${failed} failed` : ""}.` });
+  }
+
+  useEffect(() => {
+    runPriceChecks(false);
+  }, []);
 
   function addTarget(t) {
     setTargets((prev) => [t, ...prev]);
@@ -242,6 +401,19 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
             : ["What have Cooper Flagg Prizm rookie cards sold for recently?"]
         }
       />
+
+      <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "10px 14px", background: "#191B22", marginBottom: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <button className="btnSecondary" style={{ fontSize: 12.5 }} onClick={() => runPriceChecks(true)} disabled={Boolean(priceCheck && priceCheck.total)}>
+          🔔 {priceCheck && priceCheck.total ? `Checking ${priceCheck.done + 1} of ${priceCheck.total}…` : "Check target prices now"}
+        </button>
+        <span style={{ fontSize: 11.5, color: "#8B90A0", lineHeight: 1.5, flex: 1, minWidth: 220 }}>
+          {priceCheck && priceCheck.summary ? `${priceCheck.summary} ` : ""}
+          Watched targets with a target price are checked against the last {TARGET_ALERT_WINDOW_DAYS} days of sold listings once a day when you open this tab.{" "}
+          {(targets || []).filter(targetInBuyWindow).length > 0 && (
+            <span style={{ color: "#4E8B6B", fontWeight: 600 }}>{(targets || []).filter(targetInBuyWindow).length} in a buying window now.</span>
+          )}
+        </span>
+      </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -392,6 +564,17 @@ function TargetRow({ t, onClick }) {
         <div style={{ fontSize: 11.5, color: "#8B90A0", marginBottom: 4 }}>{t.cardToLookFor}</div>
       )}
       <div style={{ color: "#C6CAD4", fontSize: 12.5, lineHeight: 1.6, marginBottom: 10 }}>{t.reasoning}</div>
+      {t.priceCheck && (t.priceCheck.raw || t.priceCheck.graded) && (
+        <div style={{ marginBottom: 10 }}>
+          <TargetPriceCheckLine check={t.priceCheck.raw} label="Raw" />
+          <TargetPriceCheckLine check={t.priceCheck.graded} label={t.priceCheck.grade || "Graded"} />
+        </div>
+      )}
+      {t.priceCheck && targetHasPrice(t) && ((Number(t.targetPriceRaw) > 0 && !t.priceCheck.raw) || (Number(t.targetPriceGraded) > 0 && !t.priceCheck.graded)) && (
+        <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 10 }}>
+          No recent sales found for "{t.priceCheck.query}" — make "Card to look for" more specific (year, set, parallel).
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <button className="btnSecondary" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, padding: "5px 10px" }} onClick={copy}>
           {copyState === "copied" ? <Check size={12} /> : <Copy size={12} />} {copyState === "copied" ? "Copied" : "Copy search"}
@@ -535,6 +718,36 @@ function TargetDetailModal({ target, onUpdate, onDelete, onClose }) {
             <Field label="Target price (raw)"><input type="number" step="0.01" value={target.targetPriceRaw ?? ""} onChange={(e) => onUpdate(target.id, { targetPriceRaw: e.target.value })} /></Field>
             <Field label="Target price (graded)"><input type="number" step="0.01" value={target.targetPriceGraded ?? ""} onChange={(e) => onUpdate(target.id, { targetPriceGraded: e.target.value })} /></Field>
           </div>
+          <Field label="Grade the graded price is for">
+            <select value={target.targetGrade || "PSA 10"} onChange={(e) => onUpdate(target.id, { targetGrade: e.target.value })}>
+              {GRADE_OPTIONS.map((g) => <option key={g}>{g}</option>)}
+            </select>
+          </Field>
+          <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: -6 }}>
+            Set a target price to get alerts when recent sales drop to it. A specific "Card to look for" (year, set, parallel) gives far more accurate alerts.
+          </div>
+          {target.priceCheck && (target.priceCheck.raw || target.priceCheck.graded) && (
+            <div style={{ border: "1px solid #2C303B", borderRadius: 8, padding: "8px 10px", background: "#14161C" }}>
+              <div style={{ fontSize: 11, color: "#8B90A0", marginBottom: 4 }}>
+                Price check {target.priceCheck.date} · searched "{target.priceCheck.query}"
+              </div>
+              {[["Raw", target.priceCheck.raw], [target.priceCheck.grade || "Graded", target.priceCheck.graded]].map(([label, check]) =>
+                check ? (
+                  <div key={label} style={{ marginBottom: 4 }}>
+                    <TargetPriceCheckLine check={check} label={label} />
+                    {check.sales.map((s, i) => (
+                      <div key={i} style={{ fontSize: 11, color: "#6B7180", lineHeight: 1.6 }}>
+                        {new Date(s.date).toLocaleDateString()} · A${convertUsdToAud(s.priceUsd).toFixed(2)} · {s.title.length > 60 ? s.title.slice(0, 60) + "…" : s.title}
+                        <a href={ebaySoldUrl(s.title)} target="_blank" rel="noreferrer" style={{ color: "#2FA89A", marginLeft: 6 }}>
+                          eBay sold
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                ) : null
+              )}
+            </div>
+          )}
 
           <button
             onClick={() => { onDelete(target.id); onClose(); }}
