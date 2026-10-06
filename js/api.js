@@ -226,7 +226,7 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
 // CardSight. Only completed auctions that clearly match the same card are kept, and the market
 // value is the average of the 3 most recent sales, or the most recent sale if fewer exist.
 
-async function callCardSightProxy(body) {
+async function callCardSightProxy(body, attempt = 0) {
   const anonKey = window.SUPABASE_ANON_KEY;
   const isForm = body instanceof FormData;
   const response = await fetch(`${SUPABASE_URL}/functions/v1/cardsight-proxy`, {
@@ -240,7 +240,12 @@ async function callCardSightProxy(body) {
   });
 
   if (response.status === 429) {
-    throw new Error("Rate limit reached. Please wait a few seconds before retrying.");
+    // CardSight is asking us to slow down: wait 2s, then 4s, before giving up.
+    if (attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+      return callCardSightProxy(body, attempt + 1);
+    }
+    throw new Error("CardSight's rate limit was reached. Please wait a few seconds before retrying.");
   }
   let wrapper = null;
   try {
@@ -315,7 +320,13 @@ const AUTO_WORDS = /\b(auto|autos|autograph|autographs|autographed|au|signature|
 const RELIC_WORDS = /\b(patch|patches|relic|relics|jersey|jerseys|jumbo|memorabilia|materials|swatch|swatches|game worn|player worn|rpa)\b/;
 const JUNK_WORDS = /\b(lot|lots|bundle|reprint|reprints|rp|custom|facsimile|proxy)\b/;
 const PARALLEL_WORDS = /\b(silver|gold|red|blue|green|orange|purple|pink|black|white|bronze|teal|aqua|yellow|holo|refractor|shimmer|wave|mojo|cracked ice|ice|disco|hyper|neon|pulsar|scope|velocity|tie dye|camo|sparkle|lazer|laser|foil|rainbow|xfractor|sapphire|ruby|emerald|variation|variations|ssp|short print|case hit)\b/;
-const TEAM_COLOUR_NAMES = /\b(red sox|red wings|white sox|blue jays|blue jackets|green bay|golden state|black hawks)\b/g;
+// Product lines sold under the same brand as their parent set (e.g. "Topps Chrome Update" vs
+// "Topps Chrome"). A listing naming one that the card's set doesn't is a different card.
+const SUB_PRODUCT_WORDS = ["update", "sapphire", "cosmic", "black", "cactus jack", "draft picks", "platinum", "overtime", "logofractor"];
+// Words that describe a card's general finish or rarity rather than naming a specific parallel,
+// so they don't count as "extra" when matching a parallel.
+const GENERIC_FINISH_WORDS = new Set(["refractor", "holo", "foil", "prizm", "variation", "variations", "ssp", "short print", "case hit"]);
+const TEAM_COLOUR_NAMES =/\b(red sox|red wings|white sox|blue jays|blue jackets|green bay|golden state|black hawks)\b/g;
 const SET_FILLER_WORDS =new Set(["panini", "nba", "nfl", "mlb", "basketball", "football", "baseball", "soccer", "trading", "card", "cards"]);
 
 // What to match listings against, from the details Gemini read off the card.
@@ -327,7 +338,10 @@ function cardProfile(card) {
     .replace(/\s+/g, " ")
     .trim();
   const describing = normalizeCardText([card.set_name, card.parallel_or_variant].join(" "));
+  const printRun = (String(card.parallel_or_variant || "").match(/\/\s*(\d{1,4})\b/) || [])[1] || "";
   return {
+    printRun,
+    describing,
     grade: wantedGrade(card),
     variant,
     isBase: !variant,
@@ -359,11 +373,13 @@ function cardSearchQueries(card) {
   return { primary: [...new Set(primary)], fallback: join([card.set_name, card.player_name]), label };
 }
 
-// Runs the searches together and merges their results, skipping listings already in `existing`.
+// Runs the searches one after another (firing them at once trips CardSight's rate limit) and
+// merges their results, skipping listings already in `existing`.
 async function fetchSoldListings(queries, existing = []) {
-  const responses = await Promise.all(
-    queries.map((q) => callCardSightProxy({ endpoint: "/pricing/search", method: "GET", query: { q, listing_type: "auction", limit: 100 } }))
-  );
+  const responses = [];
+  for (const q of queries) {
+    responses.push(await callCardSightProxy({ endpoint: "/pricing/search", method: "GET", query: { q, listing_type: "auction", limit: 100 } }));
+  }
   const keyOf = (r) => `${r.url || r.title}|${r.date}|${r.price}`;
   const seen = new Set(existing.map(keyOf));
   const results = [...existing];
@@ -436,7 +452,8 @@ function filterSoldListings(card, results, q) {
     // no number, the card's number still has to appear in the title.
     const n = listingCardNumber(r);
     if (number && n && n !== number) return reject("a different card number");
-    if (number && !n && !title.split(" ").includes(number)) return reject("no card number to confirm");
+    // Only when the number was read off the card; a number worked out from sales is a guess.
+    if (p.number && !n && !title.split(" ").includes(p.number)) return reject("no card number to confirm");
 
     const slabGrade = r.grade && r.grade.grade_value;
     const looksSlabbed = slabGrade || /\b(psa|bgs|sgc|cgc|beckett|tag)\s*\d/i.test(rawTitle);
@@ -449,17 +466,30 @@ function filterSoldListings(card, results, q) {
       return reject(looksSlabbed ? "a different grade" : `raw or not ${p.grade.company || ""} ${p.grade.value}`.replace(/\s+/g, " "));
     }
 
+    // A sub-product line (e.g. "Update", "Sapphire") the card's own set name doesn't include.
+    const subProduct = SUB_PRODUCT_WORDS.find((w) => new RegExp(`\\b${w}\\b`).test(title) && !p.describing.includes(w));
+    if (subProduct) return reject(`a different product line ("${subProduct}")`);
+
+    // Team names and the card's own set/player words are removed first, so a "Red Sox" base
+    // card or a "Gold Standard" set isn't mistaken for a coloured parallel.
+    const ownWords = new Set([...p.setTokens, ...p.nameTokens, ...p.variantTokens]);
+    const otherWords = title.replace(TEAM_COLOUR_NAMES, " ").split(" ").filter((t) => !ownWords.has(t)).join(" ");
+
     if (p.isBase) {
       // Base cards aren't serial-numbered ("/99" titles are parallels), and unnumbered parallels
-      // like Silver Prizm show up as colour/finish words. Team names are removed first so a
-      // "Red Sox" or "Green Bay" base card isn't mistaken for a parallel.
-      const ownWords = new Set([...p.setTokens, ...p.nameTokens]);
-      const withoutTeams = title.replace(TEAM_COLOUR_NAMES, " ").split(" ").filter((t) => !ownWords.has(t)).join(" ");
-      if (r.parallel_name || /\/\s*\d{1,4}\b/.test(rawTitle) || PARALLEL_WORDS.test(withoutTeams)) {
+      // like Silver Prizm show up as colour/finish words.
+      if (r.parallel_name || /\/\s*\d{1,4}\b/.test(rawTitle) || PARALLEL_WORDS.test(otherWords)) {
         return reject("a parallel (yours is base)");
       }
-    } else if (!mostOf(p.variantTokens, `${normalizeCardText(r.parallel_name)} ${title}`)) {
-      return reject(`not the "${p.variant}" parallel`);
+    } else {
+      if (!mostOf(p.variantTokens, `${normalizeCardText(r.parallel_name)} ${title}`)) {
+        return reject(`not the "${p.variant}" parallel`);
+      }
+      // Extra finish words mean a different parallel ("Gold Wave" isn't "Gold").
+      const extra = (otherWords.match(new RegExp(PARALLEL_WORDS.source, "g")) || []).filter((w) => !GENERIC_FINISH_WORDS.has(w));
+      if (extra.length) return reject(`a different parallel ("${extra[0]}")`);
+      const listingRun = (rawTitle.match(/\/\s*(\d{1,4})\b/) || [])[1];
+      if (p.printRun && listingRun && listingRun !== p.printRun) return reject("a different print run");
     }
     return true;
   }).sort((a, b) => new Date(b.date) - new Date(a.date));

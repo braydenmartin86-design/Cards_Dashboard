@@ -8,7 +8,11 @@ Instructions:
 1. Identify EVERY card present in the image individually.
 2. IGNORE background elements like sticky notes, handwritten timestamps, coin tags, top loaders, magnetic cases, or tabletop textures.
 3. Inspect fine visual details carefully: parallel patterns (e.g., Orange Basketball/Geometric, Refractor, Silver Prizm, Cracked Ice, Holo), serial numbering, card numbers, RC logos, autographs, and set years.
-4. For each detected card, return an object in a JSON array with the following fields:
+4. Identify the set from what is printed on the card, not from the player or design style: read the manufacturer and product logo on the card face (e.g., "Topps Chrome", "Panini Prizm", "Donruss", "Select", "Mosaic", "Hoops", "Upper Deck"). Topps and Panini are different manufacturers — never call a Topps card "Panini" or vice versa. Never use a generic set name like "Panini Basketball".
+5. For graded slabs, copy the year, set, card number, parallel and grade exactly as printed on the grading label — the label is more reliable than the card design.
+6. If a serial number is visible (e.g., "11/50"), include the print run in the parallel (e.g., "Gold /50").
+7. If you can't read the set or year with confidence, give your best guess and set "value_confidence" to "Low".
+8. For each detected card, return an object in a JSON array with the following fields:
    - "player_name": Full name of the athlete
    - "sport": e.g., "NFL", "NBA", "MLB", "AFL", "WWE", "Soccer", "MMA"
    - "year": Release year of the card set (e.g., "2025-26")
@@ -143,6 +147,27 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
     setScanning(false);
   }
 }
+
+  // Corrections to what Gemini read. The old verified price no longer applies, and the eBay
+  // search text is rebuilt from the corrected details.
+  function updateCardDetails(idx, patch) {
+    setResults((prev) =>
+      prev.map((c, i) => {
+        if (i !== idx) return c;
+        const next = { ...c, ...patch, _priceSource: null, _pricedAs: null, _sales: null, _priceNote: null };
+        if ("grade" in patch) {
+          const grade = String(patch.grade || "").trim();
+          next.grade = grade || null;
+          next.is_graded = Boolean(grade);
+          next.grading_company = grade ? grade.split(/\s+/)[0].toUpperCase() : null;
+        }
+        next.ebay_search_query = [next.year, next.set_name, next.player_name, next.card_number ? `#${String(next.card_number).replace(/^#/, "")}` : "", /^base$/i.test(next.parallel_or_variant || "") ? "" : next.parallel_or_variant, next.grade]
+          .filter(Boolean)
+          .join(" ");
+        return next;
+      })
+    );
+  }
 
   function updateCardValue(idx, newValue) {
     setResults((prev) =>
@@ -358,6 +383,7 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
                   onAddBuy={() => addToBuyEvaluator(card, i)}
                   onAddTarget={() => addToMonthlyTargets(card, i)}
                   onValueChange={(v) => updateCardValue(i, v)}
+                  onDetailsChange={(patch) => updateCardDetails(i, patch)}
                 />
               ))}
             </div>
@@ -368,8 +394,9 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
   );
 }
 
-function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTarget, onValueChange }) {
+function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTarget, onValueChange, onDetailsChange }) {
   const [copyState, setCopyState] = useState("idle");
+  const [editing, setEditing] = useState(false);
   // Opens sold listings (not current ones), for checking comps by hand.
   const ebayUrl = card.ebay_search_query ? `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(card.ebay_search_query)}&LH_Sold=1&LH_Complete=1` : null;
   const point130Url = card.ebay_search_query ? `https://130point.com/sales/?search=${encodeURIComponent(card.ebay_search_query)}` : null;
@@ -450,6 +477,32 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
         </div>
       </div>
 
+      {editing && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, background: "#14161C", border: "1px solid #2C303B", borderRadius: 6, padding: 10, marginBottom: 10 }}>
+          {[
+            ["player_name", "Player"],
+            ["year", "Year (e.g. 2022-23)"],
+            ["set_name", "Set (e.g. Topps Chrome)"],
+            ["card_number", "Card #"],
+            ["parallel_or_variant", "Parallel (Base if none)"],
+            ["grade", "Grade (blank if raw)"],
+          ].map(([field, label]) => (
+            <div key={field}>
+              <label style={{ fontSize: 10.5 }}>{label}</label>
+              <input
+                value={card[field] ?? ""}
+                onChange={(e) => onDetailsChange({ [field]: e.target.value })}
+                placeholder={field === "grade" ? "e.g. PSA 10" : ""}
+                style={{ padding: "5px 8px", fontSize: 12.5 }}
+              />
+            </div>
+          ))}
+          <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#6B7180" }}>
+            Fix anything Gemini read wrong, then Verify Price searches with these details.
+          </div>
+        </div>
+      )}
+
       {(card._sales || card._priceNote) && (
         <div style={{ fontSize: 11, color: "#8B90A0", background: "#14161C", border: "1px solid #2C303B", borderRadius: 6, padding: "8px 10px", marginBottom: 10, lineHeight: 1.6 }}>
           {card._pricedAs && <div style={{ color: "#A7ADBB", marginBottom: 2 }}>Priced as: {card._pricedAs}</div>}
@@ -477,6 +530,9 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
           disabled={isVerifying}
         >
           {isVerifying ? "Verifying..." : "⚡ Verify Price (CardSight)"}
+        </button>
+        <button className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => setEditing((v) => !v)}>
+          {editing ? "Done editing" : "✏️ Edit details"}
         </button>
 
         <button className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }} onClick={copy}>
