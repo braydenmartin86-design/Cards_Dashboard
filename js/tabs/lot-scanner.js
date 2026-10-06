@@ -370,7 +370,8 @@ function LotScanner({ setTargets, setBuyList, savedScans, setSavedScans }) {
 
 function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTarget, onValueChange }) {
   const [copyState, setCopyState] = useState("idle");
-  const ebayUrl = card.ebay_search_query ? `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(card.ebay_search_query)}` : null;
+  // Opens sold listings (not current ones), for checking comps by hand.
+  const ebayUrl = card.ebay_search_query ? `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(card.ebay_search_query)}&LH_Sold=1&LH_Complete=1` : null;
   const point130Url = card.ebay_search_query ? `https://130point.com/sales/?search=${encodeURIComponent(card.ebay_search_query)}` : null;
 
   async function copy() {
@@ -483,7 +484,7 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
         </button>
         {ebayUrl && (
           <a href={ebayUrl} target="_blank" rel="noreferrer" className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px", textDecoration: "none" }}>
-            Search eBay
+            eBay sold
           </a>
         )}
         {point130Url && (

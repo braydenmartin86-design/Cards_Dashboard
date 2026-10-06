@@ -312,9 +312,11 @@ function escapeRegExp(s) {
 }
 
 const AUTO_WORDS = /\b(auto|autos|autograph|autographs|autographed|au|signature|signatures|sig|signed|rpa)\b/;
-const RELIC_WORDS = /\b(patch|patches|relic|relics|jersey|memorabilia|swatch|rpa)\b/;
+const RELIC_WORDS = /\b(patch|patches|relic|relics|jersey|jerseys|jumbo|memorabilia|materials|swatch|swatches|game worn|player worn|rpa)\b/;
 const JUNK_WORDS = /\b(lot|lots|bundle|reprint|reprints|rp|custom|facsimile|proxy)\b/;
-const SET_FILLER_WORDS = new Set(["panini", "nba", "nfl", "mlb", "basketball", "football", "baseball", "soccer", "trading", "card", "cards"]);
+const PARALLEL_WORDS = /\b(silver|gold|red|blue|green|orange|purple|pink|black|white|bronze|teal|aqua|yellow|holo|refractor|shimmer|wave|mojo|cracked ice|ice|disco|hyper|neon|pulsar|scope|velocity|tie dye|camo|sparkle|lazer|laser|foil|rainbow|xfractor|sapphire|ruby|emerald|variation|variations|ssp|short print|case hit)\b/;
+const TEAM_COLOUR_NAMES = /\b(red sox|red wings|white sox|blue jays|blue jackets|green bay|golden state|black hawks)\b/g;
+const SET_FILLER_WORDS =new Set(["panini", "nba", "nfl", "mlb", "basketball", "football", "baseball", "soccer", "trading", "card", "cards"]);
 
 // What to match listings against, from the details Gemini read off the card.
 function cardProfile(card) {
@@ -339,21 +341,42 @@ function cardProfile(card) {
   };
 }
 
-// Search queries, most specific first. The broader one only widens which listings come back;
-// every result still has to pass the same strict filter.
+// Search queries. CardSight's title search only returns listings containing every word, and at
+// most 100 of them ranked by relevance. So several searches run together and their results are
+// merged: narrow ones (adding the grade or parallel words) surface the exact card when a broad
+// search's top 100 is crowded out by other versions, while the broad one catches sellers who
+// worded the grade or parallel differently. The strict filter then decides what counts.
+// `fallback` runs only if nothing matched (e.g. Gemini's year is off by a season).
 function cardSearchQueries(card) {
   const p = cardProfile(card);
   const join = (parts) => parts.join(" ").replace(/\s+/g, " ").trim();
-  const full = join([
-    p.year,
-    card.set_name,
-    card.player_name,
-    p.number ? `#${p.number}` : "",
-    p.variant,
-    p.grade ? `${p.grade.company || ""} ${p.grade.value}` : "",
-  ]);
-  const broad = join([p.year, card.set_name, card.player_name, p.variant]);
-  return [...new Set([full, broad])];
+  const base = join([p.year, card.set_name, card.player_name]);
+  const primary = [base];
+  if (p.grade) primary.unshift(join([base, p.grade.company, p.grade.value]));
+  if (p.number) primary.unshift(join([base, `#${p.number}`]));
+  if (!p.isBase) primary.unshift(join([base, p.variant]));
+  const label = join([base, p.number ? `#${p.number}` : "", p.variant, p.grade ? `${p.grade.company || ""} ${p.grade.value}` : "Raw"]);
+  return { primary: [...new Set(primary)], fallback: join([card.set_name, card.player_name]), label };
+}
+
+// Runs the searches together and merges their results, skipping listings already in `existing`.
+async function fetchSoldListings(queries, existing = []) {
+  const responses = await Promise.all(
+    queries.map((q) => callCardSightProxy({ endpoint: "/pricing/search", method: "GET", query: { q, listing_type: "auction", limit: 100 } }))
+  );
+  const keyOf = (r) => `${r.url || r.title}|${r.date}|${r.price}`;
+  const seen = new Set(existing.map(keyOf));
+  const results = [...existing];
+  for (const data of responses) {
+    for (const r of data.results || []) {
+      const key = keyOf(r);
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(r);
+      }
+    }
+  }
+  return results;
 }
 
 function listingCardNumber(r) {
@@ -362,29 +385,31 @@ function listingCardNumber(r) {
   return r.matched_card && r.matched_card.number ? normalizeCardText(r.matched_card.number) : "";
 }
 
-// Fuzzy-search sold listing titles, then keep only listings that clearly are this card —
-// same player, year, set, card number, parallel, grade, and auto/relic status.
-async function searchSoldListingsByTitle(card, q) {
+// Keep only sold listings that clearly are this card — same player, year, set, card number,
+// parallel, grade, and auto/relic status.
+function filterSoldListings(card, results, q) {
   const p = cardProfile(card);
-  const data = await callCardSightProxy({
-    endpoint: "/pricing/search",
-    method: "GET",
-    query: { q, listing_type: "auction", limit: 100 },
-  });
-
   const gradeInTitle = p.grade
     ? new RegExp(`\\b${p.grade.company ? escapeRegExp(p.grade.company) + "\\s*(?:gem\\s*(?:mint|mt)\\s*)?" : ""}${escapeRegExp(p.grade.value)}\\b`, "i")
     : null;
   const mostOf = (tokens, hay) => tokens.filter((t) => hay.includes(t)).length >= Math.ceil((tokens.length * 2) / 3);
 
+  // Why listings were rejected, so a "no sales" result can say whether CardSight had nothing
+  // or the filter ruled everything out.
+  const rejected = {};
+  const reject = (reason) => {
+    rejected[reason] = (rejected[reason] || 0) + 1;
+    return false;
+  };
+
   // Same player, year and set — the pool used to work out the card number when it's unknown.
-  const sameCardFamily = (data.results || []).filter((r) => {
-    if (!r || !(Number(r.price) > 0) || !r.date || r.listing_type === "fixed") return false;
+  const sameCardFamily = results.filter((r) => {
+    if (!r || !(Number(r.price) > 0) || !r.date || r.listing_type === "fixed") return reject("not a completed sale");
     const title = normalizeCardText(r.title);
-    if (!p.nameTokens.length || !p.nameTokens.every((t) => title.includes(t))) return false;
+    if (!p.nameTokens.length || !p.nameTokens.every((t) => title.includes(t))) return reject("a different player");
     const set = (r.matched_card && r.matched_card.set) || {};
-    if (p.year && !title.includes(p.year) && !String(set.year || "").includes(p.year)) return false;
-    if (p.setTokens.length && !mostOf(p.setTokens, `${title} ${normalizeCardText(set.release)} ${normalizeCardText(set.name)}`)) return false;
+    if (p.year && !title.includes(p.year) && !String(set.year || "").includes(p.year)) return reject("a different year");
+    if (p.setTokens.length && !mostOf(p.setTokens, `${title} ${normalizeCardText(set.release)} ${normalizeCardText(set.name)}`)) return reject("a different set");
     return true;
   });
 
@@ -403,34 +428,57 @@ async function searchSoldListingsByTitle(card, q) {
   const sales = sameCardFamily.filter((r) => {
     const rawTitle = r.title || "";
     const title = normalizeCardText(rawTitle);
-    if (JUNK_WORDS.test(title)) return false;
-    if (AUTO_WORDS.test(title) !== p.isAuto) return false;
-    if (RELIC_WORDS.test(title) !== p.isRelic) return false;
+    if (JUNK_WORDS.test(title)) return reject("a lot or reprint");
+    if (AUTO_WORDS.test(title) !== p.isAuto) return reject(p.isAuto ? "not autographed" : "an autograph");
+    if (RELIC_WORDS.test(title) !== p.isRelic) return reject(p.isRelic ? "not a patch/relic" : "a patch/relic");
 
+    // Inserts and multi-player cards from the same set often skip the "#"; if the listing gives
+    // no number, the card's number still has to appear in the title.
     const n = listingCardNumber(r);
-    if (number && n && n !== number) return false;
+    if (number && n && n !== number) return reject("a different card number");
+    if (number && !n && !title.split(" ").includes(number)) return reject("no card number to confirm");
 
     const slabGrade = r.grade && r.grade.grade_value;
     const looksSlabbed = slabGrade || /\b(psa|bgs|sgc|cgc|beckett|tag)\s*\d/i.test(rawTitle);
     if (!p.grade) {
-      if (looksSlabbed) return false;
+      if (looksSlabbed) return reject("graded (yours is raw)");
     } else if (slabGrade) {
-      if (String(r.grade.grade_value) !== p.grade.value) return false;
-      if (p.grade.company && normalizeCardText(r.grade.company_name) !== normalizeCardText(p.grade.company)) return false;
+      if (String(r.grade.grade_value) !== p.grade.value) return reject("a different grade");
+      if (p.grade.company && normalizeCardText(r.grade.company_name) !== normalizeCardText(p.grade.company)) return reject("a different grading company");
     } else if (!gradeInTitle.test(rawTitle)) {
-      return false;
+      return reject(looksSlabbed ? "a different grade" : `raw or not ${p.grade.company || ""} ${p.grade.value}`.replace(/\s+/g, " "));
     }
 
     if (p.isBase) {
-      // Base cards aren't serial-numbered; "/99"-style titles are parallels.
-      if (r.parallel_name || /\/\s*\d{1,4}\b/.test(rawTitle)) return false;
+      // Base cards aren't serial-numbered ("/99" titles are parallels), and unnumbered parallels
+      // like Silver Prizm show up as colour/finish words. Team names are removed first so a
+      // "Red Sox" or "Green Bay" base card isn't mistaken for a parallel.
+      const ownWords = new Set([...p.setTokens, ...p.nameTokens]);
+      const withoutTeams = title.replace(TEAM_COLOUR_NAMES, " ").split(" ").filter((t) => !ownWords.has(t)).join(" ");
+      if (r.parallel_name || /\/\s*\d{1,4}\b/.test(rawTitle) || PARALLEL_WORDS.test(withoutTeams)) {
+        return reject("a parallel (yours is base)");
+      }
     } else if (!mostOf(p.variantTokens, `${normalizeCardText(r.parallel_name)} ${title}`)) {
-      return false;
+      return reject(`not the "${p.variant}" parallel`);
     }
     return true;
   }).sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  return { q, sales: onePerSellerPerDay(sales) };
+  const unique = onePerSellerPerDay(sales);
+  return { q, sales: unique, diag: { total: results.length, rejected } };
+}
+
+// Plain-English explanation of a search that found no usable sales.
+function describeNoSales(searches) {
+  const best = searches.reduce((a, b) => (b.diag.total > a.diag.total ? b : a), searches[0]);
+  if (!best || best.diag.total === 0) {
+    return `CardSight returned no sold listings at all for "${searches[0].q}" — it most likely doesn't have sales data for this card.`;
+  }
+  const reasons = Object.entries(best.diag.rejected)
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, count]) => `${count} ${reason}`)
+    .join(", ");
+  return `CardSight returned ${best.diag.total} sold listing${best.diag.total === 1 ? "" : "s"} for "${best.q}", but none matched this card (${reasons}).`;
 }
 
 async function verifyPriceWithCardSight(card) {
@@ -441,12 +489,14 @@ async function verifyPriceWithCardSight(card) {
 
     // 1. Search CardSight's sold listings using the details Gemini read off the card.
     const queries = cardSearchQueries(card);
-    let noSalesReason = null;
-    for (const q of queries) {
-      const search = await searchSoldListingsByTitle(card, q);
-      if (search.sales.length > 0) return summarizeSales(search.sales, "CardSight", queries[0]);
+    let results = await fetchSoldListings(queries.primary);
+    let search = filterSoldListings(card, results, queries.primary[queries.primary.length - 1]);
+    if (search.sales.length === 0 && queries.fallback && !queries.primary.includes(queries.fallback)) {
+      results = await fetchSoldListings([queries.fallback], results);
+      search = filterSoldListings(card, results, queries.fallback);
     }
-    noSalesReason = `CardSight has no sold listings matching "${queries[0]}".`;
+    if (search.sales.length > 0) return summarizeSales(search.sales, "CardSight", queries.label);
+    const noSalesReason = describeNoSales([search]);
 
     // 2. Last resort: no sold comps, so ask Gemini AI for an estimate (labelled as such).
     console.info(`${noSalesReason} Falling back to a Gemini valuation estimate...`);
