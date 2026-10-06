@@ -55,7 +55,7 @@ function ModalHeader({ title, onClose }) {
 
 // "Ask CardSight": plain-English questions to CardSight's AI, with follow-ups. `suggestions`
 // are one-click starter questions.
-function AskCardSight({ title = "Ask CardSight", suggestions = [], placeholder = "Ask anything about cards, prices or players…" }) {
+function AskCardSight({ title = "Ask CardSight", suggestions = [], placeholder = "Ask about a specific card, e.g. 2023 Prizm Victor Wembanyama #136 recent sales" }) {
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState([]); // [{ role: "user" | "assistant", content }]
   const [asking, setAsking] = useState(false);
@@ -97,6 +97,11 @@ function AskCardSight({ title = "Ask CardSight", suggestions = [], placeholder =
           {t.content}
         </div>
       ))}
+      {turns.length > 0 && turns[turns.length - 1].role === "assistant" && /more specific|more iterations|technical difficult|currently unavailable/i.test(turns[turns.length - 1].content) && (
+        <div style={{ fontSize: 11.5, color: "#C9A227", marginBottom: 8 }}>
+          Tip: CardSight answers questions about specific cards best. Broad market questions ("which rookies are trending?") usually fail. Try naming the year, set, player and card #.
+        </div>
+      )}
       {asking && <div style={{ fontSize: 12, color: "#8B90A0", marginBottom: 8 }}>Thinking…</div>}
       {error && <div style={{ fontSize: 12, color: "#B4472E", marginBottom: 8 }}>{error}</div>}
       {turns.length === 0 && suggestions.length > 0 && (

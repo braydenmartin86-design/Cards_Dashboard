@@ -231,8 +231,16 @@ function MonthlyTargets({ targets, setTargets, cards, pokemonCards }) {
 
       <AskCardSight
         title="Research a target with CardSight"
-        placeholder="e.g. What's a good Cooper Flagg rookie under $100?"
-        suggestions={["Best rookie cards under $100 to buy right now?", "Which rookies' card prices are rising fastest?", "Is now a good time to buy Victor Wembanyama rookies?"]}
+        placeholder="e.g. What have Cooper Flagg 2025 Topps Chrome rookies sold for?"
+        suggestions={
+          (targets || []).filter((t) => t.status === "Watching" && t.player).length
+            ? (targets || [])
+                .filter((t) => t.status === "Watching" && t.player)
+                .sort((a, b) => computeConfidence(b) - computeConfidence(a))
+                .slice(0, 3)
+                .map((t) => `What have ${t.player} ${t.cardToLookFor || "rookie cards"} sold for recently?`)
+            : ["What have Cooper Flagg Prizm rookie cards sold for recently?"]
+        }
       />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>

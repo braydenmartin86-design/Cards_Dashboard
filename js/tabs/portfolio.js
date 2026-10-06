@@ -580,6 +580,34 @@ function tierKeyForGrade(grade) {
   return null;
 }
 
+// eBay sold / 130point search text for one tier, for when CardSight has no confident comps.
+// Raw searches exclude slabbed copies.
+function tierSearchText(details, grade) {
+  const parallel = /^base$/i.test(String(details.parallel_or_variant || "").trim()) ? "" : details.parallel_or_variant;
+  // eBay needs every word to match, so leave out ones sellers often skip ("RC", "#", a Pokémon set size).
+  const number = String(details.card_number || "").replace(/^\s*#/, "").replace(/\s*\/\s*\d+\s*$/, "").trim();
+  const setName = String(details.set_name || "").replace(/\b(rc|rookie cards?|rookie)\b/gi, " ");
+  const parts = [details.year, setName, details.player_name, parallel, number];
+  const text = parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return grade ? `${text} ${grade}` : `${text} -psa -bgs -sgc -cgc`;
+}
+
+function TierSearchLinks({ details, grade }) {
+  const text = tierSearchText(details, grade);
+  const linkStyle = { color: "#2FA89A", fontSize: 11, marginRight: 10 };
+  return (
+    <div style={{ fontSize: 11, marginTop: 4 }}>
+      <span style={{ color: "#6B7180", marginRight: 6 }}>Check manually:</span>
+      <a href={`https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(text)}&LH_Sold=1&LH_Complete=1`} target="_blank" rel="noreferrer" style={linkStyle}>
+        eBay sold ↗
+      </a>
+      <a href={`https://130point.com/sales/?search=${encodeURIComponent(text.replace(/ -\w+/g, ""))}`} target="_blank" rel="noreferrer" style={linkStyle}>
+        130 Point ↗
+      </a>
+    </div>
+  );
+}
+
 const TIER_FIELDS = {
   raw: { avg: "rawAvg", history: "rawHistory", label: "Raw" },
   psa9: { avg: "psa9Avg", history: "psa9History", label: "PSA 9" },
@@ -616,7 +644,7 @@ function CompUpdater({ card, onUpdate }) {
     setTrendNote(null);
     setApplied(false);
     try {
-      const results = await findCompsForTiers(details, tiers);
+      const results = await findCompsForTiers({ ...details, sport: card.sport }, tiers);
       setFound(results);
       // Price trend for the tier this card is actually in.
       const trendTier = results.find((r) => (card.grade ? r.grade === card.grade : r.key === "raw")) || results[0];
@@ -728,6 +756,7 @@ function CompUpdater({ card, onUpdate }) {
                     </div>
                   ))}
                   {r.note && <div style={{ fontSize: 11, color: "#6B7180" }}>{r.note}</div>}
+                  {!r.highConfidence && <TierSearchLinks details={details} grade={r.grade} />}
                 </div>
               ))}
               {trendNote && <div style={{ fontSize: 11, color: "#6B7180" }}>{trendNote}</div>}
@@ -735,7 +764,7 @@ function CompUpdater({ card, onUpdate }) {
                 <button className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={apply} disabled={applicable.length === 0 || applied}>
                   {applied ? "Applied ✓" : `Apply ${applicable.length} high-confidence comp${applicable.length === 1 ? "" : "s"}`}
                 </button>
-                {applicable.length === 0 && <span style={{ fontSize: 11, color: "#6B7180" }}>Nothing confident enough to apply — use the sales above to update manually.</span>}
+                {applicable.length === 0 && <span style={{ fontSize: 11, color: "#6B7180" }}>Nothing confident enough to apply — check the sales above or the eBay sold links and update manually.</span>}
               </div>
             </div>
           )}

@@ -328,7 +328,22 @@ const SUB_PRODUCT_WORDS = ["update", "sapphire", "cosmic", "black", "cactus jack
 // so they don't count as "extra" when matching a parallel.
 const GENERIC_FINISH_WORDS = new Set(["refractor", "holo", "foil", "prizm", "variation", "variations", "ssp", "short print", "case hit"]);
 const TEAM_COLOUR_NAMES =/\b(red sox|red wings|white sox|blue jays|blue jackets|green bay|golden state|black hawks)\b/g;
-const SET_FILLER_WORDS =new Set(["panini", "nba", "nfl", "mlb", "basketball", "football", "baseball", "soccer", "trading", "card", "cards"]);
+const SET_FILLER_WORDS =new Set(["panini", "nba", "nfl", "mlb", "basketball", "football", "baseball", "soccer", "trading", "card", "cards", "pokemon", "tcg", "english", "auto", "autograph", "rookie"]);
+// Pokémon rarity words: sellers abbreviate them ("SIR", "Alt Art") or leave them out, so they
+// don't count towards matching the set — the card number does that job.
+const POKEMON_RARITY_WORDS = new Set(["special", "illustration", "rare", "alternate", "alt", "art", "full", "secret", "ultra", "hyper", "holo", "promo", "double", "sir", "ir"]);
+const FOREIGN_LANGUAGE_WORDS = /\b(japanese|japan|jp|jpn|chinese|korean|kor|german|french|italian|spanish|portuguese|thai|indonesian)\b/;
+
+function isPokemonCard(card) {
+  return /pok[eé]mon/i.test(String(card.sport || ""));
+}
+
+// "#223/197" -> "223", "032" -> "32", "#FP-GWI" -> "fp gwi". Pokémon numbers carry the set size
+// after the slash, which sellers often leave off.
+function cardNumberKey(s) {
+  const n = normalizeCardText(String(s || "").replace(/^\s*#/, "").replace(/\s*\/\s*\d+\s*$/, ""));
+  return /^\d+$/.test(n) ? String(Number(n)) : n;
+}
 
 // What to match listings against, from the details Gemini read off the card.
 function cardProfile(card) {
@@ -340,7 +355,9 @@ function cardProfile(card) {
     .trim();
   const describing = normalizeCardText([card.set_name, card.parallel_or_variant].join(" "));
   const printRun = (String(card.parallel_or_variant || "").match(/\/\s*(\d{1,4})\b/) || [])[1] || "";
+  const pokemon = isPokemonCard(card);
   return {
+    pokemon,
     printRun,
     describing,
     grade: wantedGrade(card),
@@ -349,8 +366,10 @@ function cardProfile(card) {
     isBase: !variant && !printRun,
     variantTokens: variant.split(" ").filter((t) => t.length > 2),
     nameTokens: normalizeCardText(card.player_name).split(" ").filter((t) => t.length > 1),
-    setTokens: normalizeCardText(card.set_name).split(" ").filter((t) => t.length > 2 && !/^\d+$/.test(t) && !SET_FILLER_WORDS.has(t)),
-    number: normalizeCardText(String(card.card_number || "").replace(/^#/, "")),
+    setTokens: normalizeCardText(card.set_name)
+      .split(" ")
+      .filter((t) => t.length > 2 && !/^\d+$/.test(t) && !SET_FILLER_WORDS.has(t) && !(pokemon && POKEMON_RARITY_WORDS.has(t))),
+    number: cardNumberKey(card.card_number),
     year: String(card.year || "").slice(0, 4),
     isAuto: AUTO_WORDS.test(describing),
     isRelic: RELIC_WORDS.test(describing),
@@ -366,13 +385,19 @@ function cardProfile(card) {
 function cardSearchQueries(card) {
   const p = cardProfile(card);
   const join = (parts) => parts.join(" ").replace(/\s+/g, " ").trim();
-  const base = join([p.year, card.set_name, card.player_name]);
+  // "RC"/"Rookie" are often left out of titles, and every query word has to appear.
+  const setText = String(card.set_name || "").replace(/\b(rc|rookie cards?|rookie)\b/gi, " ");
+  const base = join([p.year, setText, card.player_name]);
   const primary = [base];
   if (p.grade) primary.unshift(join([base, p.grade.company, p.grade.value]));
-  if (p.number) primary.unshift(join([base, `#${p.number}`]));
+  // As printed ("FP-GWI"), minus a Pokémon set size ("/197").
+  const numberText = String(card.card_number || "").replace(/^\s*#/, "").replace(/\s*\/\s*\d+\s*$/, "").trim();
+  if (p.number) primary.unshift(join([base, `#${numberText}`]));
   if (!p.isBase) primary.unshift(join([base, p.variant]));
+  // Pokémon titles rarely spell out the rarity, so also search by name and number alone.
+  if (p.pokemon && p.number) primary.push(join([card.player_name, numberText]));
   const label = join([base, p.number ? `#${p.number}` : "", p.variant, p.grade ? `${p.grade.company || ""} ${p.grade.value}` : "Raw"]);
-  return { primary: [...new Set(primary)], fallback: join([card.set_name, card.player_name]), label };
+  return { primary: [...new Set(primary)], fallback: join([setText, card.player_name]), label };
 }
 
 // Runs the searches one after another (firing them at once trips CardSight's rate limit) and
@@ -399,8 +424,8 @@ async function fetchSoldListings(queries, existing = []) {
 
 function listingCardNumber(r) {
   const m = String(r.title || "").match(/#\s*([A-Za-z0-9-]+)/);
-  if (m) return normalizeCardText(m[1]);
-  return r.matched_card && r.matched_card.number ? normalizeCardText(r.matched_card.number) : "";
+  if (m) return cardNumberKey(m[1]);
+  return r.matched_card && r.matched_card.number ? cardNumberKey(r.matched_card.number) : "";
 }
 
 // Keep only sold listings that clearly are this card — same player, year, set, card number,
@@ -426,7 +451,12 @@ function filterSoldListings(card, results, q) {
     const title = normalizeCardText(r.title);
     if (!p.nameTokens.length || !p.nameTokens.every((t) => title.includes(t))) return reject("a different player");
     const set = (r.matched_card && r.matched_card.set) || {};
-    if (p.year && !title.includes(p.year) && !String(set.year || "").includes(p.year)) return reject("a different year");
+    if (p.pokemon) {
+      // Pokémon titles often skip the year, so only a different year rules a listing out.
+      const years = title.match(/\b(199\d|20[0-3]\d)\b/g) || [];
+      if (p.year && years.length && !years.includes(p.year)) return reject("a different year");
+      if (FOREIGN_LANGUAGE_WORDS.test(title) && !FOREIGN_LANGUAGE_WORDS.test(p.describing)) return reject("a different language");
+    } else if (p.year && !title.includes(p.year) && !String(set.year || "").includes(p.year)) return reject("a different year");
     if (p.setTokens.length && !mostOf(p.setTokens, `${title} ${normalizeCardText(set.release)} ${normalizeCardText(set.name)}`)) return reject("a different set");
     return true;
   });
@@ -455,10 +485,11 @@ function filterSoldListings(card, results, q) {
     const n = listingCardNumber(r);
     if (number && n && n !== number) return reject("a different card number");
     // Only when the number was read off the card; a number worked out from sales is a guess.
-    if (p.number && !n && !title.split(" ").includes(p.number)) return reject("no card number to confirm");
+    if (p.number && !n && !` ${title} `.replace(/ 0+(\d)/g, " $1").includes(` ${p.number} `)) return reject("no card number to confirm");
 
     const slabGrade = r.grade && r.grade.grade_value;
-    const looksSlabbed = slabGrade || /\b(psa|bgs|sgc|cgc|beckett|tag)\s*\d/i.test(rawTitle);
+    const looksSlabbed =
+      slabGrade || /\b(psa|bgs|sgc|cgc|beckett|tag)\s*\d/i.test(rawTitle) || /\b(graded|slabbed|black label|black 10|pristine 10|gem mint 10)\b/i.test(rawTitle);
     if (!p.grade) {
       if (looksSlabbed) return reject("graded (yours is raw)");
     } else if (slabGrade) {
@@ -469,7 +500,7 @@ function filterSoldListings(card, results, q) {
     }
 
     // A sub-product line (e.g. "Update", "Sapphire") the card's own set name doesn't include.
-    const subProduct = SUB_PRODUCT_WORDS.find((w) => new RegExp(`\\b${w}\\b`).test(title) && !p.describing.includes(w));
+    const subProduct = !p.pokemon && SUB_PRODUCT_WORDS.find((w) => new RegExp(`\\b${w}\\b`).test(title) && !p.describing.includes(w));
     if (subProduct) return reject(`a different product line ("${subProduct}")`);
 
     // Team names and the card's own set/player words are removed first, so a "Red Sox" base
@@ -477,7 +508,13 @@ function filterSoldListings(card, results, q) {
     const ownWords = new Set([...p.setTokens, ...p.nameTokens, ...p.variantTokens]);
     const otherWords = title.replace(TEAM_COLOUR_NAMES, " ").split(" ").filter((t) => !ownWords.has(t)).join(" ");
 
-    if (p.isBase) {
+    if (p.pokemon) {
+      // Pokémon "/197" is the set size, not a print run, and holo/full-art words describe the
+      // card itself — the number already pins it down. Only a reverse holo is a different version.
+      const reverse = /\breverse\b/.test(title) && !p.describing.includes("reverse");
+      if (reverse) return reject("a reverse holo");
+      if (!p.isBase && !mostOf(p.variantTokens, title)) return reject(`not the "${p.variant}" version`);
+    } else if (p.isBase) {
       // Base cards aren't serial-numbered ("/99" titles are parallels), and unnumbered parallels
       // like Silver Prizm show up as colour/finish words.
       if (r.parallel_name || /\/\s*\d{1,4}\b/.test(rawTitle) || PARALLEL_WORDS.test(otherWords)) {

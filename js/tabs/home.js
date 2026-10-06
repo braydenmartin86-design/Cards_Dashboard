@@ -49,6 +49,17 @@ function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, co
   const soldItems = salesItems.filter((s) => s.status === "Sold");
   const recentRealised = soldItems.reduce((s, i) => s + (Number(i.realisedProfit) || 0), 0);
 
+  // CardSight's AI answers best about one specific card, so the starter questions are built
+  // from the most valuable cards still held.
+  const cardSightSuggestions = useMemo(() => {
+    const held = allEnriched
+      .filter((c) => c.status !== "Sold" && c.status !== "Listed" && c.player)
+      .sort((a, b) => b.totalCost - a.totalCost)
+      .slice(0, 3)
+      .map((c) => `What has the ${[c.card, c.player, c.cardNum].filter(Boolean).join(" ")}${c.grade ? ` ${c.grade}` : ""} sold for recently?`);
+    return held.length ? held : ["What has the 2023 Prizm Victor Wembanyama #136 sold for recently?"];
+  }, [allEnriched]);
+
   const postedInPeriod = countPostedInPeriod(contentPlan, contentGoal.period);
   const goalHit = postedInPeriod >= contentGoal.count;
 
@@ -61,9 +72,7 @@ function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, co
         <Stat label="Overall ROI" value={fmtPct(portfolioTotals.overallROI)} color={portfolioTotals.overallROI >= 0 ? "#4E8B6B" : "#B4472E"} />
       </div>
 
-      <AskCardSight
-        suggestions={["Which basketball rookies are trending up in price this month?", "What are the hottest card sets right now?", "Which Pokémon cards have risen most in the last 30 days?"]}
-      />
+      <AskCardSight suggestions={cardSightSuggestions} />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
         <DashCard title="⚡ Needs your attention" onViewAll={() => setTab("portfolio")} count={actionItems.length}>
