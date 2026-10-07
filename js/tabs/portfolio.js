@@ -235,6 +235,44 @@ function CardTable({ cards, onSelect, playerLabel, sortKey, sortDir, onSort }) {
   );
 }
 
+// Box styles for the comps-age tag, matching the Timing column's boxes (green = "Good Timing",
+// gold = "Grade" month), plus red for stale and grey for never updated.
+const COMPS_AGE_STYLE = {
+  fresh: { background: "#1E3A2B", color: "#4E8B6B", border: "1px solid #2E5940" },
+  aging: { background: "#3A2E1E", color: "#C9A227", border: "1px solid #59462E" },
+  stale: { background: "#3A201B", color: "#B4472E", border: "1px solid #5E3027" },
+  never: { background: "#22252D", color: "#8B90A0", border: "1px solid #333844" },
+};
+
+// Tag on each card row counting the days since its market values were last updated:
+// green under 2 weeks, gold 2 weeks to a month, red over a month, grey if never.
+function CompsAgeTag({ card }) {
+  if (card.status !== "Raw" && card.status !== "Graded") return null;
+  const days = compsAgeDays(card);
+  const style = days == null ? COMPS_AGE_STYLE.never : days < 14 ? COMPS_AGE_STYLE.fresh : days < STALE_COMPS_DAYS ? COMPS_AGE_STYLE.aging : COMPS_AGE_STYLE.stale;
+  const text = days == null ? "No comps" : days === 0 ? "Today" : `${days} day${days === 1 ? "" : "s"}`;
+  return (
+    <span
+      title={days == null ? "Market values have never been updated" : `Market values last updated ${card.compsUpdatedAt}`}
+      style={{
+        ...style,
+        fontSize: 9.5,
+        fontWeight: 600,
+        padding: "1px 6px",
+        borderRadius: 4,
+        textTransform: "uppercase",
+        letterSpacing: "0.3px",
+        whiteSpace: "nowrap",
+        display: "inline-block",
+        marginLeft: 8,
+        verticalAlign: "middle",
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
 function CardRow({ card, onClick, gridCols }) {
   // 1. Force live evaluation through engine based on sport
   const computed = card.sport === "Pokémon" ? computePokemonCard(card) : computeCard(card);
@@ -280,11 +318,7 @@ function CardRow({ card, onClick, gridCols }) {
               📍 {card.location}
             </span>
           )}
-          {compsAgeDays(card) != null && compsAgeDays(card) >= STALE_COMPS_DAYS && (
-            <span className="mono" title="Market values haven't been updated in a while" style={{ fontSize: 10, color: "#C9A227", marginLeft: 8 }}>
-              ⏱ comps {compsAgeDays(card)}d old
-            </span>
-          )}
+          <CompsAgeTag card={card} />
         </div>
       </div>
       <div style={{ color: "#A7ADBB" }}>{card.status}{card.grade ? ` · ${card.grade}` : ""}</div>
@@ -1327,6 +1361,11 @@ function save() {
       rawHistory: appendHistoryIfChanged(card.rawHistory, card.rawAvg, newRawAvg, today),
       psa9History: appendHistoryIfChanged(card.psa9History, card.psa9Avg, newPsa9Avg, today),
       psa10History: appendHistoryIfChanged(card.psa10History, card.psa10Avg, newPsa10Avg, today),
+      // Typing new market values counts as updating the comps.
+      compsUpdatedAt:
+        newRawAvg !== (card.rawAvg ?? null) || newPsa9Avg !== (card.psa9Avg ?? null) || newPsa10Avg !== (card.psa10Avg ?? null)
+          ? today
+          : card.compsUpdatedAt,
       outOf: form.numbered && form.outOf !== "" && form.outOf != null ? Number(form.outOf) : null,
       quantity: Number(form.quantity) || 1,
       actualSellPrice: form.actualSellPrice === "" || form.actualSellPrice == null ? null : Number(form.actualSellPrice),
