@@ -344,13 +344,6 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     if (pkmn.length) setPokemonCards((prev) => [...pkmn, ...prev]);
   }
 
-  // Updates a card wherever it lives (My Cards or Pokémon) — used from Home, which shows both.
-  function updateAnyCard(id, updates) {
-    const apply = (prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c));
-    setCards(apply);
-    setPokemonCards(apply);
-  }
-
   // My Sales combines Sold + Listed items from both collections, tagged with their source
   // so edits/deletes route back to the right underlying array.
   function updateCardIn(source, id, updates) {
@@ -515,7 +508,6 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
             contentPlan={contentPlan}
             contentGoal={contentGoal}
             setTab={setTab}
-            onUpdateCard={updateAnyCard}
           />
         )}
 

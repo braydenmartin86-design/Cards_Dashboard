@@ -1,6 +1,6 @@
 // ===== Home / Dashboard =====
 
-function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, contentPlan, contentGoal, setTab, onUpdateCard }) {
+function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, contentPlan, contentGoal, setTab }) {
   const allEnriched = useMemo(() => [...cards.map(computeCard), ...pokemonCards.map(computePokemonCard)], [cards, pokemonCards]);
 
   const portfolioTotals = useMemo(() => {
@@ -76,7 +76,7 @@ function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, co
 
       <TargetAlertsBanner targets={targets} setTab={setTab} />
 
-      <ListingCheckup cards={cards} pokemonCards={pokemonCards} setTab={setTab} onUpdateCard={onUpdateCard} />
+      <ListingAlerts allEnriched={allEnriched} setTab={setTab} />
 
       <PriceMoves cards={cards} pokemonCards={pokemonCards} setTab={setTab} />
 
@@ -206,7 +206,7 @@ function agingAdvice(card) {
   const breakEven = card.totalCost / (1 - fees);
   const trend = card.priceTrend ? trendChangePct(card.priceTrend.points) : null;
   const falling = trend != null && trend <= -0.05;
-  if (card.status === "Listed") return { text: "Already listed — see the Listing check-up for what to do next", color: "#5C7A99" };
+  if (card.status === "Listed") return { text: "Already listed — see the Listing check-up on My Sales", color: "#5C7A99" };
   if (value == null) return { text: "No market value — update its comps to decide", color: "#6B7180" };
   const profit = value * (1 - fees) - card.totalCost;
   if (profit > 0) {
@@ -366,238 +366,30 @@ function PriceMoves({ cards, pokemonCards, setTab }) {
   );
 }
 
-// ===== Listing check-up =====
-// What to do with listings that haven't sold, by days since listing (or since the last price
-// cut / relist): check comps at 14 days, cut 5–10% at 21, relist at 30, and stop cutting once
-// the price reaches break-even. Price cuts are kept so you can see how far cards came down.
-
-const LISTING_STEPS = { check: 14, cut: 21, relist: 30, stop: 45 };
-const LISTING_CUT_PCT = 0.07;
-const LISTING_OVERPRICED_PCT = 0.1;
-const CHEAP_CARD_COST = 15;
-
-function daysSince(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? null : Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
-}
-
-// Whole dollars from $20 up, 50c steps below — rounded up, so a price never lands under break-even.
-function niceListPrice(v) {
-  return v >= 20 ? Math.ceil(v) : Math.ceil(v * 2) / 2;
-}
-
-function listingCheck(c) {
-  const totalDays = daysSince(c.dateListed);
-  if (totalDays == null) return { card: c, stage: "noDate", priority: 1, color: "#8B90A0", text: "No listing date saved — enter when you listed it." };
-  const stepDays = daysSince(c.lastListingActionAt) ?? totalDays;
-  const fees = c.feesPct || 0.13;
-  const tier = heldTier(c);
-  const breakEven = tier && tier.breakEven != null ? tier.breakEven : c.totalCost / (1 - fees);
-  const price = Number(c.listedPrice) || null;
-  const value = currentMarketValue(c);
-  const compsAge = compsAgeDays(c);
-  const trend = c.priceTrend && c.priceTrend.points ? trendChangePct(c.priceTrend.points) : null;
-  const falling = trend != null && trend <= -0.05;
-  const ebay = !c.sellingMethod || /ebay/i.test(c.sellingMethod);
-  const atFloor = price != null && price <= breakEven * 1.02;
-  const base = { card: c, totalDays, stepDays, price, value, breakEven, compsAge };
-  const step = (stage, priority, color, text, suggested) => ({ ...base, stage, priority, color, text, suggested: suggested != null && suggested < price ? suggested : null });
-
-  if (stepDays < LISTING_STEPS.check) return { ...base, stage: "fresh", priority: 9 };
-  if (price == null) return step("noPrice", 2, "#C9A227", "Add the price it's listed at so the check-up can suggest cuts.");
-  if (value == null || compsAge == null || compsAge >= STALE_COMPS_DAYS) {
-    return step("comps", 3, "#C9A227", `Update its comps before changing the price — ${compsAge == null ? "it has none saved" : `they're ${compsAge} days old`}.`);
-  }
-
-  const floorPrice = niceListPrice(breakEven);
-  if (price > value * (1 + LISTING_OVERPRICED_PCT) && !atFloor) {
-    const target = Math.max(niceListPrice(value), floorPrice);
-    const pct = Math.round((price / value - 1) * 100);
-    return step("over", 2, "#B4472E", `Listed ${pct}% above comps (${fmtMoney(value)}). Lower it to ${fmtMoney(target)}${target > value ? " — your break-even, the lowest to go" : ""}.`, target);
-  }
-
-  if (atFloor) {
-    if (totalDays >= LISTING_STEPS.stop) {
-      if (falling && c.totalCost < CHEAP_CARD_COST) {
-        return step("stop", 2, "#B4472E", `At break-even after ${totalDays} days and prices are falling. It's a cheap card — fine to drop to ${fmtMoney(value)} to get the cash back, or add it to a lot.`, niceListPrice(value));
-      }
-      return step("stop", 3, "#B4472E", `At break-even after ${totalDays} days — stop cutting. Take it down and hold, add it to a team lot, or try ${ebay ? "Facebook or Instagram" : "eBay"}.`);
-    }
-    if (stepDays >= LISTING_STEPS.relist) {
-      return step("relist", 4, "#5C7A99", ebay ? `At break-even with no room to cut — end it and relist with Sell similar for a fresh run in search.` : `At break-even with no room to cut — repost or bump it.`);
-    }
-    return step("hold", 6, "#8B90A0", `Already at break-even (${fmtMoney(breakEven)}) — leave the price. Relist at ${LISTING_STEPS.relist} days if it hasn't sold.`);
-  }
-
-  if (stepDays >= LISTING_STEPS.relist) {
-    return step("relist", 4, "#5C7A99", ebay ? `Up ${stepDays} days at a fair price — end it and relist with Sell similar. New listings get more search visibility.` : `Up ${stepDays} days at a fair price — repost or bump it.`);
-  }
-  if (stepDays >= LISTING_STEPS.cut) {
-    const target = Math.max(niceListPrice(price * (1 - LISTING_CUT_PCT)), floorPrice);
-    return step("cut", 3, "#C9A227", `Priced near comps (${fmtMoney(value)}) but no sale in ${stepDays} days — lower to ${fmtMoney(target)}${ebay ? ", or send watchers an offer at that price" : ""}.`, target);
-  }
-  return step("watch", 5, "#4E8B6B", `Priced at market (comps ${fmtMoney(value)}). Give it until day ${LISTING_STEPS.cut}${ebay ? " — if it has watchers, send them an offer" : ""}.`);
-}
-
-function listingCutSummary(c) {
-  const cuts = (c.listingActions || []).filter((a) => a.type === "cut");
-  if (!cuts.length) return null;
-  const first = Number(cuts[0].from);
-  const now = Number(c.listedPrice);
-  if (!(first > 0) || !(now > 0)) return null;
-  return `Cut ${cuts.length}× from ${fmtMoney(first)} (−${Math.round((1 - now / first) * 100)}%)`;
-}
-
-// How your sales compare with the price you first listed at.
-function firstListPriceStats(soldCards) {
-  const rows = soldCards
-    .filter((c) => Number(c.actualSellPrice) > 0 && Number(c.listedPrice) > 0 && c.dateListed && c.dateSold)
-    .map((c) => {
-      const firstCut = (c.listingActions || []).find((a) => a.type === "cut");
-      const first = Number(firstCut ? firstCut.from : c.listedPrice);
-      const days = (new Date(c.dateSold) - new Date(c.dateListed)) / 86400000;
-      return { date: c.dateSold, ratio: Number(c.actualSellPrice) / first, days };
-    })
-    .filter((r) => r.ratio > 0 && r.days >= 0)
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    .slice(0, 10);
-  if (rows.length < 3) return null;
-  return {
-    count: rows.length,
-    ratio: rows.reduce((s, r) => s + r.ratio, 0) / rows.length,
-    days: Math.round(rows.reduce((s, r) => s + r.days, 0) / rows.length),
-  };
-}
-
-function ListingDaysBox({ days }) {
-  const style = days < LISTING_STEPS.check ? COMPS_AGE_STYLE.fresh : days < LISTING_STEPS.relist ? COMPS_AGE_STYLE.aging : COMPS_AGE_STYLE.stale;
+// Only shows when a listing needs something done; the full check-up lives on My Sales.
+function ListingAlerts({ allEnriched, setTab }) {
+  const due = useMemo(() => listingsNeedingAction(allEnriched), [allEnriched]);
+  if (!due.length) return null;
   return (
-    <span style={{ ...style, fontSize: 9.5, fontWeight: 600, padding: "1px 6px", borderRadius: 4, textTransform: "uppercase", letterSpacing: "0.3px", whiteSpace: "nowrap", marginLeft: 8 }}>
-      {days === 0 ? "Today" : `${days} day${days === 1 ? "" : "s"}`}
-    </span>
-  );
-}
-
-function ListingCheckRow({ check, onUpdateCard, setTab }) {
-  const c = check.card;
-  const [editing, setEditing] = useState(false);
-  const [newPrice, setNewPrice] = useState("");
-  const [listedOn, setListedOn] = useState("");
-  const today = new Date().toISOString().slice(0, 10);
-  const actions = c.listingActions || [];
-  const btn = { fontSize: 11, padding: "3px 9px" };
-
-  function lowerTo(p) {
-    const to = Number(p);
-    if (!(to > 0)) return;
-    onUpdateCard(c.id, { listedPrice: to, lastListingActionAt: today, listingActions: [...actions, { date: today, type: "cut", from: check.price, to }] });
-    setEditing(false);
-    setNewPrice("");
-  }
-  function relisted() {
-    onUpdateCard(c.id, { lastListingActionAt: today, listingActions: [...actions, { date: today, type: "relist", price: check.price }] });
-  }
-  function takeDown() {
-    onUpdateCard(c.id, { status: c.grade ? "Graded" : "Raw", dateListed: null, lastListingActionAt: null, listingActions: [...actions, { date: today, type: "down", price: check.price }] });
-  }
-
-  const cutSummary = listingCutSummary(c);
-  const belowFloor = check.price != null && check.breakEven != null && check.price < check.breakEven * 0.98;
-
-  return (
-    <div className="cardRow" style={{ padding: "8px", borderRadius: 6, fontSize: 12.5 }}>
-      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
-        <span style={{ fontWeight: 600, cursor: "pointer" }} onClick={() => setTab(c._tab)}>{c.player}</span>
-        {c.grade && <span style={{ color: "#6B7180", marginLeft: 6 }}>{c.grade}</span>}
-        {check.totalDays != null && <ListingDaysBox days={check.totalDays} />}
-      </div>
-      {check.stage !== "noDate" && (
-        <div style={{ fontSize: 11.5, color: "#8B90A0", marginTop: 2 }}>
-          {check.price != null ? `Listed ${fmtMoney(check.price)}` : "No list price"}
-          {check.value != null && ` · comps ${fmtMoney(check.value)}`}
-          {check.breakEven != null && <> · break-even <span style={{ color: belowFloor ? "#B4472E" : undefined }}>{fmtMoney(check.breakEven)}</span></>}
-          {cutSummary && ` · ${cutSummary}`}
-          {check.stepDays !== check.totalDays && ` · ${check.stepDays}d since last change`}
+    <div style={{ border: "1px solid #C9A22755", background: "#C9A2270F", borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div className="oswald" style={{ fontSize: 14, fontWeight: 600, color: "#C9A227" }}>
+          🏷️ {due.length} listing{due.length === 1 ? " needs" : "s need"} action
         </div>
-      )}
-      <div style={{ fontSize: 11.5, color: check.color, marginTop: 3 }}>{check.text}</div>
-
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6, alignItems: "center" }}>
-        {check.stage === "noDate" ? (
-          <>
-            <input type="date" value={listedOn} max={today} onChange={(e) => setListedOn(e.target.value)} style={{ fontSize: 11.5, padding: "3px 6px", width: 140 }} />
-            <button type="button" className="btnSecondary" style={btn} disabled={!listedOn} onClick={() => onUpdateCard(c.id, { dateListed: listedOn })}>Save date</button>
-            <button type="button" className="btnSecondary" style={btn} onClick={() => onUpdateCard(c.id, { dateListed: today })}>Start from today</button>
-          </>
-        ) : (
-          <>
-            {check.suggested != null && (
-              <button type="button" className="btnSecondary" style={{ ...btn, borderColor: "#C9A22766", color: "#C9A227" }} onClick={() => lowerTo(check.suggested)}>
-                Lower to {fmtMoney(check.suggested)}
-              </button>
-            )}
-            {editing ? (
-              <>
-                <input type="number" step="0.01" min="0" autoFocus placeholder="New price" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lowerTo(newPrice)} style={{ fontSize: 11.5, padding: "3px 6px", width: 90 }} />
-                <button type="button" className="btnSecondary" style={btn} disabled={!(Number(newPrice) > 0)} onClick={() => lowerTo(newPrice)}>Save</button>
-                <button type="button" className="btnSecondary" style={btn} onClick={() => setEditing(false)}>Cancel</button>
-              </>
-            ) : (
-              <button type="button" className="btnSecondary" style={btn} onClick={() => setEditing(true)}>{check.price != null ? "Other price" : "Add price"}</button>
-            )}
-            {check.price != null && (
-              <button type="button" className="btnSecondary" style={btn} title="Resets the day count for the next step" onClick={relisted}>
-                {check.stage === "relist" ? "✓ " : ""}Relisted
-              </button>
-            )}
-            <button type="button" className="btnSecondary" style={btn} title={`Moves it back to ${c.grade ? "Graded" : "Raw"}`} onClick={takeDown}>Take down</button>
-          </>
-        )}
+        <button className="btnSecondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => setTab("sales")}>
+          Open My Sales
+        </button>
       </div>
-      {check.price != null && check.breakEven != null && editing && Number(newPrice) > 0 && Number(newPrice) < check.breakEven && (
-        <div style={{ fontSize: 11, color: "#B4472E", marginTop: 4 }}>That's below break-even ({fmtMoney(check.breakEven)}) — you'd lose money after fees.</div>
-      )}
-    </div>
-  );
-}
-
-function ListingCheckup({ cards, pokemonCards, setTab, onUpdateCard }) {
-  const all = useMemo(
-    () => [...cards.map((c) => ({ ...computeCard(c), _tab: "portfolio" })), ...pokemonCards.map((c) => ({ ...computePokemonCard(c), _tab: "pokemon" }))],
-    [cards, pokemonCards]
-  );
-  const checks = useMemo(() => all.filter((c) => c.status === "Listed").map(listingCheck), [all]);
-  const stats = useMemo(() => firstListPriceStats(all.filter((c) => c.status === "Sold")), [all]);
-  if (!checks.length) return null;
-
-  const fresh = checks.filter((k) => k.stage === "fresh");
-  const due = checks.filter((k) => k.stage !== "fresh").sort((a, b) => a.priority - b.priority || (b.stepDays || 0) - (a.stepDays || 0));
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <DashCard title="🏷️ Listing check-up" onViewAll={() => setTab("sales")} count={checks.length}>
-        <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 2 }}>
-          {checks.length} listed · {due.length} to look at. Check comps at {LISTING_STEPS.check} days, cut 5–10% at {LISTING_STEPS.cut}, relist at {LISTING_STEPS.relist} — never below break-even.
-        </div>
-        {stats && (
-          <div style={{ fontSize: 11.5, color: "#8B90A0", marginBottom: 2 }}>
-            Your last {stats.count} sales went for <b style={{ color: stats.ratio < 0.9 ? "#C9A227" : "#4E8B6B" }}>{Math.round(stats.ratio * 100)}%</b> of the first list price, after {stats.days} days listed on average.
-            {stats.ratio < 0.9 && " First prices may be set a bit high."}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+        {due.slice(0, 4).map((k) => (
+          <div key={k.card.id} style={{ fontSize: 12, cursor: "pointer" }} onClick={() => setTab("sales")}>
+            <span style={{ fontWeight: 600 }}>{k.card.player}</span>
+            {k.totalDays != null && <ListingDaysBox days={k.totalDays} />}
+            <span style={{ color: k.color, marginLeft: 8 }}>{k.text}</span>
           </div>
-        )}
-        {due.length === 0 ? (
-          <EmptyRow text={`Nothing due — all listings are under ${LISTING_STEPS.check} days since listing or the last change.`} />
-        ) : (
-          due.slice(0, 10).map((k) => <ListingCheckRow key={`${k.card._tab}-${k.card.id}`} check={k} onUpdateCard={onUpdateCard} setTab={setTab} />)
-        )}
-        {due.length > 10 && <div style={{ fontSize: 11, color: "#6B7180" }}>+ {due.length - 10} more</div>}
-        {fresh.length > 0 && due.length > 0 && (
-          <div style={{ fontSize: 11, color: "#5C6270", padding: "2px 8px" }}>
-            {fresh.length} newer listing{fresh.length === 1 ? "" : "s"} — nothing to do yet.
-          </div>
-        )}
-      </DashCard>
+        ))}
+        {due.length > 4 && <div style={{ fontSize: 11, color: "#8B90A0" }}>+ {due.length - 4} more on My Sales</div>}
+      </div>
     </div>
   );
 }
@@ -607,9 +399,11 @@ function DashCard({ title, count, onViewAll, children }) {
     <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "16px 18px", background: "#191B22" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div className="oswald" style={{ fontSize: 15, fontWeight: 600 }}>{title}</div>
-        <button className="btnSecondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={onViewAll}>
-          View all{count != null ? ` (${count})` : ""}
-        </button>
+        {onViewAll && (
+          <button className="btnSecondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={onViewAll}>
+            View all{count != null ? ` (${count})` : ""}
+          </button>
+        )}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{children}</div>
     </div>
