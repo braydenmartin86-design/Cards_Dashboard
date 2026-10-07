@@ -6,8 +6,9 @@ const FEE_COMPARISON = [
   { platform: "Whatnot (AU promo hours)", fee: "~7% all-in", note: "2am-4pm AEST/AEDT daily, through Dec 31 2026 — same following/volume caveat as eBay Live" },
   { platform: "Whatnot (standard)", fee: "~10.9% + $0.30", note: "8% commission + processing, outside promo hours" },
   { platform: "Standard eBay", fee: "~13.25% + $0.30", note: "No Store subscription, always available, no approval gate" },
-  { platform: "DCSports87 consignment", fee: "~15-20% effective", note: "Full walkthrough + alternatives below — not always the cheapest" },
-  { platform: "ShipMyCards Marketplace", fee: "Low, unconfirmed exact %", note: "Check their current fee page before relying on a number" },
+  { platform: "ShipMyCards Marketplace", fee: "1%", note: "Cheapest way to sell a vault card — smaller buyer pool, so slower" },
+  { platform: "Fanatics Collect auction (via SMC)", fee: "1% (buyer pays 20% premium)", note: "Graded only, US$50+ minimum" },
+  { platform: "PC Sportscards eBay (via SMC)", fee: "~14% + US$1 (18% under US$50)", note: "Fastest ShipMyCards option, eBay's full audience" },
   { platform: "Facebook Marketplace/groups", fee: "0%", note: "No platform fee, but no buyer protection either" },
 ];
 
@@ -55,12 +56,12 @@ function SellingPlaybook() {
           color="#4E8B6B"
           body="Never bring it home first — see the golden rule above. Sell it while it's still in the US so you only pay one domestic shipping leg, not two international ones."
           steps={[
-            "First choice for most cards: DCSports87 consignment (~15-20% effective cut, but they handle photography, listing, and shipping, and their established eBay account sells for more than a brand-new listing would)",
-            "Sign up at dcsports87.com, then from your ShipMyCards dashboard request a shipment addressed to DCSports87's submission address — not to yourself",
-            "Check eligibility first: singles (raw or graded) or sealed boxes/cases only — no lots, no loose packs, no reprints/customs",
-            "Include their printed submission form in the package, pick standard or Premium ($5/card, 1-business-day listing) service tier",
-            "Alternative: ShipMyCards Marketplace for a lower fee if you're comfortable managing your own listing inside their ecosystem",
-            "Alternative for high-value graded cards: PWCC consignment through ShipMyCards, for more exposure on expensive singles",
+            "Start on the ShipMyCards Marketplace (1%, no minimum) priced at comps — vault buyers can take it with no shipping",
+            "Graded and US$50+? If it hasn't sold in 2–3 weeks, consign it to Fanatics Collect's weekly auction through SMC (you keep the hammer minus 1%)",
+            "Raw US$50+, or a slab without much demand? Send it to PC Sportscards' eBay consignment through SMC (~14% + US$1 under US$1,000) — fastest payout",
+            "Under US$50? Don't consign — keep it on the Marketplace, or batch cheap cards into one shipment home and sell them as team lots",
+            "Need cash now? The SMC Purchase Program pays 70–85% of conservative value instantly — usually a worse deal than waiting a week for PC Sportscards",
+            "Payouts come back as SMC store credit — confirm how you cash it out",
           ]}
         />
         <ScenarioCard
@@ -104,7 +105,7 @@ function SellingPlaybook() {
           color="#B4472E"
           body="If none of the above quite fits, work through these in order."
           steps={[
-            "Is it still in a US vault and you don't want to keep it? → Don't ship it home. Consign or sell it from there.",
+            "Is it still in the ShipMyCards vault and you don't want to keep it? → Don't ship it home. Marketplace first, then Fanatics (graded) or PC Sportscards (see below).",
             "Is it worth $1,000+? → Look at Fanatics Collect (formerly PWCC) or a specialist high-value consignor for better exposure, not a generic listing",
             "Is it AFL or otherwise Australia-specific? → Check local groups before defaulting to eBay's global audience",
             "Do you have eBay Live access or the ability to go live on Whatnot during AU promo hours? → Use whichever is cheaper for that item",
@@ -114,42 +115,53 @@ function SellingPlaybook() {
       </div>
 
       <div style={{ height: 12 }} />
-      <SectionTitle>DCSports87, step by step</SectionTitle>
-      <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "18px 20px", background: "#191B22", marginBottom: 28 }}>
-        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "#C6CAD4", lineHeight: 2 }}>
-          <li>Sign up for a consignor account at <span className="mono" style={{ color: "#C9A227" }}>dcsports87.com</span>.</li>
-          <li>Sort what you're sending — they take singles (raw or graded, any sport/TCG) and sealed boxes/cases. They <b>don't</b> take lots, loose packs, or altered/custom/reprint cards.</li>
-          <li>Decide service tier: standard, or Premium (+$5/card) for 1-business-day listing turnaround if you want it moving fast.</li>
-          <li>Don't ship from Australia — route it through ShipMyCards. From your SMC dashboard, request a shipment addressed to DCSports87's submission address instead of to yourself, so it's one domestic US leg instead of two international ones.</li>
-          <li>Include their printed submission form in the package, noting your chosen service tier.</li>
-          <li>Track it on your DCSports87 dashboard — a notification fires once the package arrives (usually same day, sometimes next business day) with an estimated listing date.</li>
-          <li>They photograph, title, and list each card individually on their established eBay account. Payouts go out multiple times a day, including Sundays, once something sells.</li>
-        </ol>
-        <div style={{ marginTop: 14, fontSize: 11.5, color: "#6B7180" }}>
-          Payout tiers: $1-9.99 → 80% minus 75¢ · $10-24.99 → 80% minus 50¢ · $25-999.99 → 85% minus 50¢ · $1,000-4,999.99 → 90% · $5,000+ → 97% minus $300. That's roughly 15-20% effective on typical mid-value cards.
-        </div>
-      </div>
-
-      <SectionTitle>Is DCSports87 actually the best option?</SectionTitle>
+      <SectionTitle>Selling from the ShipMyCards vault — which option</SectionTitle>
       <div style={{ border: "1px solid #4E8B6B55", borderRadius: 10, padding: "16px 18px", background: "#4E8B6B0f", marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: "#4E8B6B", marginBottom: 12 }}>💰 The value-based rule</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div style={{ background: "#14161C", border: "1px solid #24272F", borderRadius: 8, padding: "12px 14px" }}>
-            <div className="oswald" style={{ fontSize: 15, fontWeight: 700, color: "#C9A227", marginBottom: 4 }}>Under $1,000</div>
-            <div style={{ fontSize: 12.5, color: "#C6CAD4" }}>→ DCSports87. Raw or graded, no minimum, they take everyday mixed-value cards Fanatics won't bother with.</div>
-          </div>
-          <div style={{ background: "#14161C", border: "1px solid #4E8B6B55", borderRadius: 8, padding: "12px 14px" }}>
-            <div className="oswald" style={{ fontSize: 15, fontWeight: 700, color: "#4E8B6B", marginBottom: 4 }}>$1,000+ (especially graded)</div>
-            <div style={{ fontSize: 12.5, color: "#C6CAD4" }}>→ Fanatics Collect (PWCC), <span style={{ color: "#4E8B6B" }}>already available through ShipMyCards</span> — no new account needed.</div>
-          </div>
-        </div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: "#4E8B6B", marginBottom: 10 }}>💰 My suggested approach (US$ values)</div>
+        <ol style={{ margin: "0 0 12px", paddingLeft: 20, fontSize: 13, color: "#C6CAD4", lineHeight: 1.75 }}>
+          <li style={{ marginBottom: 6 }}>
+            <b style={{ color: "#EDEAE1" }}>List on the Marketplace first, priced at comps.</b> At 1% it's by far the cheapest, and the buyer can keep the card in their own vault with no shipping.
+          </li>
+          <li style={{ marginBottom: 6 }}>
+            <b style={{ color: "#EDEAE1" }}>If it hasn't sold after about 3 weeks:</b>
+            <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+              <li><b style={{ color: "#C9A227" }}>Graded, US$50+, strong demand</b> (e.g. a PSA 10 of a key rookie): Fanatics weekly auction.</li>
+              <li><b style={{ color: "#C9A227" }}>Everything else over US$50:</b> PC Sportscards. Their auctions start at 99c, so ask for fixed price with an auto-decline at your break-even; they allow that on cards US$50+.</li>
+            </ul>
+          </li>
+          <li>
+            <b style={{ color: "#EDEAE1" }}>Under US$50:</b> don't consign; 18% + US$1 is too much. Leave it on the Marketplace, or ship your cheap cards home together in one box and sell them as team lots like your Bulls lot.
+          </li>
+        </ol>
         <div style={{ fontSize: 11.5, color: "#6B7180", lineHeight: 1.7 }}>
-          Full honesty on the number: this isn't a fee-math crossover — Fanatics Collect's 6% Buy Now fee is actually cheaper than DCSports87 at nearly every value tier, only catching up around $10,000+ where DCSports87's top payout tier (97% minus $300) pulls back ahead. $1,000 is a <b>practical fit</b> line instead: it's where Fanatics Collect's own stated audience starts — <span style={{ fontStyle: "italic" }}>"PSA 9 or 10 of a major player, vintage material worth $1,000+"</span> is literally how they describe who they're for — and where DCSports87's no-minimum convenience stops being worth the extra ~5-10% you're leaving on the table. Below $1,000, DCSports87 wins on practicality even though it's not the cheaper option on paper.
+          The Marketplace-first habit pairs with the Listing check-up on My Sales: set the selling method to ShipMyCards Marketplace, and when it's 3 weeks unsold the check-up tells you to move it to PC Sportscards. Payouts from Fanatics and PC Sportscards come back as <b>ShipMyCards store credit</b> — check with SMC how and at what cost you can cash that out before relying on it for anything other than grading, shipping or buying.
         </div>
       </div>
 
+      <div style={{ border: "1px solid #2C303B", borderRadius: 10, overflow: "hidden", marginBottom: 28 }}>
+        <table style={{ width: "100%", fontSize: 12, color: "#C6CAD4", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#1D2028", textAlign: "left" }}>
+              <th style={{ padding: "8px 12px", fontWeight: 500, color: "#8B90A0" }}>ShipMyCards option</th>
+              <th style={{ padding: "8px 12px", fontWeight: 500, color: "#8B90A0" }}>What it costs you</th>
+              <th style={{ padding: "8px 12px", fontWeight: 500, color: "#8B90A0" }}>Use it for</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SMC_OPTIONS.map((c, i) => (
+              <tr key={i} style={{ borderTop: "1px solid #24272F" }}>
+                <td style={{ padding: "8px 12px", fontWeight: 600, color: "#EDEAE1" }}>{c.name}</td>
+                <td style={{ padding: "8px 12px", color: "#C9A227" }} className="mono">{c.fee}</td>
+                <td style={{ padding: "8px 12px", color: "#6B7180" }}>{c.bestFor}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <SectionTitle>Cards in hand — consignors you'd ship to yourself</SectionTitle>
       <div style={{ fontSize: 12.5, color: "#8B90A0", marginBottom: 14, lineHeight: 1.6 }}>
-        Full comparison, for anything that doesn't fit neatly into those two buckets:
+        Only worth it for cards already in Australia when you don't want to list them yourself — you pay the international shipping to get them there.
       </div>
       <div style={{ border: "1px solid #2C303B", borderRadius: 10, overflow: "hidden", marginBottom: 28 }}>
         <table style={{ width: "100%", fontSize: 12, color: "#C6CAD4", borderCollapse: "collapse" }}>
@@ -175,9 +187,18 @@ function SellingPlaybook() {
   );
 }
 
+const SMC_OPTIONS = [
+  { name: "ShipMyCards Marketplace", fee: "1%", bestFor: "Default first try — any card, no minimum. Smaller buyer pool, so slower" },
+  { name: "Fanatics Collect auction (via SMC)", fee: "0% + 1% SMC (buyer pays 20% premium)", bestFor: "Graded only, $50+ minimum. High-demand slabs; weekly auctions run ~10 days" },
+  { name: "Fanatics Collect Buy Now (via SMC)", fee: "6% + 1% SMC", bestFor: "Graded $50+ when you'd rather set the price than auction it" },
+  { name: "PC Sportscards eBay (via SMC)", fee: "13–17% + US$1 + 1% (8% at $1k+, 5% at $5k+)", bestFor: "Raw $50+, or slabs without much Fanatics demand. Fastest turnaround" },
+  { name: "Card Show Consignment", fee: "US$10/card + 2% if sold", bestFor: "Only $200+ cards where $10 is small, and you can wait for a show (~6 a year)" },
+  { name: "Purchase Program", fee: "Paid 70–85% of conservative value", bestFor: "Only when you need the money now — $50–$5,000, raw or graded, instant store credit" },
+];
+
 const CONSIGNMENT_COMPARISON = [
-  { name: "DCSports87", fee: "~15-20%", bestFor: "Everyday mixed-value cards, no minimum, fully hands-off" },
-  { name: "Fanatics Collect (PWCC)", fee: "6% Buy Now, or 0%+20% buyer premium at auction", bestFor: "Graded $1,000+ singles — already accessible via ShipMyCards" },
+  { name: "DCSports87", fee: "~15-20%", bestFor: "Everyday mixed-value cards, no minimum — not offered as a ShipMyCards option, so only for cards you ship yourself" },
+  { name: "Fanatics Collect (direct)", fee: "6% Buy Now, or 0% + buyer premium at auction", bestFor: "Graded $1,000+ singles" },
   { name: "Probstein / P123", fee: "~8-12%", bestFor: "High-value cards, no public rate card — confirm directly first" },
   { name: "COMC", fee: "~5% + per-card ingestion fee", bestFor: "Large raw collections (100+ cards), patient sellers — slow (up to 16 wks)" },
   { name: "MySlabs", fee: "~4-5%", bestFor: "Graded cards, cheapest fees — but you list and manage it yourself" },

@@ -161,7 +161,7 @@ function SalesDetailModal({ item, onClose, onUpdate, onDelete }) {
             <input
               type="number"
               step="0.01"
-              placeholder="e.g. SMC → DCSports87 cost"
+              placeholder="e.g. SMC → PC Sportscards cost"
               value={item.consignmentShipping ?? ""}
               onChange={(e) => onUpdate(item._source, item.id, { consignmentShipping: e.target.value === "" ? "" : Number(e.target.value) })}
             />
@@ -422,6 +422,9 @@ function listingCheck(c) {
   const trend = c.priceTrend && c.priceTrend.points ? trendChangePct(c.priceTrend.points) : null;
   const falling = trend != null && trend <= -0.05;
   const ebay = !c.sellingMethod || /ebay/i.test(c.sellingMethod);
+  // Vault cards try the 1% Marketplace first, then go to SMC's consignment partners.
+  const smcMarketplace = c.sellingMethod === "ShipMyCards Marketplace";
+  const smcNext = c.grade && price != null && audToUsd(price) >= 50 ? "Fanatics Collect's weekly auction through ShipMyCards" : "PC Sportscards' eBay consignment through ShipMyCards";
   const atFloor = price != null && price <= breakEven * 1.02;
   const base = { card: c, totalDays, stepDays, price, value, breakEven, compsAge };
   const step = (stage, priority, color, text, suggested) => ({ ...base, stage, priority, color, text, suggested: suggested != null && suggested < price ? suggested : null });
@@ -430,6 +433,10 @@ function listingCheck(c) {
   if (price == null) return step("noPrice", 2, "#C9A227", "Add the price it's listed at so the check-up can suggest cuts.");
   if (value == null || compsAge == null || compsAge >= STALE_COMPS_DAYS) {
     return step("comps", 3, "#C9A227", `Update its comps before changing the price — ${compsAge == null ? "it has none saved" : `they're ${compsAge} days old`}.`);
+  }
+
+  if (stepDays >= LISTING_STEPS.cut && smcMarketplace) {
+    return step("relist", 4, "#5C7A99", `No sale in ${stepDays} days on the ShipMyCards Marketplace — move it to ${smcNext}.`);
   }
 
   const floorPrice = niceListPrice(breakEven);
