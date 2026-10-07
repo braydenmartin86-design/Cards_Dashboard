@@ -625,6 +625,8 @@ const TIER_FIELDS = {
   psa10: { avg: "psa10Avg", history: "psa10History", label: "PSA 10" },
 };
 
+const MANUAL_CURRENCY_KEY = "cardflip_ev_manual_comp_currency";
+
 // Grade tiers to look up: graded cards only their own grade; raw cards Raw, PSA 9 and PSA 10.
 function compTiersFor(grade) {
   return grade
@@ -693,6 +695,34 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
   const [showPaste, setShowPaste] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [pasteInfo, setPasteInfo] = useState(null);
+  // Currency the hand-typed prices are in. CardHedger and US eBay / 130 Point show US$.
+  const [manualCurrency, setManualCurrency] = useState(() => {
+    try {
+      return localStorage.getItem(MANUAL_CURRENCY_KEY) === "USD" ? "USD" : "AUD";
+    } catch (e) {
+      return "AUD";
+    }
+  });
+
+  function changeManualCurrency(value) {
+    setManualCurrency(value);
+    setApplied(false);
+    try {
+      localStorage.setItem(MANUAL_CURRENCY_KEY, value);
+    } catch (e) {}
+  }
+
+  // Shows the price boxes for each grade without searching anything — for typing in prices
+  // you've looked up yourself (e.g. when CardSight's calls are used up).
+  function enterByHand() {
+    setError(null);
+    setTrend(null);
+    setTrendNote(null);
+    setApplied(false);
+    setPasteInfo(null);
+    setSource("manual");
+    showResults(tiers.map((t) => ({ key: t.key, grade: t.grade, sales: [], highConfidence: false, reasons: [], note: null, manualOnly: true })));
+  }
 
   function showResults(results) {
     setFound(results);
@@ -758,13 +788,14 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
     }
   }
 
-  // The value a tier would apply: typed-in sales win (averaged over however many are filled in),
-  // otherwise the average of ticked sales.
+  // The value a tier would apply: typed-in sales win (averaged over however many are filled in,
+  // converted from US$ when that's what you typed), otherwise the average of ticked sales.
   function tierValue(r) {
     const c = choices[r.key] || {};
     const manual = (c.manual || []).map(Number).filter((n) => n > 0);
     if (manual.length) {
-      return { aud: Math.round((manual.reduce((s, n) => s + n, 0) / manual.length) * 100) / 100, manual: true, count: manual.length };
+      const avg = Math.round((manual.reduce((s, n) => s + n, 0) / manual.length) * 100) / 100;
+      return { aud: manualCurrency === "USD" ? convertUsdToAud(avg) : avg, usd: manualCurrency === "USD" ? avg : null, manual: true, count: manual.length };
     }
     const picked = r.sales.filter((_, i) => (c.ticked || [])[i]);
     if (!picked.length) return null;
@@ -844,6 +875,9 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
             <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setShowPaste((v) => !v)}>
               📋 Paste sold listings instead {showPaste ? "▲" : "▼"}
             </button>
+            <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={enterByHand} disabled={loading}>
+              ✍️ Enter prices by hand
+            </button>
           </div>
           {showPaste && (
             <div style={{ marginTop: 8, border: "1px solid #2C303B", borderRadius: 6, padding: "8px 10px" }}>
@@ -899,7 +933,11 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
                       <span style={{ fontWeight: 700, color: "#C9A227" }}>{value ? fmtMoney(value.aud) : "—"}</span>
                     </div>
                     <div style={{ fontSize: 11, color: r.highConfidence ? "#4E8B6B" : "#C9A227", margin: "2px 0 4px" }}>
-                      {r.highConfidence ? `✓ High confidence` : `⚠️ Low confidence — ${r.reasons.join(", ")}. Check the listings before using it.`}
+                      {r.manualOnly
+                        ? "✍️ Your prices"
+                        : r.highConfidence
+                        ? `✓ High confidence`
+                        : `⚠️ Low confidence — ${r.reasons.join(", ")}. Check the listings before using it.`}
                       {value && (value.manual ? ` · avg of your ${value.count} sale${value.count === 1 ? "" : "s"}` : ` · avg of ${value.count} ticked sale${value.count === 1 ? "" : "s"}`)}
                       {!canApply && " · this grade has no market-value column"}
                     </div>
@@ -933,10 +971,19 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
                       </div>
                     ))}
                     {r.note && <div style={{ fontSize: 11, color: "#6B7180" }}>{r.note}</div>}
-                    {!r.highConfidence && <TierSearchLinks details={details} grade={r.grade} />}
+                    {(!r.highConfidence || r.manualOnly) && <TierSearchLinks details={details} grade={r.grade} />}
                     {canApply && (
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11, color: "#8B90A0", flexWrap: "wrap" }}>
-                        <span>Or enter the last 3 sold prices yourself (A$):</span>
+                        <span>{r.manualOnly ? "Last 3 sold prices" : "Or enter the last 3 sold prices yourself"} in</span>
+                        <select
+                          value={manualCurrency}
+                          onChange={(e) => changeManualCurrency(e.target.value)}
+                          title="CardHedger and US eBay / 130 Point show US$ — pick US$ and it's converted at the live rate"
+                          style={{ width: "auto", padding: "3px 6px", fontSize: 11.5 }}
+                        >
+                          <option value="AUD">A$</option>
+                          <option value="USD">US$</option>
+                        </select>
                         {[0, 1, 2].map((i) => (
                           <input
                             key={i}
@@ -954,6 +1001,11 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
                             style={{ width: 80, padding: "4px 7px", fontSize: 12 }}
                           />
                         ))}
+                        {value && value.manual && value.usd != null && (
+                          <span style={{ color: "#C9A227" }}>
+                            avg US${value.usd.toFixed(2)} = {fmtMoney(value.aud)} at {currentUsdToAudRate().toFixed(4)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -974,8 +1026,8 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
   );
 }
 
-// PokemonPriceTracker prices for a Pokémon card inside CompFinder: TCGplayer market (raw),
-// eBay PSA 9 / PSA 10 averages, and the PSA gem rate. Tick what to use and apply.
+// PokemonPriceTracker prices for a Pokémon card inside CompFinder: TCGplayer market (raw) and
+// recent eBay PSA 9 / PSA 10 prices. Tick what to use and apply.
 function PokemonPricesPanel({ details, onApply }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -990,7 +1042,8 @@ function PokemonPricesPanel({ details, onApply }) {
     try {
       const r = await fetchPokemonPrices({ ...details, pptId: pptId || details.pptId });
       setResult(r);
-      if (r.matched) setUse({ raw: r.rawAud != null, psa9: Boolean(r.psa9), psa10: Boolean(r.psa10), gem: Boolean(r.gem) });
+      // Low-confidence graded prices (few recent sales) start unticked.
+      if (r.matched) setUse({ raw: r.rawAud != null, psa9: Boolean(r.psa9 && r.psa9.confidence !== "low"), psa10: Boolean(r.psa10 && r.psa10.confidence !== "low") });
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -1003,17 +1056,21 @@ function PokemonPricesPanel({ details, onApply }) {
     if (use.raw && result.rawAud != null) values.raw = result.rawAud;
     if (use.psa9 && result.psa9) values.psa9 = result.psa9.aud;
     if (use.psa10 && result.psa10) values.psa10 = result.psa10.aud;
-    const extra = use.gem && result.gem ? { setGemRate: Math.round(result.gem.rate * 10) / 10 } : {};
-    onApply({ values, details: { ...details, pptId: result.id }, trend: null, extra });
+    onApply({ values, details: { ...details, pptId: result.id }, trend: null });
     setApplied(true);
   }
 
+  const gradeText = (g) => {
+    if (!g) return null;
+    const trendIcon = g.trend === "up" ? " ↗" : g.trend === "down" ? " ↘" : "";
+    const basis = g.recent ? `last 7 days${g.confidence ? `, ${g.confidence} confidence` : ""}` : "all-time average — no recent sales";
+    return `${fmtMoney(g.aud)}${trendIcon} · ${basis}${g.count ? ` · ${g.count.toLocaleString()} sales tracked` : ""}`;
+  };
   const rows = result && result.matched
     ? [
         ["raw", "Raw (TCGplayer market)", result.rawAud != null ? fmtMoney(result.rawAud) : null],
-        ["psa9", "PSA 9 (eBay avg)", result.psa9 ? `${fmtMoney(result.psa9.aud)}${result.psa9.count ? ` · ${result.psa9.count} sales` : ""}` : null],
-        ["psa10", "PSA 10 (eBay avg)", result.psa10 ? `${fmtMoney(result.psa10.aud)}${result.psa10.count ? ` · ${result.psa10.count} sales` : ""}` : null],
-        ["gem", "PSA gem rate → set gem rate %", result.gem ? `${result.gem.rate.toFixed(1)}%${result.gem.graded ? ` of ${result.gem.graded.toLocaleString()} graded` : ""}` : null],
+        ["psa9", "PSA 9 (eBay)", gradeText(result.psa9)],
+        ["psa10", "PSA 10 (eBay)", gradeText(result.psa10)],
       ]
     : [];
   const anyTicked = rows.some(([k, , v]) => v && use[k]);
@@ -1057,12 +1114,12 @@ function PokemonPricesPanel({ details, onApply }) {
           {rows.map(([key, label, value]) => (
             <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, margin: "2px 0", fontSize: 12, color: value ? "#EDEAE1" : "#5C6270", cursor: value ? "pointer" : "default" }}>
               <input type="checkbox" disabled={!value} checked={Boolean(value && use[key])} onChange={(e) => setUse((u) => ({ ...u, [key]: e.target.checked }))} style={{ width: "auto", margin: 0 }} />
-              <span style={{ minWidth: 190 }}>{label}</span>
+              <span style={{ minWidth: 150 }}>{label}</span>
               <span style={{ fontWeight: 600, color: value ? "#C9A227" : "#5C6270" }}>{value || "no data"}</span>
             </label>
           ))}
           <div style={{ fontSize: 10.5, color: "#6B7180", margin: "4px 0 6px" }}>
-            Averages over recent sales, converted from US$ at the live rate. Raw is TCGplayer's market price for a near-mint copy.
+            Converted from US$ at the live rate. Raw is TCGplayer's market price for a near-mint copy; graded prices are PokemonPriceTracker's weighted price from the last 7 days of eBay sales (↗/↘ = trend).
           </div>
           <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "6px 12px" }} onClick={apply} disabled={!anyTicked || applied}>
             {applied ? "Applied ✓" : "Apply ticked prices"}

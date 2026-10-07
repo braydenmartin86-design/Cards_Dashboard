@@ -372,9 +372,34 @@ function pptNum(v) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-// Finds a grade's average price (and sale count) anywhere in the card's eBay / graded data:
-// e.g. ebay.psa10.avg, gradedPrices.psa10, ebay.salesByGrade.psa10.averagePrice.
+// A grade's current price from the card's eBay data (ebay.salesByGrade.psa10 etc.). Prefers the
+// recent price — PokemonPriceTracker's 7-day "smart market price", then the 7-day median — over
+// the all-time average, which can be months out of date.
 function pptGradeStats(card, grade) {
+  const wanted = normalizeCardText(grade).replace(/ /g, ""); // "psa10"
+  const byGrade = (card.ebay && card.ebay.salesByGrade) || null;
+  if (byGrade) {
+    const key = Object.keys(byGrade).find((k) => normalizeCardText(k).replace(/ /g, "") === wanted);
+    const g = key ? byGrade[key] : null;
+    if (!g) return null;
+    const smart = g.smartMarketPrice || {};
+    const recent = pptNum(smart.price) ?? pptNum(g.marketPriceMedian7Day) ?? pptNum(g.marketPrice7Day);
+    const avg = recent ?? pptNum(g.medianPrice) ?? pptNum(g.averagePrice);
+    if (!avg) return null;
+    return {
+      avg,
+      count: g.count ?? null,
+      recent: recent != null,
+      confidence: recent != null ? smart.confidence || null : "low",
+      trend: g.marketTrend || null,
+      lastSale: g.lastSaleDate || null,
+    };
+  }
+  return pptGradeStatsLoose(card, grade);
+}
+
+// Fallback for other reply shapes: e.g. ebay.psa10.avg or gradedPrices.psa10.
+function pptGradeStatsLoose(card, grade) {
   const wanted = normalizeCardText(grade).replace(/ /g, ""); // "psa10"
   let found = null;
   (function walk(obj, depth) {
@@ -398,7 +423,8 @@ function pptCardInfo(c) {
   const tcg = c.tcgplayer || prices.tcgplayer || {};
   return {
     id: c.tcgPlayerId ?? c.tcgplayerId ?? c.id ?? null,
-    name: c.name || c.cardName || "",
+    // Names come back as "Charizard ex - 223/197".
+    name: String(c.name || c.cardName || "").replace(/\s+-\s+[\w/]+$/, ""),
     number: String(c.number ?? c.cardNumber ?? c.card_number ?? ""),
     set: (c.set && (c.set.name || c.set)) || c.setName || c.set_name || "",
     rawUsd: pptNum(prices.market ?? tcg.market ?? prices.mid ?? tcg.mid ?? c.marketPrice),
@@ -437,15 +463,8 @@ async function fetchPokemonPrices(details) {
   const full = pptCards(await pptGet("/cards", { tcgPlayerId: id, includeEbay: true, language }))[0];
   if (!full) throw new Error("PokemonPriceTracker returned no data for that card.");
   const info = pptCardInfo(full);
-  let gem = null;
-  try {
-    const pop = await pptGet("/population", { tcgPlayerId: id }, 30);
-    const p = (pptCards(pop)[0] || pop || {}).populationByGrader || (pop && pop.populationByGrader);
-    if (p && p.PSA && p.PSA.gemRate != null) {
-      const psa = p.PSA;
-      gem = { rate: Number(psa.gemRate), graded: ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10"].reduce((s, g) => s + (Number(psa[g]) || 0), 0) || null };
-    }
-  } catch (e) {}
+  // (Gem rates / population need PokemonPriceTracker's Business plan, so they aren't fetched.)
+  const grade = (g) => (g ? { aud: convertUsdToAud(g.avg), count: g.count, recent: g.recent, confidence: g.confidence, trend: g.trend, lastSale: g.lastSale } : null);
   return {
     matched: true,
     id,
@@ -453,9 +472,8 @@ async function fetchPokemonPrices(details) {
     number: info.number || (searched && searched.number),
     set: info.set || (searched && searched.set),
     rawAud: info.rawUsd != null ? convertUsdToAud(info.rawUsd) : null,
-    psa9: info.psa9 ? { aud: convertUsdToAud(info.psa9.avg), count: info.psa9.count } : null,
-    psa10: info.psa10 ? { aud: convertUsdToAud(info.psa10.avg), count: info.psa10.count } : null,
-    gem,
+    psa9: grade(info.psa9),
+    psa10: grade(info.psa10),
     creditsLeft: pptCreditsLeft,
   };
 }
