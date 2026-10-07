@@ -281,6 +281,185 @@ async function callDualEngineIdentify(base64Image, mediaType = "image/jpeg", fal
 // CardSight. Only completed auctions that clearly match the same card are kept, and the market
 // value is the average of the 3 most recent sales, or the most recent sale if fewer exist.
 
+// ===== eBay listing lookup =====
+// A pasted eBay link → the listing's details, via the `ebay-item` Supabase function (eBay's
+// official Browse API). Doesn't use any CardSight calls.
+async function fetchEbayListing(url) {
+  const anonKey = window.SUPABASE_ANON_KEY;
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/functions/v1/ebay-item`, {
+      method: "POST",
+      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+  } catch (e) {
+    // A function that doesn't exist yet fails the browser's CORS check, which surfaces as a
+    // bare network error.
+    throw new Error("Couldn't reach the eBay lookup. If you haven't deployed the ebay-item function in Supabase yet, do that first; otherwise check your connection.");
+  }
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (e) {}
+  if (response.status === 404 && !(data && data.error)) {
+    throw new Error("The eBay lookup isn't set up yet — deploy the ebay-item function in Supabase.");
+  }
+  if (!response.ok || !data || data.error) throw new Error((data && data.error) || `eBay lookup failed (status ${response.status}).`);
+  return data;
+}
+
+// ===== Pokémon prices (PokemonPriceTracker) =====
+// Raw market price (TCGplayer), eBay graded averages (PSA 9 / PSA 10…) and PSA gem rates for
+// Pokémon cards, via the `pokemon-prices` Supabase function. The free plan has 100 credits a
+// day (1 per card returned, +1 for eBay data), so: search the card's set for its name (no eBay
+// data), pick the exact card by number, then fetch just that card with eBay data. The card's ID
+// is remembered so later checks skip the search. Answers are reused for 7 days.
+const PPT_CACHE_KEY = "cardflip_ev_ppt_cache_v1";
+const PPT_CACHE_DAYS = 7;
+let pptCreditsLeft = null;
+
+async function pptGet(path, query, maxAgeDays = PPT_CACHE_DAYS) {
+  const key = `${path}?${Object.keys(query).sort().map((k) => `${k}=${query[k]}`).join("&")}`;
+  let cache = {};
+  try {
+    cache = JSON.parse(localStorage.getItem(PPT_CACHE_KEY) || "{}");
+  } catch (e) {}
+  const hit = cache[key];
+  if (hit && (Date.now() - hit.t) / 86400000 < maxAgeDays) return { ...hit.data, _fromCache: true };
+
+  const anonKey = window.SUPABASE_ANON_KEY;
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/functions/v1/pokemon-prices`, {
+      method: "POST",
+      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ path, query }),
+    });
+  } catch (e) {
+    throw new Error("Couldn't reach the Pokémon price lookup. If you haven't deployed the pokemon-prices function in Supabase yet, do that first.");
+  }
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (e) {}
+  if (data && data._meta && data._meta.dailyRemaining != null) pptCreditsLeft = Number(data._meta.dailyRemaining);
+  if (!response.ok || !data || (data.error && !data.data)) {
+    const msg = (data && (data.error || data.message)) || `status ${response.status}`;
+    if (response.status === 429 || /limit|credits/i.test(String(msg))) throw new Error("PokemonPriceTracker's 100 free daily credits are used up — try again tomorrow.");
+    throw new Error(`PokemonPriceTracker: ${msg}`);
+  }
+  cache[key] = { t: Date.now(), data };
+  const entries = Object.entries(cache).sort((a, b) => b[1].t - a[1].t).slice(0, 40);
+  try {
+    localStorage.setItem(PPT_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch (e) {}
+  return data;
+}
+
+// The list of cards in a reply, whatever it's wrapped in.
+function pptCards(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.data)) return data.data;
+  if (data.data && typeof data.data === "object") return [data.data];
+  if (Array.isArray(data.cards)) return data.cards;
+  if (Array.isArray(data.results)) return data.results;
+  return [];
+}
+
+function pptNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Finds a grade's average price (and sale count) anywhere in the card's eBay / graded data:
+// e.g. ebay.psa10.avg, gradedPrices.psa10, ebay.salesByGrade.psa10.averagePrice.
+function pptGradeStats(card, grade) {
+  const wanted = normalizeCardText(grade).replace(/ /g, ""); // "psa10"
+  let found = null;
+  (function walk(obj, depth) {
+    if (!obj || typeof obj !== "object" || depth > 5 || found) return;
+    for (const [k, v] of Object.entries(obj)) {
+      if (found) return;
+      if (normalizeCardText(k).replace(/ /g, "") === wanted) {
+        if (typeof v === "number" || typeof v === "string") found = { avg: pptNum(v), count: null };
+        else if (v && typeof v === "object") {
+          const avg = pptNum(v.avg ?? v.average ?? v.averagePrice ?? v.avgPrice ?? v.median ?? v.medianPrice ?? v.price ?? v.market);
+          found = { avg, count: v.count ?? v.salesCount ?? v.sales ?? null };
+        }
+      } else if (v && typeof v === "object") walk(v, depth + 1);
+    }
+  })(card.ebay || card.gradedPrices || card.graded || card, 0);
+  return found && found.avg ? found : null;
+}
+
+function pptCardInfo(c) {
+  const prices = c.prices || {};
+  const tcg = c.tcgplayer || prices.tcgplayer || {};
+  return {
+    id: c.tcgPlayerId ?? c.tcgplayerId ?? c.id ?? null,
+    name: c.name || c.cardName || "",
+    number: String(c.number ?? c.cardNumber ?? c.card_number ?? ""),
+    set: (c.set && (c.set.name || c.set)) || c.setName || c.set_name || "",
+    rawUsd: pptNum(prices.market ?? tcg.market ?? prices.mid ?? tcg.mid ?? c.marketPrice),
+    psa9: pptGradeStats(c, "PSA 9"),
+    psa10: pptGradeStats(c, "PSA 10"),
+  };
+}
+
+// details: { player_name, set_name, card_number, year, parallel_or_variant, pptId? }
+async function fetchPokemonPrices(details) {
+  const language = /japanese|\bjp\b/i.test(`${details.set_name} ${details.parallel_or_variant}`) ? "japanese" : "english";
+  let id = details.pptId || null;
+  let searched = null;
+  if (!id) {
+    const query = { search: details.player_name, limit: 10, language };
+    if (details.set_name) query.set = details.set_name;
+    let data = await pptGet("/cards", query);
+    let list = pptCards(data).map(pptCardInfo);
+    if (!list.length && details.set_name) {
+      // The set name may be worded differently; retry on the name alone.
+      data = await pptGet("/cards", { search: `${details.player_name} ${details.set_name}`, limit: 10, language });
+      list = pptCards(data).map(pptCardInfo);
+    }
+    const number = cardNumberKey(details.card_number);
+    const match = number ? list.find((c) => cardNumberKey(c.number) === number) : list.length === 1 ? list[0] : null;
+    if (!match) {
+      return {
+        matched: false,
+        candidates: list.slice(0, 6),
+        reason: !list.length ? "PokemonPriceTracker found no cards for that name and set." : number ? `None of the ${list.length} cards found has number ${details.card_number}.` : "Add the card # so the right card can be picked.",
+      };
+    }
+    id = match.id;
+    searched = match;
+  }
+  const full = pptCards(await pptGet("/cards", { tcgPlayerId: id, includeEbay: true, language }))[0];
+  if (!full) throw new Error("PokemonPriceTracker returned no data for that card.");
+  const info = pptCardInfo(full);
+  let gem = null;
+  try {
+    const pop = await pptGet("/population", { tcgPlayerId: id }, 30);
+    const p = (pptCards(pop)[0] || pop || {}).populationByGrader || (pop && pop.populationByGrader);
+    if (p && p.PSA && p.PSA.gemRate != null) {
+      const psa = p.PSA;
+      gem = { rate: Number(psa.gemRate), graded: ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10"].reduce((s, g) => s + (Number(psa[g]) || 0), 0) || null };
+    }
+  } catch (e) {}
+  return {
+    matched: true,
+    id,
+    name: info.name || (searched && searched.name),
+    number: info.number || (searched && searched.number),
+    set: info.set || (searched && searched.set),
+    rawAud: info.rawUsd != null ? convertUsdToAud(info.rawUsd) : null,
+    psa9: info.psa9 ? { aud: convertUsdToAud(info.psa9.avg), count: info.psa9.count } : null,
+    psa10: info.psa10 ? { aud: convertUsdToAud(info.psa10.avg), count: info.psa10.count } : null,
+    gem,
+    creditsLeft: pptCreditsLeft,
+  };
+}
+
 // ===== CardSight quota =====
 // When the account's monthly API calls run out, CardSight answers every request with an
 // "account is inactive" error. Once that's seen, CardSight calls are paused (for this browser,
@@ -512,12 +691,83 @@ function cardSearchQueries(card) {
   return { primary: [...new Set(primary)], fallback: join([setText, card.player_name]), label };
 }
 
+// ===== CardSight search cache =====
+// Identical CardSight searches within a few days reuse the saved answer instead of spending
+// another API call (e.g. verifying a lot, then updating comps on the same cards). Kept short-term
+// and small, as CardSight's terms allow: only the fields the app uses, at most 40 searches, in
+// this browser only.
+const CARDSIGHT_CACHE_KEY = "cardflip_ev_cardsight_cache_v1";
+const CARDSIGHT_CACHE_DAYS = 7;
+const CARDSIGHT_CACHE_MAX = 40;
+
+function readCardSightCache() {
+  try {
+    return JSON.parse(localStorage.getItem(CARDSIGHT_CACHE_KEY) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeCardSightCache(cache) {
+  let entries = Object.entries(cache).sort((a, b) => b[1].t - a[1].t).slice(0, CARDSIGHT_CACHE_MAX);
+  // If browser storage is full, keep dropping the oldest searches until it fits.
+  while (entries.length) {
+    try {
+      localStorage.setItem(CARDSIGHT_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+      return;
+    } catch (e) {
+      entries = entries.slice(0, Math.floor(entries.length / 2));
+    }
+  }
+}
+
+// Just the fields the comp matching uses, to keep the cache small.
+function slimPricingResults(data) {
+  return {
+    results: (data.results || []).map((r) => ({
+      title: r.title,
+      price: r.price,
+      date: r.date,
+      listing_type: r.listing_type,
+      url: r.url,
+      parallel_id: r.parallel_id,
+      parallel_name: r.parallel_name,
+      matched_card: r.matched_card
+        ? { card_id: r.matched_card.card_id, number: r.matched_card.number, set: r.matched_card.set && { year: r.matched_card.set.year, release: r.matched_card.set.release, name: r.matched_card.set.name } }
+        : null,
+      grade: r.grade ? { company_name: r.grade.company_name, grade_value: r.grade.grade_value, grade_id: r.grade.grade_id } : null,
+    })),
+  };
+}
+
+// A CardSight GET that reuses an identical request from the last `maxAgeDays` days.
+// `stats` (optional) counts { fresh, cached, oldestCachedDays } for "reused" notes in the UI.
+async function cardSightGetCached(endpoint, query, maxAgeDays = CARDSIGHT_CACHE_DAYS, stats) {
+  const key = `${endpoint}?${Object.keys(query).sort().map((k) => `${k}=${query[k]}`).join("&")}`;
+  const cache = readCardSightCache();
+  const hit = cache[key];
+  const ageDays = hit ? (Date.now() - hit.t) / 86400000 : Infinity;
+  if (hit && ageDays < maxAgeDays) {
+    if (stats) {
+      stats.cached += 1;
+      stats.oldestCachedDays = Math.max(stats.oldestCachedDays || 0, Math.floor(ageDays));
+    }
+    return hit.data;
+  }
+  const data = await callCardSightProxy({ endpoint, method: "GET", query });
+  if (stats) stats.fresh += 1;
+  cache[key] = { t: Date.now(), data: endpoint === "/pricing/search" ? slimPricingResults(data) : data };
+  writeCardSightCache(cache);
+  return data;
+}
+
 // Runs the searches one after another (firing them at once trips CardSight's rate limit) and
-// merges their results, skipping listings already in `existing`.
-async function fetchSoldListings(queries, existing = []) {
+// merges their results, skipping listings already in `existing`. Searches made in the last
+// 7 days are reused unless `fresh` is set.
+async function fetchSoldListings(queries, existing = [], { fresh = false, stats } = {}) {
   const responses = [];
   for (const q of queries) {
-    responses.push(await callCardSightProxy({ endpoint: "/pricing/search", method: "GET", query: { q, listing_type: "auction", limit: 100 } }));
+    responses.push(await cardSightGetCached("/pricing/search", { q, listing_type: "auction", limit: 100 }, fresh ? 0 : CARDSIGHT_CACHE_DAYS, stats));
   }
   const keyOf = (r) => `${r.url || r.title}|${r.date}|${r.price}`;
   const seen = new Set(existing.map(keyOf));
@@ -737,22 +987,88 @@ function mostCommon(values) {
   return Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || null;
 }
 
-async function findCompsForTiers(details, tiers) {
-  const tierCard = (grade) => ({
+function compTierCard(details, grade) {
+  return {
     ...details,
     is_graded: Boolean(grade),
     grade: grade || null,
     grading_company: grade ? String(grade).split(/\s+/)[0] : null,
-  });
-  const queries = [...new Set(tiers.flatMap((t) => cardSearchQueries(tierCard(t.grade)).primary))];
-  let results = await fetchSoldListings(queries);
-  let perTier = tiers.map((t) => ({ tier: t, search: filterSoldListings(tierCard(t.grade), results, queries[queries.length - 1]) }));
-  const fallback = cardSearchQueries(tierCard(null)).fallback;
-  if (perTier.some((x) => x.search.sales.length === 0) && fallback && !queries.includes(fallback)) {
-    results = await fetchSoldListings([fallback], results);
-    perTier = tiers.map((t) => ({ tier: t, search: filterSoldListings(tierCard(t.grade), results, fallback) }));
-  }
+  };
+}
 
+// `options.fresh` skips the 7-day search cache. The returned array carries `.cache` =
+// { fresh, cached, oldestCachedDays } so the UI can say when saved searches were reused.
+async function findCompsForTiers(details, tiers, options = {}) {
+  const stats = { fresh: 0, cached: 0, oldestCachedDays: 0 };
+  const fetchOpts = { fresh: Boolean(options.fresh), stats };
+  const queries = [...new Set(tiers.flatMap((t) => cardSearchQueries(compTierCard(details, t.grade)).primary))];
+  let results = await fetchSoldListings(queries, [], fetchOpts);
+  let perTier = tiers.map((t) => ({ tier: t, search: filterSoldListings(compTierCard(details, t.grade), results, queries[queries.length - 1]) }));
+  const fallback = cardSearchQueries(compTierCard(details, null)).fallback;
+  if (perTier.some((x) => x.search.sales.length === 0) && fallback && !queries.includes(fallback)) {
+    results = await fetchSoldListings([fallback], results, fetchOpts);
+    perTier = tiers.map((t) => ({ tier: t, search: filterSoldListings(compTierCard(details, t.grade), results, fallback) }));
+  }
+  const out = summarizeTierComps(details, perTier, "CardSight");
+  out.cache = stats;
+  return out;
+}
+
+// Comps from sales you pasted (e.g. an eBay sold search page), run through the same matching
+// rules as CardSight's sales. `sales`: [{ title, price (US$), date }].
+function compsFromPastedSales(details, tiers, sales) {
+  const perTier = tiers.map((t) => ({ tier: t, search: filterSoldListings(compTierCard(details, t.grade), sales, "your pasted sales") }));
+  return summarizeTierComps(details, perTier, "Pasted sales").map((r) => ({
+    ...r,
+    note: r.note
+      ? r.note
+          .replace(/^CardSight returned no sold listings at all for "your pasted sales".*$/, "No sales could be read from your paste.")
+          .replace(/^CardSight returned (\d+) sold listings? for "your pasted sales", but/, "Your paste had $1 sales, but")
+      : r.note,
+  }));
+}
+
+// Reads sold listings out of text copied from a sold-results page (eBay sold search with
+// Ctrl+A / Ctrl+C, 130 Point, CardHedger…) using Gemini — no CardSight calls. Returns
+// [{ title, price (US$), date, listing_type, url: null }] ready for the comp matching, plus
+// how many rows were skipped for an unknown currency.
+const PASTED_SALES_PROMPT = `The text below was copied from a web page of SOLD trading card listings (an eBay sold search, 130 Point, CardHedger or similar). Extract every individual sold listing.
+
+Rules:
+- Only completed sales with a sold price. Ignore active listings, ads, "Shop on eBay" placeholders, navigation, filters and recommendations.
+- On eBay, stop at the heading "Results matching fewer words" — listings after it are not good matches.
+- "price" is the final sold price of the item as a number (no shipping). For "Best offer accepted" use the price shown. If a price range is shown, skip that row.
+- "currency": "AUD" for AU $ / A$, "USD" for US $ / $ on US sites / "USD", otherwise the ISO code.
+- "date": the sold date as YYYY-MM-DD. If the year is missing, use ${new Date().getFullYear()} (or the previous year if that date would be in the future).
+- "title": the listing title exactly as shown.
+
+Return ONLY a JSON array, no markdown: [{"title":"","price":0,"currency":"AUD","date":"YYYY-MM-DD"}]`;
+
+async function readSoldListingsFromText(text) {
+  const clipped = String(text || "").slice(0, 60000);
+  const raw = await callGeminiAi(`${PASTED_SALES_PROMPT}\n\nCopied page text:\n${clipped}`);
+  const cleaned = String(raw).replace(/```json|```/g, "").trim();
+  const rows = JSON.parse(cleaned.slice(cleaned.indexOf("["), cleaned.lastIndexOf("]") + 1));
+  const rate = currentUsdToAudRate();
+  let skipped = 0;
+  const sales = [];
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const price = Number(r.price);
+    const date = /^\d{4}-\d{2}-\d{2}/.test(String(r.date || "")) ? String(r.date).slice(0, 10) : null;
+    if (!(price > 0) || !r.title || !date) continue;
+    const currency = String(r.currency || "").toUpperCase();
+    // The comp matching works in US$ like CardSight, so AUD is converted at the live rate.
+    const usd = currency === "USD" ? price : currency === "AUD" ? price / rate : null;
+    if (usd == null) {
+      skipped += 1;
+      continue;
+    }
+    sales.push({ title: String(r.title), price: Math.round(usd * 100) / 100, date: `${date}T12:00:00Z`, listing_type: "auction", url: null });
+  }
+  return { sales, skipped };
+}
+
+function summarizeTierComps(details, perTier, sourceLabel) {
   const numberKnown = Boolean(cardProfile(details).number);
   return perTier.map(({ tier, search }) => {
     const sales = search.sales;
@@ -765,7 +1081,7 @@ async function findCompsForTiers(details, tiers) {
     if (!numberKnown) reasons.push("no card number to match on");
     if (used.length < 2) reasons.push(used.length === 0 ? "no matching sales" : "only 1 matching sale");
     if (catalogIds.length > 1) reasons.push("sales matched to different catalogue cards");
-    const summary = used.length ? summarizeSales(sales, "CardSight", null, COMPS_PER_TIER) : null;
+    const summary = used.length ? summarizeSales(sales, sourceLabel, null, COMPS_PER_TIER) : null;
     return {
       key: tier.key,
       grade: tier.grade,
@@ -789,7 +1105,7 @@ async function fetchPriceTrend(cardId, { parallelId, gradeId, graded } = {}) {
   query.parallel_id = parallelId || "null";
   if (!graded) query.grade_id = "null";
   else if (gradeId) query.grade_id = gradeId;
-  const data = await callCardSightProxy({ endpoint: `/pricing/${cardId}/timeseries`, method: "GET", query });
+  const data = await cardSightGetCached(`/pricing/${cardId}/timeseries`, query);
 
   let candles = (data.raw && data.raw.candles) || [];
   if (graded) {
@@ -850,6 +1166,19 @@ function ebaySoldUrl(text) {
   return `https://www.ebay.com.au/sch/i.html?_nkw=${encodeURIComponent(String(text || "").replace(/\s+/g, " ").trim())}&LH_Sold=1&LH_Complete=1`;
 }
 
+// Card Hedge's free price guide search (Raw / PSA 9 / PSA 10 prices per parallel, from eBay,
+// Fanatics, Heritage and Goldin sales). Grades and eBay "-word" exclusions are left out because
+// its results already show every grade.
+function cardHedgerUrl(text) {
+  const q = String(text || "")
+    .replace(/\s-\w+/g, " ")
+    .replace(/\b(PSA|BGS|SGC|CGC|TAG)\s*\d+(\.5)?\b/gi, " ")
+    .replace(/#/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `https://ai.cardhedger.com/price-guide?query=${encodeURIComponent(q)}&queryTags=${encodeURIComponent(JSON.stringify([q]))}`;
+}
+
 const CARDSIGHT_AI_GAVE_UP = /more iterations|try a more specific|technical difficult|currently unavailable/i;
 const PRICE_QUESTION = /\b(sold|sell|sells|selling|price|prices|priced|worth|value|comps?|going for|cost)\b/i;
 
@@ -888,6 +1217,8 @@ Return ONLY JSON: {"is_specific_card": true|false, "player_name": "", "year": ""
 }
 
 // Universal AI Call Proxy with exponential backoff retries & safe string parsing
+const GEMINI_TIMEOUT_MS = 60000;
+
 async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jpeg", retries = 2, delay = 3000) {
   if (!supabaseClient) {
     throw new Error("Supabase client is not initialized.");
@@ -900,13 +1231,17 @@ async function callGeminiAi(promptText, imageBase64 = null, mimeType = "image/jp
 
   for (let i = 0; i < retries; i++) {
     try {
-      const { data, error } = await supabaseClient.functions.invoke("analyze-card", {
-        body: {
-          prompt: promptText,
-          imageBase64: cleanBase64,
-          mimeType: mimeType
-        }
-      });
+      // A request that never answers would otherwise leave the app spinning forever.
+      const { data, error } = await Promise.race([
+        supabaseClient.functions.invoke("analyze-card", {
+          body: {
+            prompt: promptText,
+            imageBase64: cleanBase64,
+            mimeType: mimeType
+          }
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini took too long to answer.")), GEMINI_TIMEOUT_MS)),
+      ]);
 
       if (error) throw error;
       if (data && data.error) throw new Error(data.error);

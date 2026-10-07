@@ -48,6 +48,209 @@ function buyCompPatch(values, details) {
   return patch;
 }
 
+// ===== eBay link → form =====
+
+// An eBay money object as AUD. eBay usually converts to AUD for the Australian site; US$ is
+// converted at the live rate; anything else is passed through and flagged.
+function ebayMoneyToAud(m) {
+  if (!m || m.value == null) return { aud: null, note: null };
+  const value = Number(m.value);
+  if (m.currency === "AUD") return { aud: value, note: null };
+  if (m.currency === "USD") return { aud: convertUsdToAud(value), note: value ? `converted from US$${value.toFixed(2)}` : null };
+  return { aud: value, note: `price is in ${m.currency}, not converted` };
+}
+
+const EBAY_GRADERS = [
+  [/\bpsa\b|professional sports authenticator/i, "PSA"],
+  [/\bbgs\b|beckett/i, "BGS"],
+  [/\bsgc\b|sportscard guaranty/i, "SGC"],
+  [/\bcgc\b|certified guaranty/i, "CGC"],
+  [/\btag\b/i, "TAG"],
+];
+
+function ebaySport(get, title) {
+  const text = `${get("Sport")} ${get("League")} ${get("Game")} ${get("Franchise")} ${title}`.toLowerCase();
+  if (/pok[eé]mon/.test(text)) return "Pokémon";
+  if (/australian (rules )?football|\bafl\b/.test(text)) return "AFL";
+  if (/\bwnba\b/.test(text)) return "WNBA";
+  if (/basketball|\bnba\b/.test(text)) return "NBA";
+  if (/baseball|\bmlb\b/.test(text)) return "MLB";
+  if (/soccer|premier league|\bmls\b|fifa/.test(text)) return "Soccer";
+  if (/\bufc\b|\bmma\b/.test(text)) return "MMA";
+  if (/wrestling|\bwwe\b/.test(text)) return "WWE";
+  if (/football|\bnfl\b/.test(text)) return "NFL";
+  return null;
+}
+
+// Form fields from an eBay listing's item specifics (falling back to the title where a seller
+// left a specific blank). Returns { patch, missing, notes }.
+function ebayListingToForm(listing) {
+  const aspects = listing.aspects || [];
+  const get = (...names) => {
+    for (const n of names) {
+      const a = aspects.find((x) => x.name.toLowerCase() === n.toLowerCase());
+      if (a && a.value) return String(a.value).trim();
+    }
+    return "";
+  };
+  const title = listing.title || "";
+  const descriptor = (name) => ((listing.conditionDescriptors || []).find((d) => d.name.toLowerCase() === name.toLowerCase()) || {}).value || "";
+
+  const sport = ebaySport(get, title);
+  const isPokemon = sport === "Pokémon";
+  // Pokémon listings name the card ("Charizard ex") under Card Name and just the Pokémon under Character.
+  const player = isPokemon ? get("Card Name", "Character") : get("Player/Athlete", "Player", "Athlete", "Card Name");
+  const year = (get("Season", "Year Manufactured", "Year") || title).match(/\b(19|20)\d{2}(?:-\d{2})?\b/);
+  const setRaw = get("Set", "Set Name", "Series");
+  const setName = setRaw.replace(/\b(19|20)\d{2}(?:-\d{2,4})?\b/, "").replace(/\s+/g, " ").trim();
+  const parallelRaw = get("Parallel/Variety", "Parallel", "Variety");
+  const parallel = /^\[?base\]?$/i.test(parallelRaw) ? "" : parallelRaw.replace(/^\[|\]$/g, "");
+  const cardNum = get("Card Number", "Card #").replace(/^#/, "");
+
+  // Grade: condition descriptors first (eBay's graded-card fields), then specifics, then title.
+  const graderText = descriptor("Professional Grader") || get("Professional Grader", "Grader");
+  const gradeText = descriptor("Grade") || get("Grade");
+  const titleGrade = title.match(/\b(PSA|BGS|SGC|CGC|TAG)\s*(10|9\.5|9|8\.5|8|7|6|5|4|3|2|1)\b/i);
+  let grade = "";
+  if (graderText && gradeText) {
+    const company = (EBAY_GRADERS.find(([re]) => re.test(graderText)) || [])[1];
+    const value = (gradeText.match(/\d+(?:\.5)?/) || [])[0];
+    if (company && value) grade = `${company} ${value}`;
+  }
+  if (!grade && titleGrade) grade = `${titleGrade[1].toUpperCase()} ${titleGrade[2]}`;
+  const isGraded = Boolean(grade) || /graded/i.test(listing.condition || "") || /^yes$/i.test(get("Graded"));
+
+  const printRun = (get("Print Run").match(/\d{1,4}/) || [])[0] || (!isPokemon && (title.match(/\/\s*(\d{1,4})\b/) || [])[1]) || "";
+  const rookie = /rookie/i.test(get("Features", "Card Attributes")) || /\b(rc|rookie)\b/i.test(title);
+
+  const isAuction = (listing.buyingOptions || []).includes("AUCTION");
+  const bid = ebayMoneyToAud(isAuction ? listing.currentBidPrice || listing.price : listing.price);
+  const ship = ebayMoneyToAud(listing.shippingCost);
+
+  const patch = {
+    listingUrl: listing.url,
+    listingTitle: title,
+    listingEndDate: listing.endDate || null,
+    listingType: isAuction ? "Auction" : "Buy It Now",
+    sport: sport || undefined,
+    isPokemonInsert: isPokemon || undefined,
+    player: player || undefined,
+    card: [year ? year[0] : "", setName, parallel].filter(Boolean).join(" ") || undefined,
+    cardNum: cardNum || undefined,
+    rookie,
+    numbered: Boolean(printRun),
+    outOf: printRun ? Number(printRun) : "",
+    rawGraded: isGraded ? "Graded" : "Raw",
+    psaLevel: GRADE_OPTIONS.includes(grade) ? grade : "",
+    gradingService: isGraded ? "None" : "PSA via Australia",
+    currentBid: bid.aud != null ? bid.aud : undefined,
+    bidders: listing.bidCount != null ? listing.bidCount : undefined,
+    shipping: ship.aud != null ? ship.aud : undefined,
+    // The specifics make a far better comp search than re-splitting the card text later.
+    compSearch: player
+      ? { player_name: player, year: year ? year[0] : "", set_name: setName, parallel_or_variant: parallel || "Base", card_number: cardNum }
+      : undefined,
+  };
+  for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
+
+  const missing = [!player && "player", !setName && "set", !cardNum && "card #"].filter(Boolean);
+  const notes = [
+    bid.note && `${isAuction ? "bid" : "price"} ${bid.note}`,
+    ship.note && `shipping ${ship.note}`,
+    grade && !GRADE_OPTIONS.includes(grade) && `graded ${grade} (not in the grade list — pick the closest)`,
+  ].filter(Boolean);
+  return { patch, missing, notes, isAuction };
+}
+
+// Paste an eBay listing link and the form fills itself from the listing.
+function EbayLinkImporter({ onImported }) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+
+  async function importLink() {
+    if (!url.trim() || loading) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const listing = await fetchEbayListing(url.trim());
+      const mapped = ebayListingToForm(listing);
+      // Sellers sometimes leave the player blank; let Gemini read it from the title.
+      if (!mapped.patch.player && listing.title) {
+        try {
+          const raw = await callGeminiAi(`${LISTING_EXTRACT_PROMPT}\n\nPasted listing:\n${listing.title}`);
+          const parsed = JSON.parse(String(raw).replace(/```json|```/g, "").trim());
+          if (parsed.player) mapped.patch.player = parsed.player;
+          if (!mapped.patch.card && parsed.card) mapped.patch.card = parsed.card;
+          if (!mapped.patch.cardNum && parsed.cardNum) mapped.patch.cardNum = String(parsed.cardNum).replace(/^#/, "");
+          mapped.missing = mapped.missing.filter((m) => !(m === "player" && parsed.player));
+        } catch (e) {}
+      }
+      onImported(mapped.patch);
+      setResult({ listing, ...mapped });
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ border: "1px solid #2FA89A55", borderRadius: 8, padding: "10px 12px", background: "#14161C" }}>
+      <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 6 }}>🔗 Paste an eBay listing link</div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              importLink();
+            }
+          }}
+          placeholder="https://www.ebay.com.au/itm/…"
+        />
+        <button type="button" className="btnPrimary" onClick={importLink} disabled={!url.trim() || loading} style={{ whiteSpace: "nowrap" }}>
+          {loading ? "Loading…" : "Fill in"}
+        </button>
+      </div>
+      {error && <div style={{ fontSize: 11.5, color: "#B4472E", marginTop: 6 }}>{error}</div>}
+      {result && (
+        <div style={{ fontSize: 11.5, color: "#4E8B6B", marginTop: 6, lineHeight: 1.5 }}>
+          Filled in from "{result.listing.title}" ({result.isAuction ? `auction, ${result.listing.bidCount ?? 0} bids` : "Buy It Now"}).
+          {result.notes.length > 0 && <span style={{ color: "#C9A227" }}> Note: {result.notes.join("; ")}.</span>}
+          {result.missing.length > 0 && <span style={{ color: "#C9A227" }}> The seller didn't list the {result.missing.join(", ")} — check below.</span>}
+          <span style={{ color: "#6B7180" }}> eBay doesn't share watcher counts, so add those yourself if you want them.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// eBay sold + 130 Point searches for a buy target, shown beside "Get comps from CardSight".
+function BuySoldLinks({ t }) {
+  const details = compSearchDefaults(t);
+  if (!details.player_name) return null;
+  const grade = buyGrade(t);
+  const text = tierSearchText(details, grade);
+  const linkStyle = { fontSize: 12, padding: "6px 12px", textDecoration: "none", display: "inline-flex", alignItems: "center" };
+  return (
+    <>
+      <a href={ebaySoldUrl(text)} target="_blank" rel="noreferrer" className="btnSecondary" style={linkStyle} title={`eBay sold: ${text}`}>
+        eBay sold ↗
+      </a>
+      <a href={`https://130point.com/sales/?search=${encodeURIComponent(text.replace(/ -\w+/g, ""))}`} target="_blank" rel="noreferrer" className="btnSecondary" style={linkStyle}>
+        130 Point ↗
+      </a>
+      <a href={cardHedgerUrl(text)} target="_blank" rel="noreferrer" className="btnSecondary" style={linkStyle}>
+        CardHedger ↗
+      </a>
+    </>
+  );
+}
+
 function buyGrade(t) {
   return t.rawGraded === "Graded" && t.psaLevel ? t.psaLevel : null;
 }
@@ -327,6 +530,18 @@ function BuyDetailModal({ t, onUpdate, onRemove, onWin, onClose }) {
             <div style={{ fontSize: 12, color: "#8B90A0" }}>{t.sport && `${SPORT_EMOJI[t.sport] || "🎴"} ${t.sport}`}</div>
             <h2 className="oswald" style={{ margin: "2px 0 0", fontSize: 20 }}>{t.player || "Unnamed"}</h2>
             <div style={{ fontSize: 12, color: "#6B7180" }}>{t.card}{t.cardNum ? ` ${t.cardNum}` : ""}</div>
+            {t.listingUrl && (
+              <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                <a href={t.listingUrl} target="_blank" rel="noreferrer" style={{ color: "#2FA89A" }}>
+                  View listing ↗
+                </a>
+                {t.listingEndDate && (
+                  <span style={{ color: "#6B7180", marginLeft: 8 }}>
+                    {t.listingType || "Listing"} {new Date(t.listingEndDate) > new Date() ? "ends" : "ended"} {new Date(t.listingEndDate).toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <X size={20} style={{ cursor: "pointer", color: "#8B90A0" }} onClick={onClose} />
         </div>
@@ -378,6 +593,7 @@ function BuyDetailModal({ t, onUpdate, onRemove, onWin, onClose }) {
           applyNoun="price"
           defaultOpen={t.marketPrice <= 0}
           updatedAt={t.compsUpdatedAt}
+          headerExtra={<BuySoldLinks t={t} />}
           onApply={({ values, details }) => onUpdate(t.id, buyCompPatch(values, details))}
         />
 
@@ -667,6 +883,7 @@ function BuyModal({ onClose, onSave }) {
       <div className="modalBox" onClick={(e) => e.stopPropagation()}>
         <ModalHeader title="New auction target" onClose={onClose} />
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <EbayLinkImporter onImported={(patch) => setForm((f) => ({ ...f, ...patch }))} />
           <ListingPasteExtractor
             onExtracted={(parsed) =>
               setForm((f) => ({
@@ -738,6 +955,7 @@ function BuyModal({ onClose, onSave }) {
               grade={buyGrade(form)}
               title="🔄 Get comps from CardSight"
               applyNoun="price"
+              headerExtra={<BuySoldLinks t={form} />}
               onApply={({ values, details }) => setForm((f) => ({ ...f, ...buyCompPatch(values, details) }))}
             />
           )}

@@ -337,7 +337,7 @@ function AddCardModal({ onClose, onSave, playerLabel }) {
     player: "",
     card: "",
     cardNum: "",
-    sport: "NFL",
+    sport: /pok[eé]mon/i.test(playerLabel || "") ? "Pokémon" : "NFL",
     location: "In Hand",
     rookie: false,
     numbered: false,
@@ -544,6 +544,9 @@ function SearchCopyBlock({ card }) {
         <a href={ebayUrl} target="_blank" rel="noreferrer" className="btnSecondary" style={{ display: "flex", alignItems: "center", fontSize: 12, padding: "6px 12px", textDecoration: "none" }}>
           Search eBay sold
         </a>
+        <a href={cardHedgerUrl(searchText)} target="_blank" rel="noreferrer" className="btnSecondary" style={{ display: "flex", alignItems: "center", fontSize: 12, padding: "6px 12px", textDecoration: "none" }}>
+          CardHedger
+        </a>
         {copyState === "failed" && (
           <span style={{ fontSize: 11, color: "#B4472E" }}>Couldn't auto-copy — click the text above to select it, then Ctrl/Cmd+C</span>
         )}
@@ -609,6 +612,9 @@ function TierSearchLinks({ details, grade }) {
       <a href={`https://130point.com/sales/?search=${encodeURIComponent(text.replace(/ -\w+/g, ""))}`} target="_blank" rel="noreferrer" style={linkStyle}>
         130 Point ↗
       </a>
+      <a href={cardHedgerUrl(text)} target="_blank" rel="noreferrer" style={linkStyle}>
+        CardHedger ↗
+      </a>
     </div>
   );
 }
@@ -654,7 +660,7 @@ const STALE_COMPS_DAYS = 30;
 // Pokémon, the Buy Evaluator and Grade Check — `onApply({ values, details, trend })` decides
 // where the chosen values go.
 // `card` needs player, card ("Card / set" text), cardNum, sport and optionally compSearch.
-function CompFinder({ card, grade, onApply, title = "🔄 Update comps from CardSight", applyNoun = "value", defaultOpen = false, savedTrend, updatedAt }) {
+function CompFinder({ card, grade, onApply, title = "🔄 Update comps from CardSight", applyNoun = "value", defaultOpen = false, savedTrend, updatedAt, headerExtra }) {
   const [open, setOpen] = useState(defaultOpen);
   const [details, setDetails] = useState(() => compSearchDefaults(card));
   const [loading, setLoading] = useState(false);
@@ -676,21 +682,61 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
     setTrend(null);
     setTrendNote(null);
     setApplied(false);
+    setPasteText("");
+    setPasteInfo(null);
+    setSource(null);
   }, [identity]);
 
   const tiers = compTiersFor(grade);
+  const [source, setSource] = useState(null); // "cardsight" | "pasted"
+  const [cacheInfo, setCacheInfo] = useState(null);
+  const [showPaste, setShowPaste] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteInfo, setPasteInfo] = useState(null);
 
-  async function lookUp() {
+  function showResults(results) {
+    setFound(results);
+    setChoices(Object.fromEntries(results.map((r) => [r.key, { use: r.highConfidence, ticked: r.sales.map(() => true), manual: ["", "", ""] }])));
+  }
+
+  // Sales copied from an eBay sold search (or 130 Point / CardHedger) — read by Gemini, matched
+  // with the same rules as CardSight's sales, no CardSight calls.
+  async function readPasted() {
+    if (!pasteText.trim()) return;
     setLoading(true);
     setError(null);
     setFound(null);
     setTrend(null);
     setTrendNote(null);
     setApplied(false);
+    setCacheInfo(null);
+    setPasteInfo(null);
     try {
-      const results = await findCompsForTiers({ ...details, sport: card.sport }, tiers);
-      setFound(results);
-      setChoices(Object.fromEntries(results.map((r) => [r.key, { use: r.highConfidence, ticked: r.sales.map(() => true), manual: ["", "", ""] }])));
+      const { sales, skipped } = await readSoldListingsFromText(pasteText);
+      if (!sales.length) throw new Error("Couldn't find any sold listings in that text. On the sold results page press Ctrl+A, then Ctrl+C, and paste the lot here.");
+      showResults(compsFromPastedSales({ ...details, sport: card.sport }, tiers, sales));
+      setSource("pasted");
+      setPasteInfo({ count: sales.length, skipped });
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function lookUp(fresh = false) {
+    setLoading(true);
+    setError(null);
+    setFound(null);
+    setTrend(null);
+    setTrendNote(null);
+    setApplied(false);
+    setPasteInfo(null);
+    try {
+      const results = await findCompsForTiers({ ...details, sport: card.sport }, tiers, { fresh });
+      showResults(results);
+      setSource("cardsight");
+      setCacheInfo(results.cache || null);
       // Price trend for the tier this card is actually in.
       const trendTier = results.find((r) => (grade ? r.grade === grade : r.key === "raw")) || results[0];
       const cardId = trendTier.cardId || results.map((r) => r.cardId).find(Boolean);
@@ -744,11 +790,12 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
 
   return (
     <div style={{ border: "1px solid #2C303B", borderRadius: 8, padding: "10px 12px", marginBottom: 16, background: "#14161C" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px", borderColor: "#2FA89A66", color: "#2FA89A" }} onClick={() => setOpen((v) => !v)}>
           {title} {open ? "▲" : "▼"}
         </button>
-        {updatedAt && <span style={{ fontSize: 11, color: "#6B7180" }}>Last updated {updatedAt}</span>}
+        {headerExtra}
+        {updatedAt && <span style={{ fontSize: 11, color: "#6B7180", marginLeft: "auto" }}>Last updated {updatedAt}</span>}
       </div>
 
       {shownTrend && (
@@ -779,7 +826,7 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
                     // Inside the Buy Evaluator's form, Enter would otherwise submit the whole form.
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      if (!loading && details.player_name) lookUp();
+                      if (!loading && details.player_name) lookUp(false);
                     }
                   }}
                   style={{ padding: "5px 8px", fontSize: 12.5 }}
@@ -790,10 +837,50 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
           <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 8, lineHeight: 1.5 }}>
             Searches the last {COMPS_PER_TIER} sales for {grade ? grade : "Raw, PSA 9 and PSA 10"}. High-confidence results are ticked for you (that needs the card #, so add it from the back of the card). Low-confidence ones can be ticked after checking the listings, or you can type in prices yourself.
           </div>
-          <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={lookUp} disabled={loading || !details.player_name}>
-            {loading ? "Searching sold listings…" : "Find recent comps"}
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={() => lookUp(false)} disabled={loading || !details.player_name}>
+              {loading ? "Searching sold listings…" : "Find recent comps"}
+            </button>
+            <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setShowPaste((v) => !v)}>
+              📋 Paste sold listings instead {showPaste ? "▲" : "▼"}
+            </button>
+          </div>
+          {showPaste && (
+            <div style={{ marginTop: 8, border: "1px solid #2C303B", borderRadius: 6, padding: "8px 10px" }}>
+              <div style={{ fontSize: 11, color: "#8B90A0", marginBottom: 6, lineHeight: 1.5 }}>
+                No CardSight calls. Open the{" "}
+                <a href={ebaySoldUrl(tierSearchText(details, grade))} target="_blank" rel="noreferrer" style={{ color: "#2FA89A" }}>
+                  eBay sold search ↗
+                </a>{" "}
+                (or 130 Point / CardHedger), press <b>Ctrl+A</b> then <b>Ctrl+C</b>, and paste the whole page here. Gemini reads the sales and the same matching rules pick out this exact card.
+              </div>
+              <textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                rows={4}
+                placeholder="Paste the copied sold-results page…"
+                style={{ background: "#0F1015", border: "1px solid #333844", color: "#EDEAE1", borderRadius: 6, padding: "8px 10px", fontSize: 12.5, fontFamily: "'Inter', sans-serif", width: "100%", resize: "vertical", marginBottom: 6 }}
+              />
+              <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "6px 12px" }} onClick={readPasted} disabled={loading || !pasteText.trim()}>
+                {loading ? "Reading sales…" : "Read sales"}
+              </button>
+            </div>
+          )}
+          {/pok[eé]mon/i.test(card.sport || "") && <PokemonPricesPanel details={details} onApply={onApply} />}
           {error && <div style={{ fontSize: 12, color: "#B4472E", marginTop: 8 }}>{error}</div>}
+          {found && source === "pasted" && pasteInfo && (
+            <div style={{ fontSize: 11, color: "#8B90A0", marginTop: 8 }}>
+              Read {pasteInfo.count} sold listing{pasteInfo.count === 1 ? "" : "s"} from your paste (prices in A$ converted at the live rate for matching){pasteInfo.skipped ? ` · ${pasteInfo.skipped} skipped (other currency)` : ""}.
+            </div>
+          )}
+          {found && source === "cardsight" && cacheInfo && cacheInfo.cached > 0 && (
+            <div style={{ fontSize: 11, color: "#8B90A0", marginTop: 8 }}>
+              ♻️ Reused {cacheInfo.cached} saved search{cacheInfo.cached === 1 ? "" : "es"} from the last {Math.max(1, cacheInfo.oldestCachedDays)} day{Math.max(1, cacheInfo.oldestCachedDays) === 1 ? "" : "s"} (saved {cacheInfo.cached} CardSight call{cacheInfo.cached === 1 ? "" : "s"}).{" "}
+              <button type="button" onClick={() => lookUp(true)} disabled={loading} style={{ background: "transparent", border: "none", color: "#2FA89A", fontSize: 11, cursor: "pointer", padding: 0 }}>
+                Search fresh instead
+              </button>
+            </div>
+          )}
 
           {found && (
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -887,6 +974,105 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
   );
 }
 
+// PokemonPriceTracker prices for a Pokémon card inside CompFinder: TCGplayer market (raw),
+// eBay PSA 9 / PSA 10 averages, and the PSA gem rate. Tick what to use and apply.
+function PokemonPricesPanel({ details, onApply }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+  const [use, setUse] = useState({});
+  const [applied, setApplied] = useState(false);
+
+  async function load(pptId) {
+    setLoading(true);
+    setError(null);
+    setApplied(false);
+    try {
+      const r = await fetchPokemonPrices({ ...details, pptId: pptId || details.pptId });
+      setResult(r);
+      if (r.matched) setUse({ raw: r.rawAud != null, psa9: Boolean(r.psa9), psa10: Boolean(r.psa10), gem: Boolean(r.gem) });
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function apply() {
+    const values = {};
+    if (use.raw && result.rawAud != null) values.raw = result.rawAud;
+    if (use.psa9 && result.psa9) values.psa9 = result.psa9.aud;
+    if (use.psa10 && result.psa10) values.psa10 = result.psa10.aud;
+    const extra = use.gem && result.gem ? { setGemRate: Math.round(result.gem.rate * 10) / 10 } : {};
+    onApply({ values, details: { ...details, pptId: result.id }, trend: null, extra });
+    setApplied(true);
+  }
+
+  const rows = result && result.matched
+    ? [
+        ["raw", "Raw (TCGplayer market)", result.rawAud != null ? fmtMoney(result.rawAud) : null],
+        ["psa9", "PSA 9 (eBay avg)", result.psa9 ? `${fmtMoney(result.psa9.aud)}${result.psa9.count ? ` · ${result.psa9.count} sales` : ""}` : null],
+        ["psa10", "PSA 10 (eBay avg)", result.psa10 ? `${fmtMoney(result.psa10.aud)}${result.psa10.count ? ` · ${result.psa10.count} sales` : ""}` : null],
+        ["gem", "PSA gem rate → set gem rate %", result.gem ? `${result.gem.rate.toFixed(1)}%${result.gem.graded ? ` of ${result.gem.graded.toLocaleString()} graded` : ""}` : null],
+      ]
+    : [];
+  const anyTicked = rows.some(([k, , v]) => v && use[k]);
+
+  return (
+    <div style={{ marginTop: 10, border: "1px solid #8B6FD655", borderRadius: 6, padding: "8px 10px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px", borderColor: "#8B6FD666", color: "#8B6FD6" }} onClick={() => load()} disabled={loading || !details.player_name}>
+          {loading ? "Loading Pokémon prices…" : "🧬 Get Pokémon prices (PokemonPriceTracker)"}
+        </button>
+        <span style={{ fontSize: 11, color: "#6B7180" }}>
+          No CardSight calls{result && result.creditsLeft != null ? ` · ${result.creditsLeft} PokemonPriceTracker credits left today` : " · uses ~2–12 of 100 free daily credits"}
+        </span>
+      </div>
+      {error && <div style={{ fontSize: 12, color: "#B4472E", marginTop: 6 }}>{error}</div>}
+      {result && !result.matched && (
+        <div style={{ fontSize: 11.5, color: "#C9A227", marginTop: 6, lineHeight: 1.6 }}>
+          {result.reason}
+          {result.candidates.length > 0 && (
+            <div style={{ color: "#8B90A0" }}>
+              Pick the right one:
+              {result.candidates.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => load(c.id)}
+                  style={{ background: "transparent", border: "1px solid #333844", borderRadius: 999, color: "#EDEAE1", fontSize: 11, padding: "2px 8px", margin: "3px 4px 0 0", cursor: "pointer" }}
+                >
+                  {c.name} #{c.number} · {c.set}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {result && result.matched && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 11.5, color: "#A7ADBB", marginBottom: 4 }}>
+            Matched: <b>{result.name}</b> #{result.number} · {result.set}
+          </div>
+          {rows.map(([key, label, value]) => (
+            <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, margin: "2px 0", fontSize: 12, color: value ? "#EDEAE1" : "#5C6270", cursor: value ? "pointer" : "default" }}>
+              <input type="checkbox" disabled={!value} checked={Boolean(value && use[key])} onChange={(e) => setUse((u) => ({ ...u, [key]: e.target.checked }))} style={{ width: "auto", margin: 0 }} />
+              <span style={{ minWidth: 190 }}>{label}</span>
+              <span style={{ fontWeight: 600, color: value ? "#C9A227" : "#5C6270" }}>{value || "no data"}</span>
+            </label>
+          ))}
+          <div style={{ fontSize: 10.5, color: "#6B7180", margin: "4px 0 6px" }}>
+            Averages over recent sales, converted from US$ at the live rate. Raw is TCGplayer's market price for a near-mint copy.
+          </div>
+          <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "6px 12px" }} onClick={apply} disabled={!anyTicked || applied}>
+            {applied ? "Applied ✓" : "Apply ticked prices"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // " · up 12% over 12 weeks" from a trend's first and last points.
 function trendChangeText(points) {
   const change = trendChangePct(points);
@@ -912,7 +1098,7 @@ function CompUpdater({ card, onUpdate }) {
       grade={card.grade || null}
       savedTrend={card.priceTrend}
       updatedAt={card.compsUpdatedAt}
-      onApply={({ values, details, trend }) => onUpdate(cardWithCompValues(card, values, details, trend))}
+      onApply={({ values, details, trend, extra }) => onUpdate({ ...cardWithCompValues(card, values, details, trend), ...(extra || {}) })}
     />
   );
 }
@@ -920,7 +1106,7 @@ function CompUpdater({ card, onUpdate }) {
 // One click to refresh comps on every card you hold. Only high-confidence results are written
 // (anything else is listed for you to check by hand), cards run one at a time to stay under
 // CardSight's rate limit, and by default cards checked in the last 30 days are skipped to save quota.
-function BulkCompRefresh({ cards, setCards }) {
+function BulkCompRefresh({ cards, setCards, isPokemon = false }) {
   const [onlyStale, setOnlyStale] = useState(true);
   const [progress, setProgress] = useState(null); // { done, total, current }
   const [summary, setSummary] = useState(null);
@@ -949,7 +1135,7 @@ function BulkCompRefresh({ cards, setCards }) {
       setProgress({ done: i, total: queue.length, current: card.player });
       const today = new Date().toISOString().slice(0, 10);
       try {
-        const found = await findCompsForTiers({ ...compSearchDefaults(card), sport: card.sport }, compTiersFor(card.grade || null));
+        const found = await findCompsForTiers({ ...compSearchDefaults(card), sport: isPokemon ? "Pokémon" : card.sport }, compTiersFor(card.grade || null));
         const values = {};
         for (const r of found) if (r.highConfidence && TIER_FIELDS[r.key]) values[r.key] = r.priceAud;
         if (Object.keys(values).length) {
@@ -1190,7 +1376,9 @@ function save() {
         )}
 
         <SearchCopyBlock card={card} />
-        <CompUpdater card={card} onUpdate={onUpdate} />
+        {/* Cards added on the Pokémon tab can still carry the form's default sport, which would
+            switch off the Pokémon price lookup and matching rules. */}
+        <CompUpdater card={isPkmn && !/pok[eé]mon/i.test(card.sport || "") ? { ...card, sport: "Pokémon" } : card} onUpdate={onUpdate} />
 
         {!edit ? (
           <>

@@ -802,6 +802,11 @@ function LotScannerCard({ card, added, isVerifying, onVerify, onAddBuy, onAddTar
             Search 130 Point
           </a>
         )}
+        {plainSearch && (
+          <a href={cardHedgerUrl(plainSearch)} target="_blank" rel="noreferrer" className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px", textDecoration: "none" }}>
+            CardHedger
+          </a>
+        )}
         <button className="btnSecondary" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={onAddBuy} disabled={added === "buy"}>
           {added === "buy" ? "Added ✓" : "+ Buy Evaluator"}
         </button>

@@ -104,7 +104,8 @@ async function checkTargetPrice(t) {
   let used = null;
   let matches = [];
   for (const q of targetSearchQueries(t)) {
-    const data = await callCardSightProxy({ endpoint: "/pricing/search", method: "GET", query: { q, listing_type: "auction", limit: 100 } });
+    // Reuses the same search from earlier today (e.g. a target also checked from another tab).
+    const data = await cardSightGetCached("/pricing/search", { q, listing_type: "auction", limit: 100 }, 1);
     matches = onePerSellerPerDay(
       (data.results || [])
         .filter((r) => Number(r.price) > 0 && r.date && new Date(r.date).getTime() >= cutoff)
@@ -642,6 +643,16 @@ function TargetRow({ t, onClick }) {
           style={{ display: "flex", alignItems: "center", fontSize: 11.5, padding: "5px 10px", textDecoration: "none" }}
         >
           Search eBay
+        </a>
+        <a
+          href={cardHedgerUrl(searchText)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="btnSecondary"
+          style={{ display: "flex", alignItems: "center", fontSize: 11.5, padding: "5px 10px", textDecoration: "none" }}
+        >
+          CardHedger
         </a>
         {copyState === "failed" && <span style={{ fontSize: 11, color: "#B4472E" }}>Couldn't auto-copy — try again</span>}
       </div>

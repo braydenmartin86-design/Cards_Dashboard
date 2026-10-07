@@ -521,7 +521,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
       enriched={isPokemon ? enrichedPokemonCards : enriched}
     />
 
-    <BulkCompRefresh key={isPokemon ? "pokemon" : "cards"} cards={activeCards} setCards={setActiveCards} />
+    <BulkCompRefresh key={isPokemon ? "pokemon" : "cards"} cards={activeCards} setCards={setActiveCards} isPokemon={isPokemon} />
 
     {/* 3. Card Table receives the specific category list with full EV & Grade Call logic */}
     <CardTable
