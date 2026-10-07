@@ -678,7 +678,13 @@ function cardWithCompValues(card, values, details, trend) {
     const f = TIER_FIELDS[key];
     if (!f || value == null) continue;
     patch[f.avg] = value;
-    patch[f.history] = appendHistoryIfChanged(card[f.history], card[f.avg], value, today);
+    // A value set before history was kept (e.g. typed in when the card was added) becomes the
+    // first point, so the first comps update can show how far the price moved.
+    let history = card[f.history] || [];
+    if (!history.length && card[f.avg] != null && card[f.avg] !== value) {
+      history = [{ date: card.compsUpdatedAt || card.datePurchased || today, value: card[f.avg] }];
+    }
+    patch[f.history] = appendHistoryIfChanged(history, card[f.avg], value, today);
   }
   if (trend && trend.points && trend.points.length >= 2) patch.priceTrend = { ...trend, fetchedAt: today };
   return { ...card, ...patch, id: card.id };

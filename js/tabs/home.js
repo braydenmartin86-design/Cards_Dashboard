@@ -76,6 +76,8 @@ function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, co
 
       <TargetAlertsBanner targets={targets} setTab={setTab} />
 
+      <PriceMoves cards={cards} pokemonCards={pokemonCards} setTab={setTab} />
+
       <AgingStock cards={cards} pokemonCards={pokemonCards} setTab={setTab} />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
@@ -261,6 +263,100 @@ function AgingStock({ cards, pokemonCards, setTab }) {
               );
             })}
           </>
+        )}
+      </DashCard>
+    </div>
+  );
+}
+
+// ===== Price moves =====
+// Cards whose value moved 10%+ between their last two comps updates, with where that leaves you
+// against break-even and the 12-week trend when one was saved. A "have a look" list, not a sell
+// signal — a dip can recover, a lasting slide usually doesn't.
+
+const PRICE_MOVE_PCT = 0.1;
+const PRICE_MOVE_MAX_AGE_DAYS = 60;
+
+// The value history for the version of the card you hold.
+function heldTier(c) {
+  const g = String(c.grade || "").toLowerCase();
+  if (c.status === "Graded" || c.grade) {
+    if (PSA10_GRADES.includes(g)) return { label: c.grade, history: c.psa10History, breakEven: c.psa10BE };
+    if (PSA9_GRADES.includes(g)) return { label: c.grade, history: c.psa9History, breakEven: c.psa9BE };
+    return null;
+  }
+  return { label: "Raw", history: c.rawHistory, breakEven: c.rawBE };
+}
+
+function priceMoveFor(c) {
+  const tier = heldTier(c);
+  const points = ((tier && tier.history) || []).filter((p) => p && Number(p.value) > 0);
+  if (points.length < 2) return null;
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const age = (Date.now() - new Date(last.date).getTime()) / 86400000;
+  if (!(age <= PRICE_MOVE_MAX_AGE_DAYS)) return null;
+  const change = (last.value - prev.value) / prev.value;
+  if (Math.abs(change) < PRICE_MOVE_PCT) return null;
+  const fees = c.feesPct || 0.13;
+  const profit = last.value * (1 - fees) - c.totalCost;
+  const trend = c.priceTrend && c.priceTrend.points ? trendChangePct(c.priceTrend.points) : null;
+  return { card: c, tier, last, prev, change, profit, trend };
+}
+
+function priceMoveAdvice(m) {
+  const { change, profit, trend } = m;
+  const trendSays = trend == null ? null : trend <= -0.05 ? "down" : trend >= 0.05 ? "up" : "flat";
+  if (change > 0) {
+    if (profit > 0) return { color: "#4E8B6B", text: `Now ${fmtMoney(profit)} profit if sold${trendSays === "up" ? " and still climbing" : ""} — a good time to list.` };
+    return { color: "#8B90A0", text: `Recovering — still ${fmtMoney(-profit)} below break-even (${fmtMoney(m.tier.breakEven)}).` };
+  }
+  const where = profit >= 0 ? `still ${fmtMoney(profit)} above break-even` : `now ${fmtMoney(-profit)} below break-even (${fmtMoney(m.tier.breakEven)})`;
+  if (trendSays === "down") return { color: "#B4472E", text: `${where[0].toUpperCase()}${where.slice(1)}. The 12-week trend is down too — looks like a lasting slide, not a one-off dip.` };
+  if (trendSays === "up" || trendSays === "flat") return { color: "#C9A227", text: `${where[0].toUpperCase()}${where.slice(1)}. The 12-week trend is ${trendSays}, so this may just be a dip.` };
+  return { color: "#C9A227", text: `${where[0].toUpperCase()}${where.slice(1)}. Check recent sales to see if it's a dip or a slide.` };
+}
+
+function PriceMoves({ cards, pokemonCards, setTab }) {
+  const moves = useMemo(
+    () =>
+      [...cards.map((c) => ({ ...computeCard(c), _tab: "portfolio" })), ...pokemonCards.map((c) => ({ ...computePokemonCard(c), _tab: "pokemon" }))]
+        .filter((c) => c.status === "Raw" || c.status === "Graded")
+        .map(priceMoveFor)
+        .filter(Boolean)
+        .sort((a, b) => Math.abs(b.change) - Math.abs(a.change)),
+    [cards, pokemonCards]
+  );
+  const ups = moves.filter((m) => m.change > 0).length;
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <DashCard title="📊 Price moves" onViewAll={() => setTab("portfolio")} count={moves.length}>
+        <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 2 }}>
+          Cards whose value moved {Math.round(PRICE_MOVE_PCT * 100)}%+ between their last two comps updates (last {PRICE_MOVE_MAX_AGE_DAYS} days).
+          {moves.length > 0 && ` ${ups} up · ${moves.length - ups} down.`} Something to review, not an automatic sell.
+        </div>
+        {moves.length === 0 ? (
+          <EmptyRow text="No big moves. Keep comps fresh with Update all comps (the coloured day tags show which cards are behind)." />
+        ) : (
+          moves.slice(0, 8).map((m) => {
+            const advice = priceMoveAdvice(m);
+            const up = m.change > 0;
+            return (
+              <DashRow key={`${m.card._tab}-${m.card.id}`} onClick={() => setTab(m.card._tab)}>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ fontWeight: 600 }}>{m.card.player}</span>
+                  <span style={{ color: "#6B7180", marginLeft: 6 }}>
+                    {m.tier.label} · {fmtMoney(m.prev.value)} → {fmtMoney(m.last.value)}
+                  </span>
+                  <span className="mono" style={{ marginLeft: 6, fontWeight: 700, color: up ? "#4E8B6B" : "#B4472E" }}>
+                    {up ? "▲" : "▼"} {Math.round(Math.abs(m.change) * 100)}%
+                  </span>
+                  <div style={{ fontSize: 11, color: advice.color }}>{advice.text}</div>
+                </span>
+              </DashRow>
+            );
+          })
         )}
       </DashCard>
     </div>
