@@ -452,6 +452,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
       <div style={styles.app}>
         <GlobalStyle />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", flexDirection: "column", gap: 12 }}>
+          <img src="./logo-192.png" alt="" width="72" height="72" style={{ borderRadius: 16 }} />
           <div className="oswald" style={{ fontSize: 22, fontWeight: 600, color: "#C9A227" }}>CardFlip EV</div>
           <div style={{ fontSize: 13, color: "#6B7180" }}>
             {hasArtifactStorage ? "Loading your synced data…" : "Loading…"}
@@ -639,13 +640,16 @@ function Header({ tab, setTab, onAdd, onExport, onImport, backupStatus }) {
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
-        <div>
-          <div className="mono" style={{ color: "#C9A227", fontSize: 12, letterSpacing: "0.12em", marginBottom: 6 }}>
-            EV MODEL / GRADE &amp; FLIP
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <img src="./logo-192.png" alt="" width="60" height="60" style={{ borderRadius: 14, flexShrink: 0 }} />
+          <div>
+            <div className="mono" style={{ color: "#C9A227", fontSize: 12, letterSpacing: "0.12em", marginBottom: 6 }}>
+              EV MODEL / GRADE &amp; FLIP
+            </div>
+            <h1 className="oswald" style={{ fontSize: 32, fontWeight: 700, margin: 0 }}>
+              CardFlip EV
+            </h1>
           </div>
-          <h1 className="oswald" style={{ fontSize: 32, fontWeight: 700, margin: 0 }}>
-            CardFlip EV
-          </h1>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           {backupStatus && (
