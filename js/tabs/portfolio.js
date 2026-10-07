@@ -1199,6 +1199,7 @@ function CompUpdater({ card, onUpdate }) {
 // description, and the price to list at — for any card you're about to sell.
 
 const EBAY_TITLE_MAX = 80;
+const LISTING_TITLE_STYLE_KEY = "cardflip_ev_listing_title_style";
 
 // The card's details as listing parts. Uses the saved comp search (most exact) or splits the
 // card text the same way Update Comps does.
@@ -1212,10 +1213,27 @@ function listingParts(card) {
   return { d, isPokemon, parallel, number, printRun, grade, setName: String(d.set_name || "").trim(), year: String(d.year || "").trim() };
 }
 
+// The emoji a "pop" title starts with: 🔥 rookies, 💎 gem mint / numbered, ⭐ everything else.
+function titleEmoji(card) {
+  const g = String(card.grade || "").toLowerCase();
+  if (card.rookie) return "🔥";
+  if (PSA10_GRADES.includes(g) || (card.numbered && card.outOf)) return "💎";
+  return "⭐";
+}
+
 // The grade, card # and print run always make it in — buyers search on those. If the title is
 // too long, sport words are dropped from the set name first, then the parallel name is shortened.
 // Extras (RC, sport, Raw) are added only while they fit in eBay's 80 characters.
-function buildEbayTitle(card) {
+// style "pop" (your usual style): leading emoji and the player's name in capitals.
+function buildEbayTitle(card, style = "pop") {
+  if (style === "pop") {
+    const emoji = titleEmoji(card);
+    const inner = buildEbayTitle({ ...card, player: String(card.player || "").toUpperCase() }, "plain");
+    // The emoji counts towards eBay's 80 characters, so make room for it.
+    const room = EBAY_TITLE_MAX - emoji.length - 1;
+    const fitted = inner.length > room ? inner.slice(0, room).replace(/\s+\S*$/, "") : inner;
+    return `${emoji} ${fitted}`;
+  }
   const p = listingParts(card);
   const join = (parts) => parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   const number = p.number ? (p.isPokemon ? p.number : `#${p.number}`) : "";
@@ -1262,12 +1280,42 @@ function listingPrices(card, computed) {
   return { listPrice: value * (graded ? 1.03 : 1.08), floor, label: graded ? card.grade : "Raw" };
 }
 
-const LISTING_DESCRIPTION_PROMPT = `Write a short, honest eBay listing description for this trading card. Plain text only, no markdown, no emojis, under 90 words. Structure:
-1. One line saying exactly what the card is.
-2. Condition: for a graded card, say it's in the grading company's slab and the grade; for a raw card, describe condition honestly from the notes given (or say "see photos for condition" if there are none). Never claim a card is mint or gradeable.
-3. Shipping: "Ships securely in a penny sleeve and toploader, in a team bag, with tracking." (graded cards: "Ships in a protective sleeve with bubble wrap, with tracking.")
-4. One line: "Please check all photos — the card pictured is the card you'll receive."
+// The top of the description, in the seller's own style (see their Bulls lot listing). The
+// shipping and closing sections are added by the app word for word, so they never vary.
+const LISTING_DESCRIPTION_PROMPT = `Write the top part of an eBay listing description for ONE trading card, in exactly this style (plain text, no markdown, emojis as shown):
+
+🔥 [SHORT HEADLINE IN CAPITALS, e.g. "BROCK PURDY 2022 PRIZM ROOKIE CARD #353 PSA 10"] 🔥
+
+Up for sale is [one or two enthusiastic but honest sentences about the card — player, set, why collectors want it (rookie, parallel, numbered, graded)].
+
+📦 CARD DETAILS:
+• Player: ...
+• Set: ...
+• Card #: ...
+• Parallel / Variation: ... (say "Base" if none)
+• Rookie Card (RC) — only if it is one
+• Serial numbered /N — only if it is
+• Grade: [grader + grade] — or "Condition: Raw — see photos for condition" for raw cards
+
+Rules: never claim a raw card is mint, gem or gradeable; if condition notes are given, add one bullet "• Condition notes: ..." summarising them honestly. Do NOT write any shipping, payment or closing text — that is added separately. Output only the text.
 Card details:`;
+
+const LISTING_SHIPPING_TEXT = {
+  raw: `📬 SHIPPING & HANDLING:
+• The card is carefully sleeved and toploadered, then securely packed between sturdy cardboard inside a padded bubble mailer to prevent any damage during transit.
+• Dispatch Time: Orders are processed and handed off for shipping within 3 business days of cleared payment.
+• Tracked shipping via standard courier/postal service. Tracking number provided upon dispatch!`,
+  graded: `📬 SHIPPING & HANDLING:
+• The slab is sleeved and bubble-wrapped, then securely packed between sturdy cardboard inside a padded bubble mailer to prevent any damage during transit.
+• Dispatch Time: Orders are processed and handed off for shipping within 3 business days of cleared payment.
+• Tracked shipping via standard courier/postal service. Tracking number provided upon dispatch!`,
+};
+
+function listingClosingText(card) {
+  const isPokemon = /pok[eé]mon/i.test(card.sport || "");
+  const kind = isPokemon ? "Pokémon singles and graded cards" : `${card.sport && card.sport !== "Other" ? `${card.sport} ` : ""}singles, team lots, and rookie cards`;
+  return `Check out my other listings for more ${kind}. Feel free to send a reasonable offer!`;
+}
 
 function ListingHelper({ card, computed, onUpdate }) {
   const [open, setOpen] = useState(false);
@@ -1275,12 +1323,27 @@ function ListingHelper({ card, computed, onUpdate }) {
   const [writing, setWriting] = useState(false);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(null);
-  const [title, setTitle] = useState(() => buildEbayTitle(card));
+  const [titleStyle, setTitleStyle] = useState(() => {
+    try {
+      return localStorage.getItem(LISTING_TITLE_STYLE_KEY) || "pop";
+    } catch (e) {
+      return "pop";
+    }
+  });
+  const [title, setTitle] = useState(() => buildEbayTitle(card, titleStyle));
   const prices = listingPrices(card, computed);
   const [price, setPrice] = useState(prices ? prices.listPrice.toFixed(2) : "");
 
+  function changeTitleStyle(style) {
+    setTitleStyle(style);
+    setTitle(buildEbayTitle(card, style));
+    try {
+      localStorage.setItem(LISTING_TITLE_STYLE_KEY, style);
+    } catch (e) {}
+  }
+
   useEffect(() => {
-    setTitle(buildEbayTitle(card));
+    setTitle(buildEbayTitle(card, titleStyle));
     setDescription("");
     setPrice(prices ? prices.listPrice.toFixed(2) : "");
   }, [card.id]);
@@ -1301,7 +1364,9 @@ function ListingHelper({ card, computed, onUpdate }) {
       const condition = a ? `Condition notes from a photo check: centering ${a.centering}; corners ${a.corners}; edges ${a.edges}; surface ${a.surface}.` : "No condition notes.";
       const details = [`Title: ${title}`, ...specifics.map(([k, v]) => `${k}: ${v}`), condition].join("\n");
       const text = await callGeminiAi(`${LISTING_DESCRIPTION_PROMPT}\n${details}`);
-      setDescription(String(text).replace(/```/g, "").trim());
+      const top = String(text).replace(/```/g, "").trim();
+      const graded = card.status === "Graded" || Boolean(card.grade);
+      setDescription([top, LISTING_SHIPPING_TEXT[graded ? "graded" : "raw"], listingClosingText(card)].join("\n\n"));
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -1329,7 +1394,20 @@ function ListingHelper({ card, computed, onUpdate }) {
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
               <label style={{ margin: 0 }}>Title ({title.length}/{EBAY_TITLE_MAX})</label>
-              {copyBtn("title", title)}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {[["pop", "🔥 Pop"], ["plain", "Plain"]].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`filterBtn ${titleStyle === key ? "active" : ""}`}
+                    style={{ fontSize: 11, padding: "3px 9px" }}
+                    onClick={() => changeTitleStyle(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {copyBtn("title", title)}
+              </div>
             </div>
             <input value={title} maxLength={EBAY_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} style={{ fontSize: 13 }} />
           </div>
