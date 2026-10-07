@@ -270,6 +270,9 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
         if (c.id !== id) return c;
         const next = { ...c, ...updates };
         if (updates.status === "Sold" && c.status !== "Sold") next.dateSold = new Date().toISOString().slice(0, 10);
+        // Listing through the status menu (rather than the listing helper) still starts the
+        // day count the Listing check-up on Home works from.
+        if (updates.status === "Listed" && c.status !== "Listed" && (!updates.dateListed || updates.dateListed === c.dateListed)) Object.assign(next, { dateListed: new Date().toISOString().slice(0, 10), listingActions: [], lastListingActionAt: null });
         // Sending a card to grading locks in the cost at that moment (declared value based on
         // current comps) and adds it to the card's total cost — recalculating later if market
         // prices move would be misleading, since you already paid a fixed fee.
@@ -341,6 +344,13 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     if (pkmn.length) setPokemonCards((prev) => [...pkmn, ...prev]);
   }
 
+  // Updates a card wherever it lives (My Cards or Pokémon) — used from Home, which shows both.
+  function updateAnyCard(id, updates) {
+    const apply = (prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c));
+    setCards(apply);
+    setPokemonCards(apply);
+  }
+
   // My Sales combines Sold + Listed items from both collections, tagged with their source
   // so edits/deletes route back to the right underlying array.
   function updateCardIn(source, id, updates) {
@@ -350,6 +360,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
         if (c.id !== id) return c;
         const next = { ...c, ...updates };
         if (updates.status === "Sold" && c.status !== "Sold") next.dateSold = new Date().toISOString().slice(0, 10);
+        if (updates.status === "Listed" && c.status !== "Listed" && (!updates.dateListed || updates.dateListed === c.dateListed)) Object.assign(next, { dateListed: new Date().toISOString().slice(0, 10), listingActions: [], lastListingActionAt: null });
         return next;
       })
     );
@@ -504,6 +515,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
             contentPlan={contentPlan}
             contentGoal={contentGoal}
             setTab={setTab}
+            onUpdateCard={updateAnyCard}
           />
         )}
 

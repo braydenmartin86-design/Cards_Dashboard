@@ -1381,7 +1381,8 @@ function ListingHelper({ card, computed, onUpdate }) {
   }
 
   function markListed() {
-    onUpdate({ ...card, status: "Listed", listedPrice: Number(price) || null, listingTitle: title, dateListed: new Date().toISOString().slice(0, 10) });
+    // A new listing starts its own price-cut history for the Listing check-up on Home.
+    onUpdate({ ...card, status: "Listed", listedPrice: Number(price) || null, listingTitle: title, dateListed: new Date().toISOString().slice(0, 10), listingActions: [], lastListingActionAt: null });
   }
 
   const copyBtn = (key, text) => (
