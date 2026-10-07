@@ -333,6 +333,14 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     }
   }
 
+  // Cards bought from a lot or a quick scan: Pokémon go to the Pokémon tab, the rest to My Cards.
+  function addCardsToCollection(newCards) {
+    const pkmn = newCards.filter((c) => c.sport === "Pokémon");
+    const sports = newCards.filter((c) => c.sport !== "Pokémon");
+    if (sports.length) setCards((prev) => [...sports, ...prev]);
+    if (pkmn.length) setPokemonCards((prev) => [...pkmn, ...prev]);
+  }
+
   // My Sales combines Sold + Listed items from both collections, tagged with their source
   // so edits/deletes route back to the right underlying array.
   function updateCardIn(source, id, updates) {
@@ -456,7 +464,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   return (
     <div style={styles.app}>
       <GlobalStyle />
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
+      <div className="appPage" style={{ maxWidth: 1180, margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
         <Header tab={tab} setTab={setTab} onAdd={() => setShowAdd(true)} onExport={exportAllData} onImport={importAllData} backupStatus={backupStatus} />
         <CardSightQuotaBanner />
 
@@ -557,14 +565,11 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
             setBuyList={setBuyList}
             savedScans={savedScans}
             setSavedScans={setSavedScans}
-            onAddToCollection={(newCards) => {
-              const pkmn = newCards.filter((c) => c.sport === "Pokémon");
-              const sports = newCards.filter((c) => c.sport !== "Pokémon");
-              if (sports.length) setCards((prev) => [...sports, ...prev]);
-              if (pkmn.length) setPokemonCards((prev) => [...pkmn, ...prev]);
-            }}
+            onAddToCollection={addCardsToCollection}
           />
         </div>
+
+        {tab === "quickscan" && <QuickScan setBuyList={setBuyList} onAddToCollection={addCardsToCollection} />}
 
         {tab === "targets" && <MonthlyTargets targets={targets} setTargets={setTargets} />}
 
@@ -672,7 +677,7 @@ function Header({ tab, setTab, onAdd, onExport, onImport, backupStatus }) {
           )}
         </div>
       </div>
-      <div style={{ display: "flex", gap: 8, marginTop: 22, borderBottom: "1px solid #2C303B", flexWrap: "wrap" }}>
+      <div className="tabBar" style={{ display: "flex", gap: 8, marginTop: 22, borderBottom: "1px solid #2C303B", flexWrap: "wrap" }}>
         <TabButton active={tab === "home"} onClick={() => setTab("home")} icon={<span style={{ fontSize: 13 }}>🏠</span>}>
           Home
         </TabButton>
@@ -696,6 +701,9 @@ function Header({ tab, setTab, onAdd, onExport, onImport, backupStatus }) {
         </TabButton>
         <TabButton active={tab === "lotscanner"} onClick={() => setTab("lotscanner")} icon={<span style={{ fontSize: 13 }}>🗃️</span>}>
           Lot Scanner
+        </TabButton>
+        <TabButton active={tab === "quickscan"} onClick={() => setTab("quickscan")} icon={<span style={{ fontSize: 13 }}>📷</span>}>
+          Quick Scan
         </TabButton>
         <TabButton active={tab === "targets"} onClick={() => setTab("targets")} icon={<span style={{ fontSize: 13 }}>🎯</span>}>
           Monthly Targets
@@ -721,8 +729,16 @@ function Header({ tab, setTab, onAdd, onExport, onImport, backupStatus }) {
 }
 
 function TabButton({ active, onClick, children, icon }) {
+  // On phones the tab row scrolls sideways; keep the selected tab in view.
+  const ref = useRef(null);
+  useEffect(() => {
+    if (active && ref.current && ref.current.parentElement.scrollWidth > ref.current.parentElement.clientWidth) {
+      ref.current.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
+  }, [active]);
   return (
     <button
+      ref={ref}
       onClick={onClick}
       style={{
         background: "transparent",

@@ -229,7 +229,7 @@ function EbayLinkImporter({ onImported }) {
   );
 }
 
-// eBay sold + 130 Point searches for a buy target, shown beside "Get comps from CardSight".
+// eBay sold + 130 Point searches for a buy target, shown beside "Update Comps".
 function BuySoldLinks({ t }) {
   const details = compSearchDefaults(t);
   if (!details.player_name) return null;
@@ -589,7 +589,7 @@ function BuyDetailModal({ t, onUpdate, onRemove, onWin, onClose }) {
         <CompFinder
           card={t}
           grade={buyGrade(t)}
-          title="🔄 Get comps from CardSight"
+          title="🔄 Update Comps"
           applyNoun="price"
           defaultOpen={t.marketPrice <= 0}
           updatedAt={t.compsUpdatedAt}
@@ -953,7 +953,7 @@ function BuyModal({ onClose, onSave }) {
             <CompFinder
               card={form}
               grade={buyGrade(form)}
-              title="🔄 Get comps from CardSight"
+              title="🔄 Update Comps"
               applyNoun="price"
               headerExtra={<BuySoldLinks t={form} />}
               onApply={({ values, details }) => setForm((f) => ({ ...f, ...buyCompPatch(values, details) }))}

@@ -348,6 +348,15 @@ function GlobalStyle() {
       label { font-size: 12px; color: #8B90A0; margin-bottom: 4px; display: block; }
       .modalOverlay { position: fixed; inset: 0; background: rgba(10,11,15,0.72); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
       .modalBox { background: #191B22; border: 1px solid #2C303B; border-radius: 14px; max-width: 480px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 24px; }
+      /* Phones: tabs on one row you swipe sideways, so the page content starts on the first screen. */
+      @media (max-width: 640px) {
+        .appPage { padding: 1.25rem 1rem 3rem !important; }
+        .tabBar { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .tabBar::-webkit-scrollbar { display: none; }
+        .tabBar > button { flex-shrink: 0; white-space: nowrap; }
+        .modalOverlay { padding: 8px; }
+        .modalBox { padding: 16px; max-height: 94vh; }
+      }
     `}</style>
   );
 }

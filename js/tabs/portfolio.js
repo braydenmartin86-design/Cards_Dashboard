@@ -696,7 +696,7 @@ const STALE_COMPS_DAYS = 30;
 // Pokémon, the Buy Evaluator and Grade Check — `onApply({ values, details, trend })` decides
 // where the chosen values go.
 // `card` needs player, card ("Card / set" text), cardNum, sport and optionally compSearch.
-function CompFinder({ card, grade, onApply, title = "🔄 Update comps from CardSight", applyNoun = "value", defaultOpen = false, savedTrend, updatedAt, headerExtra }) {
+function CompFinder({ card, grade, onApply, title = "🔄 Update Comps", applyNoun = "value", defaultOpen = false, savedTrend, updatedAt, headerExtra }) {
   const [open, setOpen] = useState(defaultOpen);
   const [details, setDetails] = useState(() => compSearchDefaults(card));
   const [loading, setLoading] = useState(false);
@@ -904,7 +904,7 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update comps from Card
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={() => lookUp(false)} disabled={loading || !details.player_name}>
-              {loading ? "Searching sold listings…" : "Find recent comps"}
+              {loading ? "Searching sold listings…" : "CardSight Comps"}
             </button>
             <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setShowPaste((v) => !v)}>
               📋 Paste sold listings instead {showPaste ? "▲" : "▼"}
@@ -1194,6 +1194,211 @@ function CompUpdater({ card, onUpdate }) {
   );
 }
 
+// ===== Listing helper =====
+// eBay title (built from the card's details, max 80 characters), item specifics, an AI-written
+// description, and the price to list at — for any card you're about to sell.
+
+const EBAY_TITLE_MAX = 80;
+
+// The card's details as listing parts. Uses the saved comp search (most exact) or splits the
+// card text the same way Update Comps does.
+function listingParts(card) {
+  const d = compSearchDefaults(card);
+  const isPokemon = /pok[eé]mon/i.test(card.sport || "");
+  const parallel = /^base$/i.test(String(d.parallel_or_variant || "").trim()) ? "" : String(d.parallel_or_variant || "").replace(/\s*\/\s*\d+\s*$/, "");
+  const number = String(d.card_number || card.cardNum || "").replace(/^#/, "").trim();
+  const printRun = card.numbered && card.outOf ? `/${card.outOf}` : (String(d.parallel_or_variant || "").match(/\/\s*\d+/) || [""])[0].replace(/\s/g, "");
+  const grade = card.status === "Graded" || card.grade ? card.grade || "" : "";
+  return { d, isPokemon, parallel, number, printRun, grade, setName: String(d.set_name || "").trim(), year: String(d.year || "").trim() };
+}
+
+// The grade, card # and print run always make it in — buyers search on those. If the title is
+// too long, sport words are dropped from the set name first, then the parallel name is shortened.
+// Extras (RC, sport, Raw) are added only while they fit in eBay's 80 characters.
+function buildEbayTitle(card) {
+  const p = listingParts(card);
+  const join = (parts) => parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  const number = p.number ? (p.isPokemon ? p.number : `#${p.number}`) : "";
+  let setName = p.setName;
+  let parallelWords = p.parallel.split(" ").filter(Boolean);
+  const build = () => join([p.year, setName, card.player, parallelWords.join(" "), number, p.printRun, p.grade]);
+  let title = build();
+  if (title.length > EBAY_TITLE_MAX) {
+    setName = setName.replace(/\b(basketball|football|baseball|soccer|hockey|trading cards?)\b/gi, " ").replace(/\s+/g, " ").trim();
+    title = build();
+  }
+  while (title.length > EBAY_TITLE_MAX && parallelWords.length > 1) {
+    parallelWords = parallelWords.slice(0, -1);
+    title = build();
+  }
+  if (title.length > EBAY_TITLE_MAX) title = title.slice(0, EBAY_TITLE_MAX).replace(/\s+\S*$/, "");
+  const extras = [card.rookie ? "RC Rookie" : "", p.isPokemon ? "Pokemon" : card.sport && card.sport !== "Other" ? card.sport : "", !p.grade && !p.isPokemon ? "Raw" : ""];
+  for (const extra of extras.filter(Boolean)) {
+    if (`${title} ${extra}`.length <= EBAY_TITLE_MAX) title = `${title} ${extra}`;
+  }
+  return title;
+}
+
+function buildItemSpecifics(card) {
+  const p = listingParts(card);
+  const graded = Boolean(p.grade);
+  const [grader, gradeValue] = graded ? p.grade.split(/\s+/) : [];
+  const rows = p.isPokemon
+    ? [["Game", "Pokémon TCG"], ["Card Name", card.player], ["Set", p.setName], ["Card Number", p.number], ["Year Manufactured", p.year]]
+    : [["Sport", card.sport], ["Player/Athlete", card.player], ["Set", [p.year, p.setName].filter(Boolean).join(" ")], ["Season", p.year], ["Card Number", p.number], ["Parallel/Variety", p.parallel || "Base"]];
+  rows.push(["Print Run", p.printRun.replace("/", "")], ["Features", card.rookie ? "Rookie" : ""], ["Graded", graded ? "Yes" : "No"], ["Professional Grader", grader || ""], ["Grade", gradeValue || ""]);
+  return rows.filter(([, v]) => v);
+}
+
+// The price to list at and the lowest to accept, from the card's own grade and comps.
+function listingPrices(card, computed) {
+  const listing = recommendedListing(computed);
+  if (listing) return { listPrice: listing.listPrice, floor: listing.floor, label: listing.label };
+  const g = String(card.grade || "").toLowerCase();
+  const graded = card.status === "Graded" || Boolean(card.grade);
+  const value = graded ? (PSA10_GRADES.includes(g) ? card.psa10Avg : PSA9_GRADES.includes(g) ? card.psa9Avg : null) : card.rawAvg;
+  if (value == null) return null;
+  const floor = graded ? (PSA10_GRADES.includes(g) ? computed.psa10BE : computed.psa9BE) : computed.rawBE;
+  return { listPrice: value * (graded ? 1.03 : 1.08), floor, label: graded ? card.grade : "Raw" };
+}
+
+const LISTING_DESCRIPTION_PROMPT = `Write a short, honest eBay listing description for this trading card. Plain text only, no markdown, no emojis, under 90 words. Structure:
+1. One line saying exactly what the card is.
+2. Condition: for a graded card, say it's in the grading company's slab and the grade; for a raw card, describe condition honestly from the notes given (or say "see photos for condition" if there are none). Never claim a card is mint or gradeable.
+3. Shipping: "Ships securely in a penny sleeve and toploader, in a team bag, with tracking." (graded cards: "Ships in a protective sleeve with bubble wrap, with tracking.")
+4. One line: "Please check all photos — the card pictured is the card you'll receive."
+Card details:`;
+
+function ListingHelper({ card, computed, onUpdate }) {
+  const [open, setOpen] = useState(false);
+  const [description, setDescription] = useState("");
+  const [writing, setWriting] = useState(false);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(null);
+  const [title, setTitle] = useState(() => buildEbayTitle(card));
+  const prices = listingPrices(card, computed);
+  const [price, setPrice] = useState(prices ? prices.listPrice.toFixed(2) : "");
+
+  useEffect(() => {
+    setTitle(buildEbayTitle(card));
+    setDescription("");
+    setPrice(prices ? prices.listPrice.toFixed(2) : "");
+  }, [card.id]);
+
+  const specifics = buildItemSpecifics(card);
+
+  async function copy(key, text) {
+    const ok = await copyToClipboard(text);
+    setCopied(ok ? key : null);
+    setTimeout(() => setCopied(null), 1800);
+  }
+
+  async function writeDescription() {
+    setWriting(true);
+    setError(null);
+    try {
+      const a = card.gradeAnalysis;
+      const condition = a ? `Condition notes from a photo check: centering ${a.centering}; corners ${a.corners}; edges ${a.edges}; surface ${a.surface}.` : "No condition notes.";
+      const details = [`Title: ${title}`, ...specifics.map(([k, v]) => `${k}: ${v}`), condition].join("\n");
+      const text = await callGeminiAi(`${LISTING_DESCRIPTION_PROMPT}\n${details}`);
+      setDescription(String(text).replace(/```/g, "").trim());
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setWriting(false);
+    }
+  }
+
+  function markListed() {
+    onUpdate({ ...card, status: "Listed", listedPrice: Number(price) || null, listingTitle: title, dateListed: new Date().toISOString().slice(0, 10) });
+  }
+
+  const copyBtn = (key, text) => (
+    <button type="button" className="btnSecondary" style={{ fontSize: 11, padding: "3px 9px" }} onClick={() => copy(key, text)} disabled={!text}>
+      {copied === key ? "Copied ✓" : "Copy"}
+    </button>
+  );
+
+  return (
+    <div style={{ border: "1px solid #2C303B", borderRadius: 8, padding: "10px 12px", marginBottom: 16, background: "#14161C" }}>
+      <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px", borderColor: "#4E8B6B66", color: "#4E8B6B" }} onClick={() => setOpen((v) => !v)}>
+        🏷️ Create eBay listing {open ? "▲" : "▼"}
+      </button>
+      {open && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <label style={{ margin: 0 }}>Title ({title.length}/{EBAY_TITLE_MAX})</label>
+              {copyBtn("title", title)}
+            </div>
+            <input value={title} maxLength={EBAY_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} style={{ fontSize: 13 }} />
+          </div>
+
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <label style={{ margin: 0 }}>Item specifics</label>
+              {copyBtn("specifics", specifics.map(([k, v]) => `${k}: ${v}`).join("\n"))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 12px", fontSize: 12 }}>
+              {specifics.map(([k, v]) => (
+                <React.Fragment key={k}>
+                  <span style={{ color: "#6B7180" }}>{k}</span>
+                  <span>{v}</span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 8 }}>
+              <label style={{ margin: 0 }}>Description</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" className="btnSecondary" style={{ fontSize: 11, padding: "3px 9px" }} onClick={writeDescription} disabled={writing}>
+                  {writing ? "Writing…" : description ? "Rewrite" : "✨ Write with AI"}
+                </button>
+                {copyBtn("description", description)}
+              </div>
+            </div>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={5}
+              placeholder={card.gradeAnalysis ? "Uses your Grade Check condition notes." : "Tip: run a Grade Check on the card first and the description will include its condition notes."}
+              style={{ background: "#0F1015", border: "1px solid #333844", color: "#EDEAE1", borderRadius: 6, padding: "8px 10px", fontSize: 12.5, fontFamily: "'Inter', sans-serif", width: "100%", resize: "vertical" }}
+            />
+            {error && <div style={{ fontSize: 11.5, color: "#B4472E" }}>{error}</div>}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+            <Field label={`List price${prices ? ` (${prices.label})` : ""}`}>
+              <input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} style={{ width: 130 }} />
+            </Field>
+            <div style={{ fontSize: 11.5, color: "#8B90A0", lineHeight: 1.5, flex: 1, minWidth: 180 }}>
+              {prices ? (
+                <>
+                  Suggested {fmtMoney(prices.listPrice)}. Accept offers down to <b style={{ color: "#B4472E" }}>{fmtMoney(prices.floor)}</b> (your break-even after fees).
+                  {Number(price) > 0 && Number(price) < prices.floor && <span style={{ color: "#B4472E" }}> ⚠️ That price is below break-even.</span>}
+                </>
+              ) : (
+                "No market value yet — use 🔄 Update Comps first for a suggested price."
+              )}
+            </div>
+          </div>
+
+          {card.status !== "Listed" && (
+            <div>
+              <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={markListed} disabled={!(Number(price) > 0)}>
+                Mark as listed at {Number(price) > 0 ? fmtMoney(Number(price)) : "…"}
+              </button>
+              <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 4 }}>Moves the card to My Sales as Listed, with this title and price.</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // One click to refresh comps on every card you hold. Only high-confidence results are written
 // (anything else is listed for you to check by hand), cards run one at a time to stay under
 // CardSight's rate limit, and by default cards checked in the last 30 days are skipped to save quota.
@@ -1311,7 +1516,7 @@ function BulkCompRefresh({ cards, setCards, isPokemon = false }) {
                   {card.player} — {card.card} {card.cardNum}: <span style={{ color: "#6B7180" }}>{why}</span>
                 </div>
               ))}
-              <div style={{ marginTop: 4, color: "#6B7180" }}>Open a card and use "Update comps" to check its sales and apply them by hand.</div>
+              <div style={{ marginTop: 4, color: "#6B7180" }}>Open a card and use "Update Comps" to check its sales and apply them by hand.</div>
             </div>
           )}
         </div>
@@ -1330,42 +1535,26 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
   const computed = isPkmn ? computePokemonCard(card) : computeCard(card);
 
   function startEdit() {
-    setForm({
-      ...card,
-      rawSale1: card.rawAvg != null ? String(card.rawAvg) : "",
-      rawSale2: "",
-      psa9Sale1: card.psa9Avg != null ? String(card.psa9Avg) : "",
-      psa9Sale2: "",
-      psa10Sale1: card.psa10Avg != null ? String(card.psa10Avg) : "",
-      psa10Sale2: "",
-    });
+    setForm({ ...card });
     setEdit(true);
   }
 
-function save() {
-    const today = new Date().toISOString().slice(0, 10);
-    const newRawAvg = avgOfSales(form.rawSale1, form.rawSale2);
-    const newPsa9Avg = avgOfSales(form.psa9Sale1, form.psa9Sale2);
-    const newPsa10Avg = avgOfSales(form.psa10Sale1, form.psa10Sale2);
-    
-    // Pass a single unified object containing the id and all updated properties
+  // Market values (Raw / PSA 9 / PSA 10) aren't edited here — Update Comps sets them — so the
+  // card's current values and price history are kept as they are.
+  function save() {
     onUpdate({
       ...card,
       ...form,
       id: card.id,
       paid: Number(form.paid) || 0,
       shipping: Number(form.shipping) || 0,
-      rawAvg: newRawAvg,
-      psa9Avg: newPsa9Avg,
-      psa10Avg: newPsa10Avg,
-      rawHistory: appendHistoryIfChanged(card.rawHistory, card.rawAvg, newRawAvg, today),
-      psa9History: appendHistoryIfChanged(card.psa9History, card.psa9Avg, newPsa9Avg, today),
-      psa10History: appendHistoryIfChanged(card.psa10History, card.psa10Avg, newPsa10Avg, today),
-      // Typing new market values counts as updating the comps.
-      compsUpdatedAt:
-        newRawAvg !== (card.rawAvg ?? null) || newPsa9Avg !== (card.psa9Avg ?? null) || newPsa10Avg !== (card.psa10Avg ?? null)
-          ? today
-          : card.compsUpdatedAt,
+      rawAvg: card.rawAvg ?? null,
+      psa9Avg: card.psa9Avg ?? null,
+      psa10Avg: card.psa10Avg ?? null,
+      rawHistory: card.rawHistory,
+      psa9History: card.psa9History,
+      psa10History: card.psa10History,
+      compsUpdatedAt: card.compsUpdatedAt,
       outOf: form.numbered && form.outOf !== "" && form.outOf != null ? Number(form.outOf) : null,
       quantity: Number(form.quantity) || 1,
       actualSellPrice: form.actualSellPrice === "" || form.actualSellPrice == null ? null : Number(form.actualSellPrice),
@@ -1475,6 +1664,9 @@ function save() {
         {/* Cards added on the Pokémon tab can still carry the form's default sport, which would
             switch off the Pokémon price lookup and matching rules. */}
         <CompUpdater card={isPkmn && !/pok[eé]mon/i.test(card.sport || "") ? { ...card, sport: "Pokémon" } : card} onUpdate={onUpdate} />
+        {["Raw", "Graded", "Listed"].includes(card.status) && (
+          <ListingHelper card={isPkmn && !/pok[eé]mon/i.test(card.sport || "") ? { ...card, sport: "Pokémon" } : card} computed={computed} onUpdate={onUpdate} />
+        )}
 
         {!edit ? (
           <>
@@ -1514,7 +1706,7 @@ function save() {
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button className="btnSecondary" onClick={startEdit}>Edit values</button>
+              <button className="btnSecondary" onClick={startEdit}>Edit details</button>
               <button
                 onClick={() => onDelete(card.id)}
                 style={{ background: "transparent", border: "1px solid #4a2a24", color: "#B4472E", borderRadius: 8, padding: "9px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
@@ -1576,28 +1768,8 @@ function EditForm({ form, setForm, onSave, onCancel, playerLabel }) {
         <Field label="Shipping"><input type="number" step="0.01" value={form.shipping} onChange={(e) => setForm({ ...form, shipping: e.target.value })} /></Field>
         <Field label="Qty"><input type="number" min="1" step="1" value={form.quantity ?? 1} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-        <TierPriceInput
-          label="Raw"
-          sale1={form.rawSale1 ?? ""}
-          sale2={form.rawSale2 ?? ""}
-          onChange1={(v) => setForm({ ...form, rawSale1: v })}
-          onChange2={(v) => setForm({ ...form, rawSale2: v })}
-        />
-        <TierPriceInput
-          label="PSA 9"
-          sale1={form.psa9Sale1 ?? ""}
-          sale2={form.psa9Sale2 ?? ""}
-          onChange1={(v) => setForm({ ...form, psa9Sale1: v })}
-          onChange2={(v) => setForm({ ...form, psa9Sale2: v })}
-        />
-        <TierPriceInput
-          label="PSA 10"
-          sale1={form.psa10Sale1 ?? ""}
-          sale2={form.psa10Sale2 ?? ""}
-          onChange1={(v) => setForm({ ...form, psa10Sale1: v })}
-          onChange2={(v) => setForm({ ...form, psa10Sale2: v })}
-        />
+      <div style={{ fontSize: 11.5, color: "#6B7180" }}>
+        Raw / PSA 9 / PSA 10 market values are set with <b style={{ color: "#2FA89A" }}>🔄 Update Comps</b> on the card.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Field label="Grading service">

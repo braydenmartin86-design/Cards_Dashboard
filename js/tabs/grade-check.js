@@ -283,7 +283,7 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
         <CompFinder
           card={linkedCard || { id: "gradecheck", player: form.player, card: form.card, cardNum: "", sport: "" }}
           grade={null}
-          title="🔄 Get Raw / PSA 9 / PSA 10 comps from CardSight"
+          title="🔄 Update Comps"
           savedTrend={linkedCard && linkedCard.priceTrend}
           updatedAt={linkedCard && linkedCard.compsUpdatedAt}
           onApply={applyComps}
@@ -394,7 +394,7 @@ function GradeCheck({ cards, pokemonCards, onUpdateCardIn }) {
                       <div style={{ fontSize: 11, color: "#6B7180" }}>Trends don't always continue — treat this as a warning sign, not a forecast.</div>
                     </div>
                   ) : linkedCard ? (
-                    <div style={{ fontSize: 11, color: "#6B7180" }}>No price trend saved for this card yet — "Get comps from CardSight" above fetches one when CardSight can match the card.</div>
+                    <div style={{ fontSize: 11, color: "#6B7180" }}>No price trend saved for this card yet — "Update Comps" → "CardSight Comps" above fetches one when CardSight can match the card.</div>
                   ) : null}
                 </div>
               </div>
