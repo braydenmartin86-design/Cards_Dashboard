@@ -691,21 +691,36 @@ function appendHistoryIfChanged(history, oldVal, newVal, dateStr) {
 // A recommended listing price once a card is ready to sell: market average plus a
 // negotiation buffer (most eBay buyers expect room to make an offer), with the
 // break-even price shown as the floor you should never go below.
+// Comps are already what cards actually sold for, and buyers check sold listings too, so the
+// premium is kept small: just enough room for Best Offers.
+const RAW_LIST_MARKUP = 1.05;
+const GRADED_LIST_MARKUP = 1.02;
+
+// eBay Best Offer settings: auto-accept anything at market value (sells straight away, no
+// back-and-forth) and auto-decline anything under break-even. Accept never drops below decline.
+function bestOfferSettings(marketValue, breakEven) {
+  if (marketValue == null) return { autoAccept: null, autoDecline: breakEven ?? null };
+  const autoDecline = breakEven != null ? Math.ceil(breakEven) : null;
+  const autoAccept = Math.max(Math.ceil(marketValue), autoDecline ?? 0);
+  return { autoAccept, autoDecline };
+}
+
 function recommendedListing(card) {
   // Raw cards have real condition/centering variance buyers can't fully verify from photos,
   // so a modest premium over average is normal. Graded cards are a known, fungible quantity —
   // the exact population and recent comps are public (PSA cert lookup, 130 Point), so buyers
   // won't pay a meaningful premium over what the card has actually been trading at.
   const basisMap = {
-    "Sell Raw First": { avg: card.rawAvg, be: card.rawBE, label: "Raw", markup: 1.08, history: card.rawHistory },
-    "Sell PSA 9": { avg: card.psa9Avg, be: card.psa9BE, label: "PSA 9", markup: 1.03, history: card.psa9History },
-    "Sell PSA 10": { avg: card.psa10Avg, be: card.psa10BE, label: "PSA 10", markup: 1.03, history: card.psa10History },
+    "Sell Raw First": { avg: card.rawAvg, be: card.rawBE, label: "Raw", markup: RAW_LIST_MARKUP, history: card.rawHistory },
+    "Sell PSA 9": { avg: card.psa9Avg, be: card.psa9BE, label: "PSA 9", markup: GRADED_LIST_MARKUP, history: card.psa9History },
+    "Sell PSA 10": { avg: card.psa10Avg, be: card.psa10BE, label: "PSA 10", markup: GRADED_LIST_MARKUP, history: card.psa10History },
   };
   const basis = basisMap[card.sellDecision];
   if (!basis || basis.avg == null) return null;
   return {
     listPrice: basis.avg * basis.markup,
     floor: basis.be,
+    ...bestOfferSettings(basis.avg, basis.be),
     label: basis.label,
     markupPct: Math.round((basis.markup - 1) * 100),
     lowConfidence: (basis.history || []).length <= 1,

@@ -1277,13 +1277,13 @@ function buildItemSpecifics(card) {
 // The price to list at and the lowest to accept, from the card's own grade and comps.
 function listingPrices(card, computed) {
   const listing = recommendedListing(computed);
-  if (listing) return { listPrice: listing.listPrice, floor: listing.floor, label: listing.label };
+  if (listing) return { listPrice: listing.listPrice, floor: listing.floor, label: listing.label, autoAccept: listing.autoAccept, autoDecline: listing.autoDecline };
   const g = String(card.grade || "").toLowerCase();
   const graded = card.status === "Graded" || Boolean(card.grade);
   const value = graded ? (PSA10_GRADES.includes(g) ? card.psa10Avg : PSA9_GRADES.includes(g) ? card.psa9Avg : null) : card.rawAvg;
   if (value == null) return null;
   const floor = graded ? (PSA10_GRADES.includes(g) ? computed.psa10BE : computed.psa9BE) : computed.rawBE;
-  return { listPrice: value * (graded ? 1.03 : 1.08), floor, label: graded ? card.grade : "Raw" };
+  return { listPrice: value * (graded ? GRADED_LIST_MARKUP : RAW_LIST_MARKUP), floor, label: graded ? card.grade : "Raw", ...bestOfferSettings(value, floor) };
 }
 
 // The top of the description, in the seller's own style (see their Bulls lot listing). The
@@ -1321,6 +1321,31 @@ function listingClosingText(card) {
   const isPokemon = /pok[eé]mon/i.test(card.sport || "");
   const kind = isPokemon ? "Pokémon singles and graded cards" : `${card.sport && card.sport !== "Other" ? `${card.sport} ` : ""}singles, team lots, and rookie cards`;
   return `Check out my other listings for more ${kind}. Feel free to send a reasonable offer!`;
+}
+
+// eBay's Best Offer settings for a listing: auto-accept at market value, auto-decline under
+// break-even. eBay needs both below the list price, so they're dropped when the price is too low.
+function BestOfferSettings({ listPrice, autoAccept, autoDecline }) {
+  if (!(listPrice > 0) || autoDecline == null) return null;
+  const box = { border: "1px solid #2C303B", borderRadius: 8, padding: "8px 10px", marginTop: 10, background: "#14161C", fontSize: 11.5, color: "#8B90A0", lineHeight: 1.6 };
+  if (autoDecline >= listPrice) {
+    return <div style={{ ...box, color: "#C9A227" }}>⚠️ This price is at or under break-even ({fmtMoney(autoDecline)}), so there's no room for offers — list it without Best Offer.</div>;
+  }
+  const showAccept = autoAccept != null && autoAccept < listPrice && autoAccept > autoDecline;
+  return (
+    <div style={box}>
+      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>eBay Best Offer settings</div>
+      {showAccept && (
+        <div>
+          Auto-accept offers of <b style={{ color: "#4E8B6B" }}>{fmtMoney(autoAccept)}</b> or more — market value, so it sells straight away.
+        </div>
+      )}
+      <div>
+        Auto-decline offers under <b style={{ color: "#B4472E" }}>{fmtMoney(autoDecline)}</b> — your break-even after fees.
+      </div>
+      {showAccept && <div style={{ color: "#6B7180", marginTop: 2 }}>Anything in between, decide yourself.</div>}
+    </div>
+  );
 }
 
 function ListingHelper({ card, computed, onUpdate }) {
@@ -1461,7 +1486,7 @@ function ListingHelper({ card, computed, onUpdate }) {
             <div style={{ fontSize: 11.5, color: "#8B90A0", lineHeight: 1.5, flex: 1, minWidth: 180 }}>
               {prices ? (
                 <>
-                  Suggested {fmtMoney(prices.listPrice)}. Accept offers down to <b style={{ color: "#B4472E" }}>{fmtMoney(prices.floor)}</b> (your break-even after fees).
+                  Suggested {fmtMoney(prices.listPrice)}. Break-even after fees is <b style={{ color: "#B4472E" }}>{fmtMoney(prices.floor)}</b>.
                   {Number(price) > 0 && Number(price) < prices.floor && <span style={{ color: "#B4472E" }}> ⚠️ That price is below break-even.</span>}
                 </>
               ) : (
@@ -1469,6 +1494,8 @@ function ListingHelper({ card, computed, onUpdate }) {
               )}
             </div>
           </div>
+
+          {prices && Number(price) > 0 && <BestOfferSettings listPrice={Number(price)} autoAccept={prices.autoAccept} autoDecline={prices.autoDecline} />}
 
           {card.status !== "Listed" && (
             <div>
@@ -1699,10 +1726,10 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
               <MiniStat label="Don't go below" value={fmtMoney(listing.floor)} color="#B4472E" />
             </div>
             <div style={{ fontSize: 11, color: "#6B7180", marginTop: 8 }}>
-              {listing.markupPct}% above the {listing.label.toLowerCase()} average
-              {listing.label === "Raw" ? " — raw condition varies, so a modest premium is normal." : " — graded cards are a known quantity with public comps, so only a small premium sticks."}{" "}
+              {listing.markupPct}% above the {listing.label.toLowerCase()} average — just enough room for offers, since buyers check sold prices too.{" "}
               The floor is your break-even; anything below that and you're paying to sell.
             </div>
+            <BestOfferSettings listPrice={listing.listPrice} autoAccept={listing.autoAccept} autoDecline={listing.autoDecline} />
             {listing.lowConfidence && (
               <div style={{ fontSize: 11, color: "#C9A227", marginTop: 6 }}>
                 ⚠️ Based on limited sale data — double-check the very latest sold listings before pricing this one.
