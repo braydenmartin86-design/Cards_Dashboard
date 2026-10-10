@@ -1323,25 +1323,35 @@ function listingClosingText(card) {
   return `Check out my other listings for more ${kind}. Feel free to send a reasonable offer!`;
 }
 
+// Says plainly that the prices shown are US dollars, and the rate used to convert them.
+function UsdPriceNote() {
+  return (
+    <div style={{ fontSize: 11.5, color: "#C9A227", border: "1px solid #C9A22755", background: "#C9A2270f", borderRadius: 6, padding: "6px 9px", marginBottom: 8, lineHeight: 1.5 }}>
+      💵 This card is in the ShipMyCards vault, so prices are shown in <b>US dollars</b> — ShipMyCards and its consignors price in USD. Converted at today's rate, US$1 = A${currentUsdToAudRate().toFixed(4)}.
+    </div>
+  );
+}
+
 // eBay's Best Offer settings for a listing: auto-accept at market value, auto-decline under
 // break-even. eBay needs both below the list price, so they're dropped when the price is too low.
-function BestOfferSettings({ listPrice, autoAccept, autoDecline }) {
+function BestOfferSettings({ listPrice, autoAccept, autoDecline, usd = false }) {
   if (!(listPrice > 0) || autoDecline == null) return null;
+  const money = usd ? fmtUsd : fmtMoney;
   const box = { border: "1px solid #2C303B", borderRadius: 8, padding: "8px 10px", marginTop: 10, background: "#14161C", fontSize: 11.5, color: "#8B90A0", lineHeight: 1.6 };
   if (autoDecline >= listPrice) {
-    return <div style={{ ...box, color: "#C9A227" }}>⚠️ This price is at or under break-even ({fmtMoney(autoDecline)}), so there's no room for offers — list it without Best Offer.</div>;
+    return <div style={{ ...box, color: "#C9A227" }}>⚠️ This price is at or under break-even ({money(autoDecline)}), so there's no room for offers — list it without taking offers.</div>;
   }
   const showAccept = autoAccept != null && autoAccept < listPrice && autoAccept > autoDecline;
   return (
     <div style={box}>
-      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>eBay Best Offer settings</div>
+      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>{usd ? "Offer limits (US$)" : "eBay Best Offer settings"}</div>
       {showAccept && (
         <div>
-          Auto-accept offers of <b style={{ color: "#4E8B6B" }}>{fmtMoney(autoAccept)}</b> or more — market value, so it sells straight away.
+          {usd ? "Accept" : "Auto-accept"} offers of <b style={{ color: "#4E8B6B" }}>{money(autoAccept)}</b> or more — market value, so it sells straight away.
         </div>
       )}
       <div>
-        Auto-decline offers under <b style={{ color: "#B4472E" }}>{fmtMoney(autoDecline)}</b> — your break-even after fees.
+        {usd ? "Decline" : "Auto-decline"} offers under <b style={{ color: "#B4472E" }}>{money(autoDecline)}</b> — your break-even after fees.
       </div>
       {showAccept && <div style={{ color: "#6B7180", marginTop: 2 }}>Anything in between, decide yourself.</div>}
     </div>
@@ -1362,7 +1372,11 @@ function ListingHelper({ card, computed, onUpdate }) {
     }
   });
   const [title, setTitle] = useState(() => buildEbayTitle(card, titleStyle));
-  const prices = listingPrices(card, computed);
+  // Vault cards sell through ShipMyCards in US$, so the helper works in US$ for them.
+  const usd = sellsInUsd(card);
+  const audPrices = listingPrices(card, computed);
+  const prices = usd ? listingInUsd(audPrices) : audPrices;
+  const money = usd ? fmtUsd : fmtMoney;
   const [price, setPrice] = useState(prices ? prices.listPrice.toFixed(2) : "");
 
   function changeTitleStyle(style) {
@@ -1407,7 +1421,10 @@ function ListingHelper({ card, computed, onUpdate }) {
 
   function markListed() {
     // A new listing starts its own price-cut history for the Listing check-up on Home.
-    onUpdate({ ...card, status: "Listed", listedPrice: Number(price) || null, listingTitle: title, dateListed: new Date().toISOString().slice(0, 10), listingActions: [], lastListingActionAt: null });
+    // My Sales and the profit maths work in A$, so a US$ price is stored converted, with the US$ kept too.
+    const entered = Number(price) || null;
+    const listedPrice = entered && usd ? Math.round(entered * currentUsdToAudRate() * 100) / 100 : entered;
+    onUpdate({ ...card, status: "Listed", listedPrice, listedPriceUsd: usd ? entered : null, listingTitle: title, dateListed: new Date().toISOString().slice(0, 10), listingActions: [], lastListingActionAt: null });
   }
 
   const copyBtn = (key, text) => (
@@ -1479,14 +1496,16 @@ function ListingHelper({ card, computed, onUpdate }) {
             {error && <div style={{ fontSize: 11.5, color: "#B4472E" }}>{error}</div>}
           </div>
 
+          {usd && <UsdPriceNote />}
           <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
-            <Field label={`List price${prices ? ` (${prices.label})` : ""}`}>
+            <Field label={`List price${usd ? " in US$" : ""}${prices ? ` (${prices.label})` : ""}`}>
               <input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} style={{ width: 130 }} />
             </Field>
             <div style={{ fontSize: 11.5, color: "#8B90A0", lineHeight: 1.5, flex: 1, minWidth: 180 }}>
               {prices ? (
                 <>
-                  Suggested {fmtMoney(prices.listPrice)}. Break-even after fees is <b style={{ color: "#B4472E" }}>{fmtMoney(prices.floor)}</b>.
+                  Suggested {money(prices.listPrice)}. Break-even after fees is <b style={{ color: "#B4472E" }}>{money(prices.floor)}</b>.
+                  {usd && Number(price) > 0 && <> That's A{fmtMoney(Number(price) * currentUsdToAudRate())}.</>}
                   {Number(price) > 0 && Number(price) < prices.floor && <span style={{ color: "#B4472E" }}> ⚠️ That price is below break-even.</span>}
                 </>
               ) : (
@@ -1495,12 +1514,12 @@ function ListingHelper({ card, computed, onUpdate }) {
             </div>
           </div>
 
-          {prices && Number(price) > 0 && <BestOfferSettings listPrice={Number(price)} autoAccept={prices.autoAccept} autoDecline={prices.autoDecline} />}
+          {prices && Number(price) > 0 && <BestOfferSettings listPrice={Number(price)} autoAccept={prices.autoAccept} autoDecline={prices.autoDecline} usd={usd} />}
 
           {card.status !== "Listed" && (
             <div>
               <button type="button" className="btnPrimary" style={{ fontSize: 12.5, padding: "7px 14px" }} onClick={markListed} disabled={!(Number(price) > 0)}>
-                Mark as listed at {Number(price) > 0 ? fmtMoney(Number(price)) : "…"}
+                Mark as listed at {Number(price) > 0 ? money(Number(price)) : "…"}
               </button>
               <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 4 }}>Moves the card to My Sales as Listed, with this title and price.</div>
             </div>
@@ -1718,18 +1737,30 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
           </div>
         )}
 
-        {listing && (
+        {listing && (() => {
+          const usd = sellsInUsd(card);
+          const shown = usd ? listingInUsd(listing) : listing;
+          const money = usd ? fmtUsd : fmtMoney;
+          return (
           <div style={{ border: "1px solid #4E8B6B55", borderRadius: 8, padding: "12px 14px", marginBottom: 16, background: "#4E8B6B0f" }}>
-            <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 8 }}>Recommended listing ({listing.label})</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <MiniStat label="List at" value={fmtMoney(listing.listPrice)} color="#4E8B6B" emphasis />
-              <MiniStat label="Don't go below" value={fmtMoney(listing.floor)} color="#B4472E" />
+            <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 8 }}>
+              Recommended listing ({listing.label}){usd ? " — in US dollars" : ""}
             </div>
+            {usd && <UsdPriceNote />}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <MiniStat label={usd ? "List at (US$)" : "List at"} value={money(shown.listPrice)} color="#4E8B6B" emphasis />
+              <MiniStat label={usd ? "Don't go below (US$)" : "Don't go below"} value={money(shown.floor)} color="#B4472E" />
+            </div>
+            {usd && (
+              <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6 }}>
+                In Australian dollars: list at A{fmtMoney(listing.listPrice)}, don't go below A{fmtMoney(listing.floor)}.
+              </div>
+            )}
             <div style={{ fontSize: 11, color: "#6B7180", marginTop: 8 }}>
               {listing.markupPct}% above the {listing.label.toLowerCase()} average — just enough room for offers, since buyers check sold prices too.{" "}
               The floor is your break-even; anything below that and you're paying to sell.
             </div>
-            <BestOfferSettings listPrice={listing.listPrice} autoAccept={listing.autoAccept} autoDecline={listing.autoDecline} />
+            <BestOfferSettings listPrice={shown.listPrice} autoAccept={shown.autoAccept} autoDecline={shown.autoDecline} usd={usd} />
             {listing.lowConfidence && (
               <div style={{ fontSize: 11, color: "#C9A227", marginTop: 6 }}>
                 ⚠️ Based on limited sale data — double-check the very latest sold listings before pricing this one.
@@ -1759,7 +1790,8 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {card.status === "At Grading" && (
           <div style={{ border: "1px solid #C9A22755", borderRadius: 8, padding: "12px 14px", marginBottom: 16, background: "#C9A2270f" }}>

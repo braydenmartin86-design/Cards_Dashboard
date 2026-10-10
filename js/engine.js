@@ -664,6 +664,26 @@ function fmtMoney(n) {
   return n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 2 });
 }
 
+// US dollars, labelled so they can't be mistaken for A$ — for ShipMyCards, which prices in USD.
+function fmtUsd(n) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return `US$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Cards in the ShipMyCards vault are sold through SMC, which works in US dollars.
+function sellsInUsd(card) {
+  return card && card.location === "ShipMyCards Vault";
+}
+
+// A recommended listing converted to US$ at today's rate, with Best Offer settings worked out in US$.
+function listingInUsd(listing) {
+  if (!listing) return null;
+  const listPrice = audToUsd(listing.listPrice);
+  const floor = listing.floor != null ? audToUsd(listing.floor) : null;
+  const market = listing.autoAccept != null ? audToUsd(listing.autoAccept) : null;
+  return { ...listing, listPrice, floor, ...bestOfferSettings(market, floor) };
+}
+
 function fmtPct(n) {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
   return `${(n * 100).toFixed(1)}%`;

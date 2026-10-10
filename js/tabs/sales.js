@@ -117,13 +117,16 @@ function SalesDetailModal({ item, onClose, onUpdate, onDelete }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <MiniStat label="Cost basis" value={fmtMoney(item.totalCost)} />
             {isListed && (
-              <Field label="Listed price">
+              <Field label={sellsInUsd(item) ? "Listed price (A$)" : "Listed price"}>
                 <input
                   type="number"
                   step="0.01"
                   value={item.listedPrice ?? ""}
                   onChange={(e) => onUpdate(item._source, item.id, { listedPrice: e.target.value === "" ? null : Number(e.target.value) })}
                 />
+                {sellsInUsd(item) && Number(item.listedPrice) > 0 && (
+                  <div style={{ fontSize: 11, color: "#C9A227", marginTop: 4 }}>= {fmtUsd(audToUsd(item.listedPrice))} on ShipMyCards (US$)</div>
+                )}
               </Field>
             )}
             {(isListed || isSold) && (
@@ -410,6 +413,10 @@ function niceListPrice(v) {
 }
 
 function listingCheck(c) {
+  // ShipMyCards vault cards are priced in US$ there: advice and suggested prices are worked out in US$.
+  const usd = sellsInUsd(c);
+  const fm = (aud) => (usd ? fmtUsd(audToUsd(aud)) : fmtMoney(aud));
+  const nice = (aud) => (usd ? niceListPrice(audToUsd(aud)) * currentUsdToAudRate() : niceListPrice(aud));
   const totalDays = daysSince(c.dateListed);
   if (totalDays == null) return { card: c, stage: "noDate", priority: 1, color: "#8B90A0", text: "No listing date saved — enter when you listed it." };
   const stepDays = daysSince(c.lastListingActionAt) ?? totalDays;
@@ -439,43 +446,43 @@ function listingCheck(c) {
     return step("relist", 4, "#5C7A99", `No sale in ${stepDays} days on the ShipMyCards Marketplace — move it to ${smcNext}.`);
   }
 
-  const floorPrice = niceListPrice(breakEven);
+  const floorPrice = nice(breakEven);
   if (price > value * (1 + LISTING_OVERPRICED_PCT) && !atFloor) {
-    const target = Math.max(niceListPrice(value), floorPrice);
+    const target = Math.max(nice(value), floorPrice);
     const pct = Math.round((price / value - 1) * 100);
-    return step("over", 2, "#B4472E", `Listed ${pct}% above comps (${fmtMoney(value)}). Lower it to ${fmtMoney(target)}${target > value ? " — your break-even, the lowest to go" : ""}.`, target);
+    return step("over", 2, "#B4472E", `Listed ${pct}% above comps (${fm(value)}). Lower it to ${fm(target)}${floorPrice > nice(value) ? " — your break-even, the lowest to go" : ""}.`, target);
   }
 
   if (atFloor) {
     if (totalDays >= LISTING_STEPS.stop) {
       if (falling && c.totalCost < CHEAP_CARD_COST) {
-        return step("stop", 2, "#B4472E", `At break-even after ${totalDays} days and prices are falling. It's a cheap card — fine to drop to ${fmtMoney(value)} to get the cash back, or add it to a lot.`, niceListPrice(value));
+        return step("stop", 2, "#B4472E", `At break-even after ${totalDays} days and prices are falling. It's a cheap card — fine to drop to ${fm(value)} to get the cash back, or add it to a lot.`, nice(value));
       }
       return step("stop", 3, "#B4472E", `At break-even after ${totalDays} days — stop cutting. Take it down and hold, add it to a team lot, or try ${ebay ? "Facebook or Instagram" : "eBay"}.`);
     }
     if (stepDays >= LISTING_STEPS.relist) {
       return step("relist", 4, "#5C7A99", ebay ? `At break-even with no room to cut — end it and relist with Sell similar for a fresh run in search.` : `At break-even with no room to cut — repost or bump it.`);
     }
-    return step("hold", 6, "#8B90A0", `Already at break-even (${fmtMoney(breakEven)}) — leave the price. Relist at ${LISTING_STEPS.relist} days if it hasn't sold.`);
+    return step("hold", 6, "#8B90A0", `Already at break-even (${fm(breakEven)}) — leave the price. Relist at ${LISTING_STEPS.relist} days if it hasn't sold.`);
   }
 
   if (stepDays >= LISTING_STEPS.relist) {
     return step("relist", 4, "#5C7A99", ebay ? `Up ${stepDays} days at a fair price — end it and relist with Sell similar. New listings get more search visibility.` : `Up ${stepDays} days at a fair price — repost or bump it.`);
   }
   if (stepDays >= LISTING_STEPS.cut) {
-    const target = Math.max(niceListPrice(price * (1 - LISTING_CUT_PCT)), floorPrice);
-    return step("cut", 3, "#C9A227", `Priced near comps (${fmtMoney(value)}) but no sale in ${stepDays} days — lower to ${fmtMoney(target)}${ebay ? ", or send watchers an offer at that price" : ""}.`, target);
+    const target = Math.max(nice(price * (1 - LISTING_CUT_PCT)), floorPrice);
+    return step("cut", 3, "#C9A227", `Priced near comps (${fm(value)}) but no sale in ${stepDays} days — lower to ${fm(target)}${ebay ? ", or send watchers an offer at that price" : ""}.`, target);
   }
-  return step("watch", 5, "#4E8B6B", `Priced at market (comps ${fmtMoney(value)}). Give it until day ${LISTING_STEPS.cut}${ebay ? " — if it has watchers, send them an offer" : ""}.`);
+  return step("watch", 5, "#4E8B6B", `Priced at market (comps ${fm(value)}). Give it until day ${LISTING_STEPS.cut}${ebay ? " — if it has watchers, send them an offer" : ""}.`);
 }
 
-function listingCutSummary(c) {
+function listingCutSummary(c, fm = fmtMoney) {
   const cuts = (c.listingActions || []).filter((a) => a.type === "cut");
   if (!cuts.length) return null;
   const first = Number(cuts[0].from);
   const now = Number(c.listedPrice);
   if (!(first > 0) || !(now > 0)) return null;
-  return `Cut ${cuts.length}× from ${fmtMoney(first)} (−${Math.round((1 - now / first) * 100)}%)`;
+  return `Cut ${cuts.length}× from ${fm(first)} (−${Math.round((1 - now / first) * 100)}%)`;
 }
 
 // How your sales compare with the price you first listed at.
@@ -517,11 +524,16 @@ function ListingCheckRow({ check, onUpdate, onOpen }) {
   const actions = c.listingActions || [];
   const btn = { fontSize: 11, padding: "3px 9px" };
   const save = (patch) => onUpdate(c._source, c.id, patch);
+  // ShipMyCards vault cards are priced in US$ there, so show both (prices are stored in A$).
+  const usd = sellsInUsd(c);
+  const money = (aud) => (usd ? `${fmtUsd(audToUsd(aud))} (${fmtMoney(aud).replace("$", "A$")})` : fmtMoney(aud));
 
-  function lowerTo(p) {
-    const to = Number(p);
+  // Typed prices are in US$ for vault cards; everything is stored in A$ (with the US$ kept too).
+  const typedToAud = (v) => (usd ? Number(v) * currentUsdToAudRate() : Number(v));
+  function lowerTo(aud) {
+    const to = Math.round(Number(aud) * 100) / 100;
     if (!(to > 0)) return;
-    save({ listedPrice: to, lastListingActionAt: today, listingActions: [...actions, { date: today, type: "cut", from: check.price, to }] });
+    save({ listedPrice: to, listedPriceUsd: usd ? Math.round(audToUsd(to) * 100) / 100 : null, lastListingActionAt: today, listingActions: [...actions, { date: today, type: "cut", from: check.price, to }] });
     setEditing(false);
     setNewPrice("");
   }
@@ -532,7 +544,7 @@ function ListingCheckRow({ check, onUpdate, onOpen }) {
     save({ status: c.grade ? "Graded" : "Raw", dateListed: null, lastListingActionAt: null, listingActions: [...actions, { date: today, type: "down", price: check.price }] });
   }
 
-  const cutSummary = listingCutSummary(c);
+  const cutSummary = listingCutSummary(c, usd ? (aud) => fmtUsd(audToUsd(aud)) : fmtMoney);
   const belowFloor = check.price != null && check.breakEven != null && check.price < check.breakEven * 0.98;
 
   return (
@@ -541,12 +553,13 @@ function ListingCheckRow({ check, onUpdate, onOpen }) {
         <span style={{ fontWeight: 600, cursor: "pointer" }} title="Open its sale details" onClick={() => onOpen(c)}>{c.player}</span>
         {c.grade && <span style={{ color: "#6B7180", marginLeft: 6 }}>{c.grade}</span>}
         {check.totalDays != null && <ListingDaysBox days={check.totalDays} />}
+        {usd && <span className="mono" title="In the ShipMyCards vault — prices shown in US dollars" style={{ fontSize: 9.5, color: "#C9A227", marginLeft: 8 }}>💵 SMC · PRICES IN US$</span>}
       </div>
       {check.stage !== "noDate" && (
         <div style={{ fontSize: 11.5, color: "#8B90A0", marginTop: 2 }}>
-          {check.price != null ? `Listed ${fmtMoney(check.price)}` : "No list price"}
-          {check.value != null && ` · comps ${fmtMoney(check.value)}`}
-          {check.breakEven != null && <> · break-even <span style={{ color: belowFloor ? "#B4472E" : undefined }}>{fmtMoney(check.breakEven)}</span></>}
+          {check.price != null ? `Listed ${money(check.price)}` : "No list price"}
+          {check.value != null && ` · comps ${money(check.value)}`}
+          {check.breakEven != null && <> · break-even <span style={{ color: belowFloor ? "#B4472E" : undefined }}>{money(check.breakEven)}</span></>}
           {cutSummary && ` · ${cutSummary}`}
           {check.stepDays !== check.totalDays && ` · ${check.stepDays}d since last change`}
         </div>
@@ -564,13 +577,13 @@ function ListingCheckRow({ check, onUpdate, onOpen }) {
           <>
             {check.suggested != null && (
               <button type="button" className="btnSecondary" style={{ ...btn, borderColor: "#C9A22766", color: "#C9A227" }} onClick={() => lowerTo(check.suggested)}>
-                Lower to {fmtMoney(check.suggested)}
+                Lower to {usd ? fmtUsd(audToUsd(check.suggested)) : fmtMoney(check.suggested)}
               </button>
             )}
             {editing ? (
               <>
-                <input type="number" step="0.01" min="0" autoFocus placeholder="New price" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lowerTo(newPrice)} style={{ fontSize: 11.5, padding: "3px 6px", width: 90 }} />
-                <button type="button" className="btnSecondary" style={btn} disabled={!(Number(newPrice) > 0)} onClick={() => lowerTo(newPrice)}>Save</button>
+                <input type="number" step="0.01" min="0" autoFocus placeholder={usd ? "New price US$" : "New price"} value={newPrice} onChange={(e) => setNewPrice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lowerTo(typedToAud(newPrice))} style={{ fontSize: 11.5, padding: "3px 6px", width: 90 }} />
+                <button type="button" className="btnSecondary" style={btn} disabled={!(Number(newPrice) > 0)} onClick={() => lowerTo(typedToAud(newPrice))}>Save</button>
                 <button type="button" className="btnSecondary" style={btn} onClick={() => setEditing(false)}>Cancel</button>
               </>
             ) : (
@@ -585,8 +598,8 @@ function ListingCheckRow({ check, onUpdate, onOpen }) {
           </>
         )}
       </div>
-      {check.price != null && check.breakEven != null && editing && Number(newPrice) > 0 && Number(newPrice) < check.breakEven && (
-        <div style={{ fontSize: 11, color: "#B4472E", marginTop: 4 }}>That's below break-even ({fmtMoney(check.breakEven)}) — you'd lose money after fees.</div>
+      {check.price != null && check.breakEven != null && editing && Number(newPrice) > 0 && typedToAud(newPrice) < check.breakEven && (
+        <div style={{ fontSize: 11, color: "#B4472E", marginTop: 4 }}>That's below break-even ({usd ? fmtUsd(audToUsd(check.breakEven)) : fmtMoney(check.breakEven)}) — you'd lose money after fees.</div>
       )}
     </div>
   );
