@@ -152,6 +152,9 @@ function BusinessSummary({ cards, pokemonCards, boxBreaks, manualExpenses, setMa
 
   return (
     <div style={{ marginTop: 24 }}>
+      <BudgetCalendar cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} />
+
+      <SectionTitle>🧾 Business & tax summary</SectionTitle>
       <div style={{ fontSize: 13, color: "#8B90A0", marginBottom: 16, lineHeight: 1.6 }}>
         A rollup of spend and realised profit — card purchases, sales, grading costs, box breaks, and anything you log manually — for a given period. Useful for your own records or handing to an accountant.
         <span style={{ color: "#C9A227" }}> This isn't tax advice</span> — it's a summary of what's tracked in the app, not a substitute for proper bookkeeping.
