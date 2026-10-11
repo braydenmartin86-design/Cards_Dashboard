@@ -47,8 +47,39 @@ function estimateGradingTurnaroundDays(service, declaredValueAUD) {
   return null;
 }
 
-const PSA9_GRADES = ["psa 9", "sgc 9", "bgs 9", "bgs 9.5"];
-const PSA10_GRADES = ["psa 10", "sgc 10", "bgs 10"];
+// Grade groups for the engine's two graded value slots (psa9Avg / psa10Avg). The slot only says
+// where a graded card's value lives — the value itself comes from comps for the card's own grade
+// (a BGS 9.5 card stores BGS 9.5 sales in the "9" slot, not PSA 9 prices).
+const PSA9_GRADES = ["psa 9", "sgc 9", "sgc 9.5", "bgs 9", "bgs 9.5", "cgc 9", "cgc 9.5", "tag 9"];
+const PSA10_GRADES = ["psa 10", "sgc 10", "bgs 10", "cgc 10", "tag 10"];
+
+// The label for a value slot on a specific card: a graded card's own grade ("BGS 9.5") for the
+// slot it lives in, otherwise the generic PSA name used for raw cards' grading estimates.
+function gradeSlotLabel(card, slot) {
+  const generic = slot === "psa10" ? "PSA 10" : slot === "psa9" ? "PSA 9" : "Raw";
+  const g = String((card && card.grade) || "").toLowerCase();
+  if (!g || slot === "raw") return generic;
+  const own = PSA10_GRADES.includes(g) ? "psa10" : PSA9_GRADES.includes(g) ? "psa9" : null;
+  return own === slot ? card.grade : generic;
+}
+
+// The sell-decision badge text, naming the card's own grade ("Sell BGS 9.5", not "Sell PSA 9").
+function sellDecisionLabel(card, decision) {
+  const label = (SELL_DECISION_STYLE[decision] || SELL_DECISION_STYLE[""]).label;
+  if ((decision === "Sell PSA 9" || decision === "Sell PSA 10") && card && card.grade) return `Sell ${card.grade}`;
+  return label;
+}
+
+// True when a graded card's saved value may be for a different grade than the one it holds —
+// e.g. PSA 9 prices saved before it came back BGS 9.5. Comps saved since this was tracked
+// record their grade in `compsGrade`.
+function compsGradeMismatch(card) {
+  const g = String((card && card.grade) || "");
+  if (!g || /^psa\b/i.test(g)) return false;
+  const slot = PSA10_GRADES.includes(g.toLowerCase()) ? "psa10Avg" : PSA9_GRADES.includes(g.toLowerCase()) ? "psa9Avg" : null;
+  if (!slot || card[slot] == null) return false;
+  return String(card.compsGrade || "").toLowerCase() !== g.toLowerCase();
+}
 
 // ===== Selling method fee estimator =====
 // Each platform's real fee structure, so My Sales can suggest a realistic number instead of
@@ -732,8 +763,8 @@ function recommendedListing(card) {
   // won't pay a meaningful premium over what the card has actually been trading at.
   const basisMap = {
     "Sell Raw First": { avg: card.rawAvg, be: card.rawBE, label: "Raw", markup: RAW_LIST_MARKUP, history: card.rawHistory },
-    "Sell PSA 9": { avg: card.psa9Avg, be: card.psa9BE, label: "PSA 9", markup: GRADED_LIST_MARKUP, history: card.psa9History },
-    "Sell PSA 10": { avg: card.psa10Avg, be: card.psa10BE, label: "PSA 10", markup: GRADED_LIST_MARKUP, history: card.psa10History },
+    "Sell PSA 9": { avg: card.psa9Avg, be: card.psa9BE, label: gradeSlotLabel(card, "psa9"), markup: GRADED_LIST_MARKUP, history: card.psa9History },
+    "Sell PSA 10": { avg: card.psa10Avg, be: card.psa10BE, label: gradeSlotLabel(card, "psa10"), markup: GRADED_LIST_MARKUP, history: card.psa10History },
   };
   const basis = basisMap[card.sellDecision];
   if (!basis || basis.avg == null) return null;

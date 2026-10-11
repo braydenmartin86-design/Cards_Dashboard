@@ -92,7 +92,7 @@ function Home({ cards, pokemonCards, targets, boxBreaks, salesItems, buyList, co
               return (
                 <DashRow key={c.id} onClick={() => setTab(c.sport === "Pokémon" ? "pokemon" : "portfolio")}>
                   <span style={{ fontWeight: 600 }}>{c.player}</span>
-                  <span className="mono" style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 999, background: `${style.color}22`, color: style.color }}>{style.label}</span>
+                  <span className="mono" style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 999, background: `${style.color}22`, color: style.color }}>{sellDecisionLabel(c, c.sellDecision)}</span>
                 </DashRow>
               );
             })

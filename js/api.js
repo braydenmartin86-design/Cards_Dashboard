@@ -810,10 +810,25 @@ function listingCardNumber(r) {
 
 // Keep only sold listings that clearly are this card — same player, year, set, card number,
 // parallel, grade, and auto/relic status.
+// The names a grading company goes by in listing titles and CardSight's grade data, lowercased.
+const GRADER_ALIASES = {
+  bgs: ["bgs", "beckett"],
+  beckett: ["bgs", "beckett"],
+  cgc: ["cgc", "csg"],
+  csg: ["cgc", "csg"],
+};
+function graderNames(company) {
+  const key = normalizeCardText(company);
+  return GRADER_ALIASES[key] || [key];
+}
+
 function filterSoldListings(card, results, q) {
   const p = cardProfile(card);
+  // Sellers and CardSight name some graders more than one way ("Beckett 9.5" is a BGS 9.5).
+  // The value can't run on into a decimal, so a BGS 9 search doesn't take BGS 9.5 sales.
+  const companyNames = p.grade && p.grade.company ? graderNames(p.grade.company) : [];
   const gradeInTitle = p.grade
-    ? new RegExp(`\\b${p.grade.company ? escapeRegExp(p.grade.company) + "\\s*(?:gem\\s*(?:mint|mt)\\s*)?" : ""}${escapeRegExp(p.grade.value)}\\b`, "i")
+    ? new RegExp(`\\b${companyNames.length ? `(?:${companyNames.map(escapeRegExp).join("|")})\\s*(?:gem\\s*(?:mint|mt)\\s*)?` : ""}${escapeRegExp(p.grade.value)}(?![.\\d])`, "i")
     : null;
   const mostOf = (tokens, hay) => tokens.filter((t) => hay.includes(t)).length >= Math.ceil((tokens.length * 2) / 3);
 
@@ -874,7 +889,9 @@ function filterSoldListings(card, results, q) {
       if (looksSlabbed) return reject("graded (yours is raw)");
     } else if (slabGrade) {
       if (String(r.grade.grade_value) !== p.grade.value) return reject("a different grade");
-      if (p.grade.company && normalizeCardText(r.grade.company_name) !== normalizeCardText(p.grade.company)) return reject("a different grading company");
+      // Matches "BGS", "Beckett" or "Beckett Grading Services".
+      const slabCompany = normalizeCardText(r.grade.company_name).split(" ");
+      if (p.grade.company && !companyNames.some((n) => slabCompany.includes(n))) return reject("a different grading company");
     } else if (!gradeInTitle.test(rawTitle)) {
       return reject(looksSlabbed ? "a different grade" : `raw or not ${p.grade.company || ""} ${p.grade.value}`.replace(/\s+/g, " "));
     }

@@ -2,7 +2,7 @@
 
 // Global constants & styling dictionaries
 const STATUS_OPTIONS = ["Raw", "At Grading", "Graded", "Listed", "Sold"];
-const GRADE_OPTIONS = ["PSA 9", "PSA 10", "SGC 9", "SGC 10", "BGS 9", "BGS 9.5", "BGS 10"];
+const GRADE_OPTIONS = ["PSA 9", "PSA 10", "SGC 9", "SGC 9.5", "SGC 10", "BGS 9", "BGS 9.5", "BGS 10", "CGC 9", "CGC 9.5", "CGC 10", "TAG 9", "TAG 10"];
 const GRADING_SERVICE_OPTIONS = [
   "PSA via Australia", 
   "PSA via ShipMyCards", 

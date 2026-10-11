@@ -342,7 +342,7 @@ function CardRow({ card, onClick, gridCols }) {
             color: isTopAction ? "#14161C" : style.color,
           }}
         >
-          {isTopAction ? "⚡ " : ""}{style.label}
+          {isTopAction ? "⚡ " : ""}{sellDecisionLabel(card, decision)}
         </span>
 
         {isHighRisk && (
@@ -674,6 +674,10 @@ function cardWithCompValues(card, values, details, trend) {
   const today = new Date().toISOString().slice(0, 10);
   const patch = { compsUpdatedAt: today };
   if (details) patch.compSearch = details;
+  // Graded cards: remember which grade these comps are for, so old values for another grade
+  // (e.g. PSA 9 prices on what came back a BGS 9.5) can be flagged.
+  const ownSlot = card.grade ? tierKeyForGrade(card.grade) : null;
+  if (ownSlot && values[ownSlot] != null) patch.compsGrade = card.grade;
   for (const [key, value] of Object.entries(values)) {
     const f = TIER_FIELDS[key];
     if (!f || value == null) continue;
@@ -940,7 +944,7 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update Comps", applyNo
               </button>
             </div>
           )}
-          {/pok[eé]mon/i.test(card.sport || "") && <PokemonPricesPanel details={details} onApply={onApply} />}
+          {/pok[eé]mon/i.test(card.sport || "") && <PokemonPricesPanel details={details} onApply={onApply} grade={grade} />}
           {error && <div style={{ fontSize: 12, color: "#B4472E", marginTop: 8 }}>{error}</div>}
           {found && source === "pasted" && pasteInfo && (
             <div style={{ fontSize: 11, color: "#8B90A0", marginTop: 8 }}>
@@ -968,7 +972,6 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update Comps", applyNo
                       <label style={{ fontWeight: 600, fontSize: 12.5, color: "#EDEAE1", display: "flex", alignItems: "center", gap: 6, margin: 0, cursor: canApply ? "pointer" : "default" }}>
                         {canApply && <input type="checkbox" checked={Boolean(c.use)} onChange={(e) => updateChoice(r.key, { use: e.target.checked })} style={{ width: "auto", margin: 0 }} />}
                         {r.grade || "Raw"}
-                        {r.grade && TIER_FIELDS[r.key] && TIER_FIELDS[r.key].label !== r.grade ? ` → ${TIER_FIELDS[r.key].label} column` : ""}
                       </label>
                       <span style={{ fontWeight: 700, color: "#C9A227" }}>{value ? fmtMoney(value.aud) : "—"}</span>
                     </div>
@@ -1068,7 +1071,12 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update Comps", applyNo
 
 // PokemonPriceTracker prices for a Pokémon card inside CompFinder: TCGplayer market (raw) and
 // recent eBay PSA 9 / PSA 10 prices. Tick what to use and apply.
-function PokemonPricesPanel({ details, onApply }) {
+function PokemonPricesPanel({ details, onApply, grade = null }) {
+  // PokemonPriceTracker only tracks PSA grades. A slabbed card can only take the price for its
+  // own grade, and only if that grade is PSA — PSA 9 prices are not BGS 9.5 prices.
+  const ownSlot = grade ? tierKeyForGrade(grade) : null;
+  const psaSlab = Boolean(grade && /^psa\b/i.test(grade));
+  const canUse = (key) => !grade || (psaSlab && key === ownSlot);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
@@ -1083,7 +1091,7 @@ function PokemonPricesPanel({ details, onApply }) {
       const r = await fetchPokemonPrices({ ...details, pptId: pptId || details.pptId });
       setResult(r);
       // Low-confidence graded prices (few recent sales) start unticked.
-      if (r.matched) setUse({ raw: r.rawAud != null, psa9: Boolean(r.psa9 && r.psa9.confidence !== "low"), psa10: Boolean(r.psa10 && r.psa10.confidence !== "low") });
+      if (r.matched) setUse({ raw: canUse("raw") && r.rawAud != null, psa9: canUse("psa9") && Boolean(r.psa9 && r.psa9.confidence !== "low"), psa10: canUse("psa10") && Boolean(r.psa10 && r.psa10.confidence !== "low") });
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -1113,7 +1121,7 @@ function PokemonPricesPanel({ details, onApply }) {
         ["psa10", "PSA 10 (eBay)", gradeText(result.psa10)],
       ]
     : [];
-  const anyTicked = rows.some(([k, , v]) => v && use[k]);
+  const anyTicked = rows.some(([k, , v]) => v && canUse(k) && use[k]);
 
   return (
     <div style={{ marginTop: 10, border: "1px solid #8B6FD655", borderRadius: 6, padding: "8px 10px" }}>
@@ -1151,9 +1159,17 @@ function PokemonPricesPanel({ details, onApply }) {
           <div style={{ fontSize: 11.5, color: "#A7ADBB", marginBottom: 4 }}>
             Matched: <b>{result.name}</b> #{result.number} · {result.set}
           </div>
+          {grade && !psaSlab && (
+            <div style={{ fontSize: 11.5, color: "#C9A227", marginBottom: 4, lineHeight: 1.5 }}>
+              PokemonPriceTracker only tracks PSA grades, so these can't be used for your {grade} — shown for reference only. Use CardSight Comps or enter {grade} sales by hand.
+            </div>
+          )}
+          {grade && psaSlab && (
+            <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 4 }}>Only the {grade} price can be applied to this slab.</div>
+          )}
           {rows.map(([key, label, value]) => (
             <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, margin: "2px 0", fontSize: 12, color: value ? "#EDEAE1" : "#5C6270", cursor: value ? "pointer" : "default" }}>
-              <input type="checkbox" disabled={!value} checked={Boolean(value && use[key])} onChange={(e) => setUse((u) => ({ ...u, [key]: e.target.checked }))} style={{ width: "auto", margin: 0 }} />
+              <input type="checkbox" disabled={!value || !canUse(key)} checked={Boolean(value && canUse(key) && use[key])} onChange={(e) => setUse((u) => ({ ...u, [key]: e.target.checked }))} style={{ width: "auto", margin: 0 }} />
               <span style={{ minWidth: 150 }}>{label}</span>
               <span style={{ fontWeight: 600, color: value ? "#C9A227" : "#5C6270" }}>{value || "no data"}</span>
             </label>
@@ -1722,7 +1738,7 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 12px" }}>
           <span className="mono" style={{ display: "inline-block", fontSize: 11, padding: "3px 10px", borderRadius: 999, background: `${style.color}22`, color: style.color }}>
-            {style.label} · priority {computed.sellPriority}
+            {sellDecisionLabel(card, computed.sellDecision)} · priority {computed.sellPriority}
           </span>
           {card.location && (
             <span className="mono" style={{ display: "inline-block", fontSize: 11, padding: "3px 10px", borderRadius: 999, background: `${(LOCATION_STYLE[card.location] || {}).color || "#8B90A0"}22`, color: (LOCATION_STYLE[card.location] || {}).color || "#8B90A0" }}>
@@ -1757,7 +1773,7 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
               </div>
             )}
             <div style={{ fontSize: 11, color: "#6B7180", marginTop: 8 }}>
-              {listing.markupPct}% above the {listing.label.toLowerCase()} average — just enough room for offers, since buyers check sold prices too.{" "}
+              {listing.markupPct}% above the {listing.label === "Raw" ? "raw" : listing.label} average — just enough room for offers, since buyers check sold prices too.{" "}
               The floor is your break-even; anything below that and you're paying to sell.
             </div>
             <BestOfferSettings listPrice={shown.listPrice} autoAccept={shown.autoAccept} autoDecline={shown.autoDecline} usd={usd} />
@@ -1824,9 +1840,14 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
             <SectionTitle>Market values (60d avg)</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
               <MiniStat label="Raw" value={computed.rawAvg != null ? fmtMoney(computed.rawAvg) : "—"} />
-              <MiniStat label="PSA 9" value={computed.psa9Avg != null ? fmtMoney(computed.psa9Avg) : "—"} />
-              <MiniStat label="PSA 10" value={computed.psa10Avg != null ? fmtMoney(computed.psa10Avg) : "—"} />
+              <MiniStat label={gradeSlotLabel(card, "psa9")} value={computed.psa9Avg != null ? fmtMoney(computed.psa9Avg) : "—"} />
+              <MiniStat label={gradeSlotLabel(card, "psa10")} value={computed.psa10Avg != null ? fmtMoney(computed.psa10Avg) : "—"} />
             </div>
+            {compsGradeMismatch(card) && (
+              <div style={{ fontSize: 11.5, color: "#C9A227", border: "1px solid #C9A22755", background: "#C9A2270f", borderRadius: 6, padding: "6px 9px", marginBottom: 10, lineHeight: 1.5 }}>
+                ⚠️ The {card.grade} value may really be a PSA price — it was saved before the app tracked which grade comps were for (or before the card was graded). Use 🔄 Update Comps to get {card.grade} sales.
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
               <TrendSparkline history={card.rawHistory} color="#5C7A99" />
               <TrendSparkline history={card.psa9History} color="#8B6FD6" />
@@ -1836,8 +1857,8 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
             <SectionTitle>Profitability (GGR = gross gain after cost)</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
               <MiniStat label="Raw GGR" value={computed.rawGGR != null ? fmtMoney(computed.rawGGR) : "—"} color={computed.rawGGR >= 0 ? "#4E8B6B" : "#B4472E"} />
-              <MiniStat label="PSA 9 GGR" value={computed.psa9GGR != null ? fmtMoney(computed.psa9GGR) : "—"} color={computed.psa9GGR >= 0 ? "#4E8B6B" : "#B4472E"} />
-              <MiniStat label="PSA 10 GGR" value={computed.psa10GGR != null ? fmtMoney(computed.psa10GGR) : "—"} color={computed.psa10GGR >= 0 ? "#4E8B6B" : "#B4472E"} />
+              <MiniStat label={`${gradeSlotLabel(card, "psa9")} GGR`} value={computed.psa9GGR != null ? fmtMoney(computed.psa9GGR) : "—"} color={computed.psa9GGR >= 0 ? "#4E8B6B" : "#B4472E"} />
+              <MiniStat label={`${gradeSlotLabel(card, "psa10")} GGR`} value={computed.psa10GGR != null ? fmtMoney(computed.psa10GGR) : "—"} color={computed.psa10GGR >= 0 ? "#4E8B6B" : "#B4472E"} />
             </div>
             {computed.psa10Avg == null && computed.psa9Avg != null && (
               <div style={{ fontSize: 10.5, color: "#C9A227", marginBottom: 8 }}>
