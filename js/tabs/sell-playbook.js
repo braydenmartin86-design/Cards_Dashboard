@@ -6,7 +6,7 @@ const FEE_COMPARISON = [
   { platform: "Whatnot (AU promo hours)", fee: "~7% all-in", note: "2am-4pm AEST/AEDT daily, through Dec 31 2026 — same following/volume caveat as eBay Live" },
   { platform: "Whatnot (standard)", fee: "~10.9% + $0.30", note: "8% commission + processing, outside promo hours" },
   { platform: "Standard eBay", fee: "~13.25% + $0.30", note: "No Store subscription, always available, no approval gate" },
-  { platform: "ShipMyCards Marketplace", fee: "1%", note: "Cheapest way to sell a vault card — smaller buyer pool, so slower" },
+  { platform: "ShipMyCards Marketplace", fee: "1%", note: "Cheapest, but very few buyers (~24 listings when checked, Oct 2026) — only worth a week's try for cards under US$50" },
   { platform: "Fanatics Collect auction (via SMC)", fee: "1% (buyer pays 20% premium)", note: "Graded only, US$50+ minimum" },
   { platform: "PC Sportscards eBay (via SMC)", fee: "~14% + US$1 (18% under US$50)", note: "Fastest ShipMyCards option, eBay's full audience" },
   { platform: "Facebook Marketplace/groups", fee: "0%", note: "No platform fee, but no buyer protection either" },
@@ -56,10 +56,10 @@ function SellingPlaybook() {
           color="#4E8B6B"
           body="Never bring it home first — see the golden rule above. Sell it while it's still in the US so you only pay one domestic shipping leg, not two international ones."
           steps={[
-            "Start on the ShipMyCards Marketplace (1%, no minimum) priced at comps — vault buyers can take it with no shipping",
-            "Graded and US$50+? If it hasn't sold in 2–3 weeks, consign it to Fanatics Collect's weekly auction through SMC (you keep the hammer minus 1%)",
-            "Raw US$50+, or a slab without much demand? Send it to PC Sportscards' eBay consignment through SMC (~14% + US$1 under US$1,000) — fastest payout",
-            "Under US$50? Don't consign — keep it on the Marketplace, or batch cheap cards into one shipment home and sell them as team lots",
+            "Graded and US$50+? Consign it straight to Fanatics Collect's weekly auction through SMC (you keep the hammer minus 1%)",
+            "Raw US$50+, or a slab without much demand? Send it straight to PC Sportscards' eBay consignment through SMC (~14% + US$1 under US$1,000) — fastest payout",
+            "Under US$50? Don't consign — try the ShipMyCards Marketplace (1%) for about a week, then batch cheap cards into one shipment home and sell them as team lots",
+            "Skip the Marketplace for anything over US$50 — it has very few buyers, so it mostly just costs you time",
             "Need cash now? The SMC Purchase Program pays 70–85% of conservative value instantly — usually a worse deal than waiting a week for PC Sportscards",
             "Payouts come back as SMC store credit — confirm how you cash it out",
           ]}
@@ -105,7 +105,7 @@ function SellingPlaybook() {
           color="#B4472E"
           body="If none of the above quite fits, work through these in order."
           steps={[
-            "Is it still in the ShipMyCards vault and you don't want to keep it? → Don't ship it home. Marketplace first, then Fanatics (graded) or PC Sportscards (see below).",
+            "Is it still in the ShipMyCards vault and you don't want to keep it? → Don't ship it home. Fanatics (graded US$50+) or PC Sportscards (US$50+), or a week on the Marketplace if it's under US$50 (see below).",
             "Is it worth $1,000+? → Look at Fanatics Collect (formerly PWCC) or a specialist high-value consignor for better exposure, not a generic listing",
             "Is it AFL or otherwise Australia-specific? → Check local groups before defaulting to eBay's global audience",
             "Do you have eBay Live access or the ability to go live on Whatnot during AU promo hours? → Use whichever is cheaper for that item",
@@ -120,21 +120,21 @@ function SellingPlaybook() {
         <div style={{ fontWeight: 700, fontSize: 14, color: "#4E8B6B", marginBottom: 10 }}>💰 My suggested approach (US$ values)</div>
         <ol style={{ margin: "0 0 12px", paddingLeft: 20, fontSize: 13, color: "#C6CAD4", lineHeight: 1.75 }}>
           <li style={{ marginBottom: 6 }}>
-            <b style={{ color: "#EDEAE1" }}>List on the Marketplace first, priced at comps.</b> At 1% it's by far the cheapest, and the buyer can keep the card in their own vault with no shipping.
-          </li>
-          <li style={{ marginBottom: 6 }}>
-            <b style={{ color: "#EDEAE1" }}>If it hasn't sold after about 3 weeks:</b>
+            <b style={{ color: "#EDEAE1" }}>US$50+: consign it straight away.</b>
             <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-              <li><b style={{ color: "#C9A227" }}>Graded, US$50+, strong demand</b> (e.g. a PSA 10 of a key rookie): Fanatics weekly auction.</li>
-              <li><b style={{ color: "#C9A227" }}>Everything else over US$50:</b> PC Sportscards. Their auctions start at 99c, so ask for fixed price with an auto-decline at your break-even; they allow that on cards US$50+.</li>
+              <li><b style={{ color: "#C9A227" }}>Graded, strong demand</b> (e.g. a PSA 10 of a key rookie): Fanatics weekly auction.</li>
+              <li><b style={{ color: "#C9A227" }}>Everything else:</b> PC Sportscards. Their auctions start at 99c, so ask for fixed price with an auto-decline at your break-even; they allow that on cards US$50+.</li>
             </ul>
           </li>
+          <li style={{ marginBottom: 6 }}>
+            <b style={{ color: "#EDEAE1" }}>Under US$50:</b> don't consign; 18% + US$1 is too much. Try the ShipMyCards Marketplace (1%) for about a week, then ship your cheap cards home together in one box and sell them as team lots like your Bulls lot.
+          </li>
           <li>
-            <b style={{ color: "#EDEAE1" }}>Under US$50:</b> don't consign; 18% + US$1 is too much. Leave it on the Marketplace, or ship your cheap cards home together in one box and sell them as team lots like your Bulls lot.
+            <b style={{ color: "#EDEAE1" }}>Optional:</b> if you're in no rush on a pricier card, put it on the Marketplace for a week first — but not longer.
           </li>
         </ol>
         <div style={{ fontSize: 11.5, color: "#6B7180", lineHeight: 1.7 }}>
-          The Marketplace-first habit pairs with the Listing check-up on My Sales: set the selling method to ShipMyCards Marketplace, and when it's 3 weeks unsold the check-up tells you to move it to PC Sportscards. Payouts from Fanatics and PC Sportscards come back as <b>ShipMyCards store credit</b> — check with SMC how and at what cost you can cash that out before relying on it for anything other than grading, shipping or buying.
+          Why only a week: the ShipMyCards Marketplace is tiny — about 24 cards listed when checked in October 2026, with no sales history shown — so most cards would just sit. If you set a listing's selling method to ShipMyCards Marketplace, the Listing check-up on My Sales tells you what to do next after 7 days unsold. Payouts from Fanatics and PC Sportscards come back as <b>ShipMyCards store credit</b> — check with SMC how and at what cost you can cash that out before relying on it for anything other than grading, shipping or buying.
         </div>
       </div>
 
@@ -188,7 +188,7 @@ function SellingPlaybook() {
 }
 
 const SMC_OPTIONS = [
-  { name: "ShipMyCards Marketplace", fee: "1%", bestFor: "Default first try — any card, no minimum. Smaller buyer pool, so slower" },
+  { name: "ShipMyCards Marketplace", fee: "1%", bestFor: "Cards under US$50, for about a week — very few buyers (~24 listings when checked), so don't wait on it" },
   { name: "Fanatics Collect auction (via SMC)", fee: "0% + 1% SMC (buyer pays 20% premium)", bestFor: "Graded only, $50+ minimum. High-demand slabs; weekly auctions run ~10 days" },
   { name: "Fanatics Collect Buy Now (via SMC)", fee: "6% + 1% SMC", bestFor: "Graded $50+ when you'd rather set the price than auction it" },
   { name: "PC Sportscards eBay (via SMC)", fee: "13–17% + US$1 + 1% (8% at $1k+, 5% at $5k+)", bestFor: "Raw $50+, or slabs without much Fanatics demand. Fastest turnaround" },

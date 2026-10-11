@@ -1712,7 +1712,7 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
   const style = SELL_DECISION_STYLE[computed.sellDecision] || SELL_DECISION_STYLE[""];
   const listing = recommendedListing(computed);
   const sellMethod = listing ? suggestedSellingMethod(computed, listing) : null;
-  const timingCheck = !isPkmn && listing ? seasonalSellCheck(card.sport) : null;
+  const timingCheck = listing ? seasonalSellCheck(isPkmn ? "Pokémon" : card.sport) : null;
 
   return (
     <div className="modalOverlay" onClick={onClose}>

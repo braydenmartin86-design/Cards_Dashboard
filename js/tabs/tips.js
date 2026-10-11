@@ -120,46 +120,48 @@ function TipsAndTricks() {
   );
 }
 
+// Month-by-month plan per sport. SHIP months sit ~3 months before a SELL window, since grading
+// from Australia takes about 3 months. GRADE = hold, or cards away being graded.
 const SEASON_ROWS = [
   {
     sport: "Football (NFL)",
     key: "NFL",
     blocks: [
-      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "BUY" }, { m: "Mar", t: "BUY" }, { m: "Apr", t: "SHIP" },
-      { m: "May", t: "GRADE" }, { m: "Jun", t: "GRADE" }, { m: "Jul", t: "SELL" }, { m: "Aug", t: "SELL" },
-      { m: "Sep", t: "GRADE" }, { m: "Oct", t: "GRADE" }, { m: "Nov", t: "GRADE" }, { m: "Dec", t: "GRADE" },
+      { m: "Jan", t: "SELL" }, { m: "Feb", t: "GRADE" }, { m: "Mar", t: "BUY" }, { m: "Apr", t: "BUY" },
+      { m: "May", t: "BUY" }, { m: "Jun", t: "SHIP" }, { m: "Jul", t: "GRADE" }, { m: "Aug", t: "SELL" },
+      { m: "Sep", t: "SELL" }, { m: "Oct", t: "GRADE" }, { m: "Nov", t: "GRADE" }, { m: "Dec", t: "GRADE" },
     ],
-    note: "Draft (Apr) is the cheapest buying window before rookie hype builds; training camp/preseason (Jul-Aug) is peak hype before results matter, and the best sell window because nobody's been exposed as a bust yet. Ship right after buying (Apr) — that's ~3 months of grading runway before the Jul-Aug sell window opens.",
+    note: "Demand peaks in season — Week 1 rookie hype (Sep) and the playoffs (Jan). The off-season after the Super Bowl (Mar-May) is the cheapest stretch to buy. Careful around the draft (late Apr): drafted rookies usually jump in price, so buy them before it or well after. Ship in Jun so slabs are back for the Aug-Sep sell window.",
   },
   {
     sport: "AFL",
     key: "AFL",
     blocks: [
-      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "BUY" }, { m: "Mar", t: "BUY" }, { m: "Apr", t: "GRADE" },
+      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "GRADE" }, { m: "Mar", t: "SELL" }, { m: "Apr", t: "GRADE" },
       { m: "May", t: "SHIP" }, { m: "Jun", t: "GRADE" }, { m: "Jul", t: "GRADE" }, { m: "Aug", t: "SELL" },
-      { m: "Sep", t: "SELL" }, { m: "Oct", t: "GRADE" }, { m: "Nov", t: "BUY" }, { m: "Dec", t: "GRADE" },
+      { m: "Sep", t: "SELL" }, { m: "Oct", t: "BUY" }, { m: "Nov", t: "BUY" }, { m: "Dec", t: "SHIP" },
     ],
-    note: "Finals + Grand Final (Aug-Sep) plus the Brownlow Medal announcement are the year's biggest attention spike — best sell window by far. Ship in May, ~3 months ahead of the Aug sell window, not right before it. Draft/trade period (Nov) often creates buying gaps as attention shifts to incoming talent.",
+    note: "Finals, the Grand Final and the Brownlow (Aug-Sep) are the biggest spike by far, with a smaller one at Round 1 (Mar). The quiet stretch after the Grand Final (Oct-Nov, including the trade period and draft) is the cheapest time to buy. Ship in Dec for Mar, or in May for Aug-Sep. AFL buyers are mostly local, so check Australian groups too.",
   },
   {
     sport: "Baseball (MLB)",
     key: "MLB",
     blocks: [
-      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "SELL" }, { m: "Mar", t: "SELL" }, { m: "Apr", t: "GRADE" },
-      { m: "May", t: "GRADE" }, { m: "Jun", t: "GRADE" }, { m: "Jul", t: "GRADE" }, { m: "Aug", t: "GRADE" },
-      { m: "Sep", t: "GRADE" }, { m: "Oct", t: "BUY" }, { m: "Nov", t: "BUY" }, { m: "Dec", t: "SHIP" },
+      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "GRADE" }, { m: "Mar", t: "SELL" }, { m: "Apr", t: "SELL" },
+      { m: "May", t: "SELL" }, { m: "Jun", t: "GRADE" }, { m: "Jul", t: "GRADE" }, { m: "Aug", t: "GRADE" },
+      { m: "Sep", t: "GRADE" }, { m: "Oct", t: "GRADE" }, { m: "Nov", t: "BUY" }, { m: "Dec", t: "SHIP" },
     ],
-    note: "Spring training (Feb-Mar) is peak hype before a full season of stats can disappoint — sell into that story. Buy right after the postseason (Oct-Nov) when attention drops off, then ship in Dec — that's the ~3 months of runway needed to have graded cards back in hand for the Feb-Mar sell window, not shipping in the same month you're trying to sell.",
+    note: "Interest builds through spring training into Opening Day (late Mar), early-season hot starts (Apr) and Bowman's release (May), when prospects get hyped — sell into that. The off-season (Nov-Dec) is the buying window; avoid buying players still in the October playoffs. Ship in Dec so slabs are back for Mar.",
   },
   {
     sport: "Basketball (NBA)",
     key: "NBA",
     blocks: [
-      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "GRADE" }, { m: "Mar", t: "GRADE" }, { m: "Apr", t: "GRADE" },
-      { m: "May", t: "BUY" }, { m: "Jun", t: "BUY" }, { m: "Jul", t: "SHIP" }, { m: "Aug", t: "GRADE" },
-      { m: "Sep", t: "SELL" }, { m: "Oct", t: "SELL" }, { m: "Nov", t: "GRADE" }, { m: "Dec", t: "GRADE" },
+      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "SELL" }, { m: "Mar", t: "GRADE" }, { m: "Apr", t: "GRADE" },
+      { m: "May", t: "GRADE" }, { m: "Jun", t: "BUY" }, { m: "Jul", t: "SHIP" }, { m: "Aug", t: "BUY" },
+      { m: "Sep", t: "GRADE" }, { m: "Oct", t: "SELL" }, { m: "Nov", t: "SELL" }, { m: "Dec", t: "GRADE" },
     ],
-    note: "Playoffs/Finals run through May-Jun, which is when a deep run or breakout series creates real buying dips for anyone eliminated early. Ship in Jul, right after buying — ~3 months ahead of the Sep tip-off sell spike, not the month before it.",
+    note: "Prices for players still in the playoffs (Apr-Jun) are at their highest, so only buy players knocked out early. The real lull is after the Finals and draft (late Jun-Aug). Ship in Jul for the season start and rookie hype (Oct-Nov); All-Star and Prizm's release (Feb) are a second window.",
   },
   {
     sport: "WWE",
@@ -169,17 +171,17 @@ const SEASON_ROWS = [
       { m: "May", t: "GRADE" }, { m: "Jun", t: "BUY" }, { m: "Jul", t: "BUY" }, { m: "Aug", t: "GRADE" },
       { m: "Sep", t: "GRADE" }, { m: "Oct", t: "SHIP" }, { m: "Nov", t: "GRADE" }, { m: "Dec", t: "GRADE" },
     ],
-    note: "WrestleMania season (Feb-Apr, the show itself early April) is easily the single biggest spike of the year for the whole hobby — sell into it. Buy in the quiet post-Mania dip (Jun-Jul), then ship in Oct — that's ~3-4 months of grading runway to have cards back in hand right as the next WrestleMania buildup starts in Feb.",
+    note: "Royal Rumble (late Jan) through WrestleMania (Apr) is the biggest spike of the year — sell into it. Buy in the quiet post-Mania dip (Jun-Jul), then ship in Oct so slabs are back as the Rumble/Mania buildup starts.",
   },
   {
     sport: "Soccer",
     key: "Soccer",
     blocks: [
-      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "BUY" }, { m: "Mar", t: "GRADE" }, { m: "Apr", t: "SHIP" },
-      { m: "May", t: "GRADE" }, { m: "Jun", t: "SELL" }, { m: "Jul", t: "SELL" }, { m: "Aug", t: "SELL" },
-      { m: "Sep", t: "GRADE" }, { m: "Oct", t: "BUY" }, { m: "Nov", t: "BUY" }, { m: "Dec", t: "GRADE" },
+      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "GRADE" }, { m: "Mar", t: "SELL" }, { m: "Apr", t: "SELL" },
+      { m: "May", t: "BUY" }, { m: "Jun", t: "SHIP" }, { m: "Jul", t: "BUY" }, { m: "Aug", t: "GRADE" },
+      { m: "Sep", t: "SELL" }, { m: "Oct", t: "GRADE" }, { m: "Nov", t: "GRADE" }, { m: "Dec", t: "SHIP" },
     ],
-    note: "European season runs Aug-May; season kickoff (Aug) and a June-July major tournament (World Cup/Euros, when one's on — 2026 is a World Cup year) are massive spikes. Ship in Apr, ~3 months ahead of the Jun sell window, using the Jan transfer-window buy. Jan transfer window creates cheap entry points on players about to move to bigger clubs.",
+    note: "Normal years: the club off-season (May-Jul) is the quiet buying window; sell at the season start (Sep) and the Champions League knockouts and title run-ins (Mar-Apr). Ship in Jun for Sep, or Dec for Mar. Tournament years are different — the Euros (2028) and World Cup (2030) make Jun-Jul a big sell window instead. The Jan transfer window can also be a cheap entry for players about to join bigger clubs.",
   },
   {
     sport: "MMA",
@@ -189,10 +191,19 @@ const SEASON_ROWS = [
       { m: "May", t: "GRADE" }, { m: "Jun", t: "SELL" }, { m: "Jul", t: "SELL" }, { m: "Aug", t: "GRADE" },
       { m: "Sep", t: "GRADE" }, { m: "Oct", t: "GRADE" }, { m: "Nov", t: "BUY" }, { m: "Dec", t: "GRADE" },
     ],
-    note: "International Fight Week (late Jun/early Jul) is the promotion's biggest annual event and the clearest sell spike. Ship in Apr, right after buying, for ~3 months of runway before it. No off-season means quieter months are more about the absence of a big card than a calendar rule — always check who's actually fighting soon.",
+    note: "International Fight Week (late Jun/early Jul) is the promotion's biggest annual event and the clearest sell spike. Ship in Apr for ~3 months of runway. There's no off-season, so who's fighting soon matters far more than the month — sell a fighter's cards in the build-up to a big fight.",
+  },
+  {
+    sport: "Pokémon",
+    key: "Pokémon",
+    blocks: [
+      { m: "Jan", t: "GRADE" }, { m: "Feb", t: "SELL" }, { m: "Mar", t: "GRADE" }, { m: "Apr", t: "GRADE" },
+      { m: "May", t: "BUY" }, { m: "Jun", t: "BUY" }, { m: "Jul", t: "GRADE" }, { m: "Aug", t: "SHIP" },
+      { m: "Sep", t: "GRADE" }, { m: "Oct", t: "GRADE" }, { m: "Nov", t: "SELL" }, { m: "Dec", t: "SELL" },
+    ],
+    note: "Weaker seasons than sports — set releases (roughly every 3 months) matter more than the month. Holiday demand (Nov-Dec) and Pokémon Day (27 Feb) are the clearest sell windows; ship in Aug so slabs are back for the holidays. New-set singles are usually priced highest at release and drop over the following weeks, so buy those once prices settle rather than on release day.",
   },
 ];
-
 const SEASON_COLORS = {
   BUY: { bg: "#4E8B6B33", text: "#7FC69B" },
   SELL: { bg: "#B4472E33", text: "#E38A73" },

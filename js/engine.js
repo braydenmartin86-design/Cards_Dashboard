@@ -98,6 +98,7 @@ const SELLING_METHOD_OPTIONS = [
   "SMC card show",
   "SMC Purchase Program",
   "Facebook / local",
+  "Card show (in person)",
   "Other",
 ];
 
@@ -148,6 +149,7 @@ function estimateSellingFee(method, price) {
       return p * 0.02 + 10 * currentUsdToAudRate();
     case "SMC Purchase Program":
     case "Facebook / local":
+    case "Card show (in person)":
       return 0;
     default:
       return null; // Other — unknown, leave for manual entry
@@ -780,8 +782,11 @@ function recommendedListing(card) {
 
 // Which route to actually sell through, using the same rules as the Selling Playbook. Cards in
 // the ShipMyCards vault are sold from there (never shipped home first) using SMC's own consignment
-// partners: Marketplace (1%) when you can wait, Fanatics Collect auction for graded US$50+,
-// PC Sportscards' eBay consignment otherwise. Cards in hand = self-list.
+// partners: Fanatics Collect auction for graded US$50+, PC Sportscards' eBay consignment for the
+// rest over US$50. SMC's own Marketplace has very few buyers (about 24 listings when checked in
+// Oct 2026), so it's only worth a short try for cards under US$50. Cards in hand = self-list.
+const SMC_MARKETPLACE_TRY_DAYS = 7;
+
 function suggestedSellingMethod(card, listing) {
   if (!listing) return null;
   const value = listing.listPrice;
@@ -789,22 +794,21 @@ function suggestedSellingMethod(card, listing) {
   const isGraded = card.status === "Graded" || Boolean(card.grade);
 
   if (card.location === "ShipMyCards Vault") {
-    const marketplaceFirst = "Patient? List it on the ShipMyCards Marketplace first for just 1% — buyers there can keep it in their own vault with no shipping. If it hasn't sold in 2–3 weeks, send it to ";
     if (isGraded && usd >= 50) {
       return {
         method: "SMC → Fanatics Collect auction",
-        why: `${marketplaceFirst}Fanatics Collect's weekly auction through ShipMyCards (graded, US$50+). You keep the full hammer price minus SMC's 1% — but buyers add a 20% premium on top, so bids land below eBay comps. For a card with deep demand (PSA 10 key rookies) that's usually the best net; for a thin market, PC Sportscards' eBay consignment may do better.`,
+        why: `Fanatics Collect's weekly auction through ShipMyCards (graded, US$50+). You keep the full hammer price minus SMC's 1% — but buyers add a 20% premium on top, so bids land below eBay comps. For a card with deep demand (PSA 10 key rookies) that's usually the best net; for a thin market, PC Sportscards' eBay consignment may do better.`,
       };
     }
     if (usd < 50) {
       return {
         method: "ShipMyCards Marketplace",
-        why: `Under US$50, PC Sportscards' eBay consignment takes ~18% + US$1 — a big bite on a cheap card. List it on the ShipMyCards Marketplace for 1% instead, or save cheap cards up and bring them home in one shipment to sell as a team lot.`,
+        why: `Under US$50, PC Sportscards' eBay consignment takes ~18% + US$1 — a big bite on a cheap card. Give the ShipMyCards Marketplace (1%) about a week — it has very few buyers, so don't wait longer. Then save cheap cards up and bring them home in one shipment to sell as a team lot.`,
       };
     }
     return {
       method: "SMC → PC Sportscards (eBay)",
-      why: `${marketplaceFirst}PC Sportscards' eBay consignment through ShipMyCards — fastest payout and the biggest audience. About ${usd < 1000 ? "14%" : usd < 5000 ? "9%" : "6%"} + US$1 all in. Ask for fixed price with an auto-decline at your break-even, since their auctions start at 99c.`,
+      why: `PC Sportscards' eBay consignment through ShipMyCards — fastest payout and the biggest audience. About ${usd < 1000 ? "14%" : usd < 5000 ? "9%" : "6%"} + US$1 all in. Ask for fixed price with an auto-decline at your break-even, since their auctions start at 99c.`,
     };
   }
 

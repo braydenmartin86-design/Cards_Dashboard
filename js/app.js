@@ -576,6 +576,18 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
 
         {tab === "quickscan" && <QuickScan setBuyList={setBuyList} onAddToCollection={addCardsToCollection} />}
 
+        {tab === "cardshow" && (
+          <CardShowPlanner
+            cards={cards}
+            pokemonCards={pokemonCards}
+            targets={targets}
+            setTargets={setTargets}
+            onUpdateCardIn={updateCardIn}
+            onAddToCollection={addCardsToCollection}
+            setTab={setTab}
+          />
+        )}
+
         {tab === "targets" && <MonthlyTargets targets={targets} setTargets={setTargets} />}
 
         {tab === "sellplaybook" && <SellingPlaybook />}
@@ -712,6 +724,9 @@ function Header({ tab, setTab, onAdd, onExport, onImport, backupStatus }) {
         </TabButton>
         <TabButton active={tab === "quickscan"} onClick={() => setTab("quickscan")} icon={<span style={{ fontSize: 13 }}>📷</span>}>
           Quick Scan
+        </TabButton>
+        <TabButton active={tab === "cardshow"} onClick={() => setTab("cardshow")} icon={<span style={{ fontSize: 13 }}>🎪</span>}>
+          Card Show
         </TabButton>
         <TabButton active={tab === "targets"} onClick={() => setTab("targets")} icon={<span style={{ fontSize: 13 }}>🎯</span>}>
           Monthly Targets

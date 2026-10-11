@@ -429,21 +429,28 @@ function listingCheck(c) {
   const trend = c.priceTrend && c.priceTrend.points ? trendChangePct(c.priceTrend.points) : null;
   const falling = trend != null && trend <= -0.05;
   const ebay = !c.sellingMethod || /ebay/i.test(c.sellingMethod);
-  // Vault cards try the 1% Marketplace first, then go to SMC's consignment partners.
+  // The ShipMyCards Marketplace has very few buyers, so it only gets a week. After that: under
+  // US$50 bring it home to sell in a lot; over, consign it (Fanatics for slabs, else PC Sportscards).
   const smcMarketplace = c.sellingMethod === "ShipMyCards Marketplace";
-  const smcNext = c.grade && price != null && audToUsd(price) >= 50 ? "Fanatics Collect's weekly auction through ShipMyCards" : "PC Sportscards' eBay consignment through ShipMyCards";
+  const priceUsd = price != null ? audToUsd(price) : null;
+  const smcNext =
+    priceUsd != null && priceUsd < 50
+      ? "bring it home with your other cheap vault cards in one shipment and sell them as a team lot"
+      : c.grade
+      ? "move it to Fanatics Collect's weekly auction through ShipMyCards"
+      : "move it to PC Sportscards' eBay consignment through ShipMyCards";
   const atFloor = price != null && price <= breakEven * 1.02;
   const base = { card: c, totalDays, stepDays, price, value, breakEven, compsAge };
   const step = (stage, priority, color, text, suggested) => ({ ...base, stage, priority, color, text, suggested: suggested != null && suggested < price ? suggested : null });
+
+  if (smcMarketplace && stepDays >= SMC_MARKETPLACE_TRY_DAYS) {
+    return step("relist", 4, "#5C7A99", `No sale in ${stepDays} days on the ShipMyCards Marketplace — it has very few buyers, so ${smcNext}.`);
+  }
 
   if (stepDays < LISTING_STEPS.check) return { ...base, stage: "fresh", priority: 9 };
   if (price == null) return step("noPrice", 2, "#C9A227", "Add the price it's listed at so the check-up can suggest cuts.");
   if (value == null || compsAge == null || compsAge >= STALE_COMPS_DAYS) {
     return step("comps", 3, "#C9A227", `Update its comps before changing the price — ${compsAge == null ? "it has none saved" : `they're ${compsAge} days old`}.`);
-  }
-
-  if (stepDays >= LISTING_STEPS.cut && smcMarketplace) {
-    return step("relist", 4, "#5C7A99", `No sale in ${stepDays} days on the ShipMyCards Marketplace — move it to ${smcNext}.`);
   }
 
   const floorPrice = nice(breakEven);
