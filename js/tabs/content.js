@@ -37,6 +37,15 @@ const SPORT_TAGS = {
   WWE: "#wwe #wrestlingcards",
   "Pokémon": "#pokemon #pokemontcg #pokemoncards",
 };
+// For cards you don't own: your screen and your own cards as B-roll, never someone else's photos or videos.
+const MARKET_SHOTS = [
+  "Screen recording: eBay sold listings or a price chart — blur or crop usernames and seller names",
+  "B-roll: a card you own from the same set or sport, or flicking through a binder",
+  "Simple text slides with the prices (YouTube editor or CapCut)",
+  "End shot: hands on cards with the key number as on-screen text",
+];
+const NFA = "Not financial advice.";
+
 function hashtagsFor(sport) {
   return `#shorts #sportscards #thehobby #cardcollector ${SPORT_TAGS[sport] || ""}`.trim();
 }
@@ -265,6 +274,59 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     });
   }
 
+  // 9b. Cards you don't own: off-season buy lists, a sell window about to open, your watchlist.
+  if (typeof SEASON_ROWS !== "undefined") {
+    const monthName = new Date().toLocaleString("en-AU", { month: "long" });
+    SEASON_ROWS.filter((r) => r.blocks[month0]?.t === "BUY").slice(0, 2).forEach((r) => {
+      const picks = (targets || []).filter((t) => t.status === "Watching" && t.sport === r.key).slice(0, 3);
+      const sellMonths = r.blocks.filter((b) => b.t === "SELL").map((b) => b.m).join(", ");
+      ideas.push({
+        key: `offseason-${r.key}-${month}`,
+        when: "Off-season buying",
+        title: `${r.sport} cards I'd buy in the off-season`,
+        pillar: "Budget Picks",
+        hook: `"${r.sport} cards are at their cheapest right now. Here's what I'd be buying."`,
+        beats: ["Why prices dip now — no games, less hype, fewer buyers", picks.length ? `Your picks: ${picks.map((t) => t.player).join(", ")}` : "2–3 players you'd buy — a rookie, a steady star, a sleeper", "Today's sold price for each (screen recording)", `When they usually peak: ${sellMonths}`, "Say it's your homework, not advice"],
+        onScreen: [...picks.map((t) => `${t.player}${t.targetPriceRaw ? ` — under ${money0(t.targetPriceRaw)}` : ""}`), `Prices peak: ${sellMonths}`],
+        shots: MARKET_SHOTS,
+        caption: `Off-season buys 🛒 ${NFA} ${hashtagsFor(r.key)}`,
+        source: `From your season calendar — ${monthName} is a BUY month for ${r.sport}. ${picks.length ? "Picks from Monthly Targets." : "Add Monthly Targets for this sport to fill in the picks."}`,
+      });
+    });
+    const next = (month0 + 1) % 12;
+    const heating = SEASON_ROWS.find((r) => r.blocks[month0]?.t !== "SELL" && r.blocks[next]?.t === "SELL");
+    if (heating) {
+      ideas.push({
+        key: `heating-${heating.key}-${month}`,
+        when: "Prices about to rise",
+        title: `Why ${heating.sport} card prices go up next month`,
+        pillar: "Market Moves",
+        hook: `"If you want ${heating.sport} cards, you've got about a month before prices jump."`,
+        beats: ["What happens next month (season start, finals, playoffs)", "Show a card's price last year: quiet month vs peak month", "Buyers: get in now. Sellers: wait for the peak", "Ask who they're watching"],
+        onScreen: [`Peak: ${heating.blocks[next].m}`, "Buy before · sell during"],
+        shots: MARKET_SHOTS,
+        caption: `Timing is everything in cards ⏰ ${NFA} ${hashtagsFor(heating.key)}`,
+        source: `From your season calendar — ${heating.sport} turns to SELL next month. ${heating.note.split(". ")[0]}.`,
+      });
+    }
+  }
+  const watching = (targets || []).filter((t) => t.status === "Watching");
+  if (watching.length >= 3) {
+    const top = [...watching].sort((a, b) => (typeof computeConfidence === "function" ? computeConfidence(b) - computeConfidence(a) : 0)).slice(0, 3);
+    ideas.push({
+      key: `watchlist-${month}`,
+      when: "Your watchlist",
+      title: "3 cards I'm watching (I don't own them yet)",
+      pillar: "Market Moves",
+      hook: `"I don't own any of these yet. Here's the price I'm waiting for on each."`,
+      beats: top.map((t) => `${t.player}${t.cardToLookFor ? ` (${t.cardToLookFor})` : ""} — ${t.reasoning ? t.reasoning.split(".")[0] : "why you like them"}${t.targetPriceRaw ? `, waiting for ${money0(t.targetPriceRaw)}` : ""}`).concat(["Follow to see if I get them"]),
+      onScreen: top.map((t) => `${t.player}${t.targetPriceRaw ? `: under ${money0(t.targetPriceRaw)}` : ""}`),
+      shots: MARKET_SHOTS,
+      caption: `My watchlist 👀 ${NFA} ${hashtagsFor(top[0].sport)}`,
+      source: `From Monthly Targets — ${watching.length} cards on watch. Do a follow-up when you buy one.`,
+    });
+  }
+
   // 10. Most recent completed box break.
   const box = [...(boxBreaks || [])].filter((b) => b.status === "Completed").sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
   if (box && typeof boxTotals === "function") {
@@ -306,6 +368,146 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     source: "Evergreen — swap in a real card from My Cards.",
   });
   return ideas;
+}
+
+// ----- Market kit maker: a filming kit for any card, owned or not -----
+const MARKET_FORMATS = [
+  { key: "move", label: "📈 How this card's price moved", a: "Price then (A$)", b: "Price now (A$)", extra: "Over how long? (e.g. in 3 months)" },
+  { key: "offseason", label: "🗓️ Buy it in the off-season", a: "Price now (A$)", b: "Typical in-season price (A$)" },
+  { key: "guess", label: "🤔 Guess what it sold for", a: "Sold price (A$)", extra: "Where / when it sold (e.g. eBay, last week)" },
+  { key: "gap", label: "💎 Raw vs PSA 10 — worth grading?", a: "Raw price (A$)", b: "PSA 10 price (A$)" },
+  { key: "vs", label: "⚖️ This or that?", a: "Card 1 price (A$)", b: "Card 2 price (A$)", other: "Card 2" },
+  { key: "budget", label: "💵 What $X gets you right now", a: "Budget (A$)", extra: "The cards it gets you (one per line)" },
+];
+
+function buildMarketIdea(f) {
+  const card = f.card.trim() || "this card";
+  const a = Number(f.a) || 0;
+  const b = Number(f.b) || 0;
+  const tags = hashtagsFor(f.sport);
+  const base = { key: `market-${crypto.randomUUID()}`, when: "Market kit", shots: MARKET_SHOTS, source: "From the market kit maker — you don't need to own the card. Use your own screen recordings, not other people's photos." };
+  if (f.fmt === "move") {
+    const pct = a > 0 ? Math.round(((b - a) / a) * 100) : 0;
+    const up = b >= a;
+    const span = f.extra.trim() || "recently";
+    return { ...base, pillar: "Market Moves", title: `${card}: ${money0(a)} → ${money0(b)} ${span}`, hook: `"${card} was ${money0(a)}. Now it's ${money0(b)}. Here's what happened."`, beats: [`The price then: ${money0(a)}`, `The price now: ${money0(b)} (${up ? "+" : ""}${pct}% ${span})`, "Why it moved — games, injury, news, a new release, hype", up ? "Sell into it, or is there more to come?" : "Buy the dip or stay away?", "Ask what they think happens next"], onScreen: [`Then: ${money0(a)}`, `Now: ${money0(b)}`, `${up ? "📈 +" : "📉 "}${pct}%`], caption: `${up ? "📈" : "📉"} ${card} ${up ? "up" : "down"} ${Math.abs(pct)}% ${span}. ${NFA} ${tags}` };
+  }
+  if (f.fmt === "offseason") {
+    const pct = a > 0 && b > a ? Math.round(((b - a) / a) * 100) : null;
+    return { ...base, pillar: "Budget Picks", title: `Why I'd buy ${card} now, not in season`, hook: `"${card} is ${money0(a)} right now.${b ? ` In season it goes for ${money0(b)}.` : ""}"`, beats: ["The card and today's sold price", b ? `What it sold for at last season's peak: ${money0(b)}${pct ? ` (${pct}% more)` : ""}` : "What it sold for at last season's peak", "Why the off-season is cheaper — less hype, fewer buyers", "What could go wrong (injury, trade, a bad season)", "Say it's your homework, not advice"], onScreen: [`Now: ${money0(a)}`, b ? `In season: ${money0(b)}` : "", pct ? `+${pct}% in season` : ""].filter(Boolean), caption: `Buy the off-season 🛒 ${NFA} ${tags}` };
+  }
+  if (f.fmt === "guess") {
+    return { ...base, pillar: "Market Moves", title: `Guess what this ${card} sold for`, hook: `"Guess what this sold for. Answer at the end."`, beats: ["Show the card (screen recording, price hidden)", "Clues: year, grade, why the player matters", "Count down 3… 2… 1", `Reveal: ${money0(a)}${f.extra.trim() ? ` (${f.extra.trim()})` : ""}`, "Ask: were you close? Comment your guess first"], onScreen: ["Guess the price 👇", "3… 2… 1…", `Sold: ${money0(a)}`], caption: `Guess the price before the end 👀 ${tags}` };
+  }
+  if (f.fmt === "gap") {
+    const fee = typeof gradingCost === "function" ? gradingCost("PSA via Australia", b) || 0 : 0;
+    const if10 = b * 0.87 - a - fee;
+    return { ...base, pillar: "Is It Worth Grading?", title: `Is ${card} worth grading?`, hook: `"Raw it's ${money0(a)}. A PSA 10 is ${money0(b)}. Is that gap worth chasing?"`, beats: [`Raw: ${money0(a)} · PSA 10: ${money0(b)}`, `Grading from Australia: about ${money0(fee)} and 3 months`, `If it gets a 10, after fees you're about ${money0(if10)} ${if10 >= 0 ? "ahead" : "behind"}`, "But most cards don't get a 10 — a 9 often barely beats raw", "Your rule: only grade near-perfect copies"], onScreen: [`Raw: ${money0(a)}`, `PSA 10: ${money0(b)}`, `Grading: ~${money0(fee)}`, `If 10: ${if10 >= 0 ? "+" : ""}${money0(if10)}`], caption: `Grade it or sell it raw? ${tags} #psa #grading` };
+  }
+  if (f.fmt === "vs") {
+    const other = f.other.trim() || "this one";
+    return { ...base, pillar: "Market Moves", title: `${card} or ${other}?`, hook: `"${money0(a)} for ${card} or ${money0(b)} for ${other}. Which are you buying?"`, beats: [`Card 1: ${card} — ${money0(a)}`, `Card 2: ${other} — ${money0(b)}`, "One reason for each", "Your pick and why", "Ask them to comment 1 or 2"], onScreen: [`1️⃣ ${card}: ${money0(a)}`, `2️⃣ ${other}: ${money0(b)}`, "Comment 1 or 2 👇"], caption: `Which one? Comment 1 or 2 👇 ${NFA} ${tags}` };
+  }
+  const items = f.extra.split(/\n|,/).map((s) => s.trim()).filter(Boolean);
+  const theme = f.card.trim() || f.sport;
+  return { ...base, pillar: "Budget Picks", title: `What ${money0(a)} gets you in ${theme} cards right now`, hook: `"I've got ${money0(a)}. Here are the best ${theme} cards it buys right now."`, beats: ["The budget on screen", ...(items.length ? items.map((s) => s) : ["3–4 cards at or under budget, cheapest to best"]), "Which one you'd actually buy", "Ask what they'd pick"], onScreen: [`Budget: ${money0(a)}`, ...items.slice(0, 4)], caption: `${money0(a)} budget picks 💵 ${NFA} ${tags}` };
+}
+
+function IdeaCard({ idea, open, onToggle, onAdd }) {
+  return (
+    <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+        <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: idea.when === "Evergreen" ? "#5C627022" : "#4E8B6B22", color: idea.when === "Evergreen" ? "#8B90A0" : "#4E8B6B" }}>{idea.when}</span>
+        <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "#C9A22722", color: "#C9A227" }}>{idea.pillar}</span>
+      </div>
+      <div className="oswald" style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>{idea.title}</div>
+      <div style={{ fontSize: 12, color: "#C9A227", fontStyle: "italic", marginBottom: 8, lineHeight: 1.5 }}>{idea.hook}</div>
+      {open && (
+        <div style={{ fontSize: 11.5, color: "#A7ADBB", lineHeight: 1.6, marginBottom: 8 }}>
+          <b style={{ color: "#EDEAE1" }}>Beats</b>
+          <ol style={{ margin: "2px 0 6px", paddingLeft: 18 }}>{idea.beats.map((b, i) => <li key={i}>{b}</li>)}</ol>
+          {idea.onScreen && idea.onScreen.length > 0 && (
+            <>
+              <b style={{ color: "#EDEAE1" }}>On-screen text</b>
+              <div style={{ margin: "2px 0 6px" }}>{idea.onScreen.join(" · ")}</div>
+            </>
+          )}
+          <b style={{ color: "#EDEAE1" }}>Shots (hands only)</b>
+          <ul style={{ margin: "2px 0 0", paddingLeft: 18 }}>{(idea.shots || FACELESS_SHOTS).map((s, i) => <li key={i}>{s}</li>)}</ul>
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 10, flex: 1 }}>{idea.source}</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => onAdd(idea)}>
+          <Plus size={12} style={{ marginRight: 4 }} /> Add to plan
+        </button>
+        {onToggle && (
+          <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={onToggle}>
+            {open ? "Hide kit" : "See the kit"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MarketKitMaker({ onAdd }) {
+  const empty = { fmt: "move", card: "", sport: "NBA", a: "", b: "", other: "", extra: "" };
+  const [f, setF] = useState(empty);
+  const [preview, setPreview] = useState(null);
+  const fmt = MARKET_FORMATS.find((x) => x.key === f.fmt);
+  const set = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setPreview(null); };
+  const lbl = { fontSize: 11, color: "#8B90A0", display: "block", marginBottom: 4 };
+
+  return (
+    <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", marginBottom: 24 }}>
+      <div style={{ fontSize: 12.5, color: "#A7ADBB", lineHeight: 1.6, marginBottom: 12 }}>
+        Make a kit for any card, owned or not. Look up the prices on eBay sold listings first, then type them here.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10, marginBottom: 12 }}>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label style={lbl}>Video type</label>
+          <select value={f.fmt} onChange={set("fmt")}>{MARKET_FORMATS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}</select>
+        </div>
+        <div>
+          <label style={lbl}>{f.fmt === "vs" ? "Card 1" : f.fmt === "budget" ? "Theme (optional)" : "Card"}</label>
+          <input value={f.card} onChange={set("card")} placeholder="e.g. Wembanyama Prizm RC PSA 10" />
+        </div>
+        {fmt.other && (
+          <div>
+            <label style={lbl}>{fmt.other}</label>
+            <input value={f.other} onChange={set("other")} placeholder="e.g. Caitlin Clark Prizm RC" />
+          </div>
+        )}
+        <div>
+          <label style={lbl}>Sport</label>
+          <select value={f.sport} onChange={set("sport")}>{Object.keys(SPORT_TAGS).map((s) => <option key={s}>{s}</option>)}</select>
+        </div>
+        <div>
+          <label style={lbl}>{fmt.a}</label>
+          <input type="number" min="0" value={f.a} onChange={set("a")} />
+        </div>
+        {fmt.b && (
+          <div>
+            <label style={lbl}>{fmt.b}</label>
+            <input type="number" min="0" value={f.b} onChange={set("b")} />
+          </div>
+        )}
+        {fmt.extra && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={lbl}>{fmt.extra}</label>
+            {f.fmt === "budget" ? <textarea rows={3} value={f.extra} onChange={set("extra")} style={textareaStyle} /> : <input value={f.extra} onChange={set("extra")} />}
+          </div>
+        )}
+      </div>
+      <button className="btnPrimary" disabled={!(Number(f.a) > 0)} onClick={() => setPreview(buildMarketIdea(f))}>Make the kit</button>
+      {preview && (
+        <div style={{ marginTop: 12, maxWidth: 520 }}>
+          <IdeaCard idea={preview} open onAdd={(idea) => { onAdd(idea); setPreview(null); setF(empty); }} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Optional AI script writer, run only when asked (one call).
@@ -430,39 +632,12 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
       <SectionTitle>🎬 Ready to film — from what's happening</SectionTitle>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12, marginBottom: 24 }}>
         {freshIdeas.map((idea) => (
-          <div key={idea.key} style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-              <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: idea.when === "Evergreen" ? "#5C627022" : "#4E8B6B22", color: idea.when === "Evergreen" ? "#8B90A0" : "#4E8B6B" }}>{idea.when}</span>
-              <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "#C9A22722", color: "#C9A227" }}>{idea.pillar}</span>
-            </div>
-            <div className="oswald" style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>{idea.title}</div>
-            <div style={{ fontSize: 12, color: "#C9A227", fontStyle: "italic", marginBottom: 8, lineHeight: 1.5 }}>{idea.hook}</div>
-            {openIdea === idea.key && (
-              <div style={{ fontSize: 11.5, color: "#A7ADBB", lineHeight: 1.6, marginBottom: 8 }}>
-                <b style={{ color: "#EDEAE1" }}>Beats</b>
-                <ol style={{ margin: "2px 0 6px", paddingLeft: 18 }}>{idea.beats.map((b, i) => <li key={i}>{b}</li>)}</ol>
-                {idea.onScreen && idea.onScreen.length > 0 && (
-                  <>
-                    <b style={{ color: "#EDEAE1" }}>On-screen text</b>
-                    <div style={{ margin: "2px 0 6px" }}>{idea.onScreen.join(" · ")}</div>
-                  </>
-                )}
-                <b style={{ color: "#EDEAE1" }}>Shots (hands only)</b>
-                <ul style={{ margin: "2px 0 0", paddingLeft: 18 }}>{(idea.shots || FACELESS_SHOTS).map((s, i) => <li key={i}>{s}</li>)}</ul>
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 10, flex: 1 }}>{idea.source}</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => addFromIdea(idea)}>
-                <Plus size={12} style={{ marginRight: 4 }} /> Add to plan
-              </button>
-              <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setOpenIdea(openIdea === idea.key ? null : idea.key)}>
-                {openIdea === idea.key ? "Hide kit" : "See the kit"}
-              </button>
-            </div>
-          </div>
+          <IdeaCard key={idea.key} idea={idea} open={openIdea === idea.key} onToggle={() => setOpenIdea(openIdea === idea.key ? null : idea.key)} onAdd={addFromIdea} />
         ))}
       </div>
+
+      <SectionTitle>🔭 Cards you don't own — market kit maker</SectionTitle>
+      <MarketKitMaker onAdd={addFromIdea} />
 
       {/* ----- Plan ----- */}
       <SectionTitle>📋 Your content plan</SectionTitle>
@@ -511,6 +686,8 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
             <b style={{ color: "#C9A227" }}>Voice:</b> voiceover recorded separately sounds cleaner. Prefer not to use your voice? Captions only, or text-to-speech, both work fine for card content.
             <br />
             <b style={{ color: "#C9A227" }}>Privacy:</b> use a channel name that isn't your name, a separate Google account and email. YouTube doesn't push your channel to your phone contacts. If you add TikTok later, sign up with that email (not your number), skip contact and Facebook syncing, and turn off "Suggest your account to others".
+            <br />
+            <b style={{ color: "#C9A227" }}>Cards you don't own:</b> film your own screen (sold listings, price charts) with usernames blurred, and use your own cards as B-roll. Don't reuse other people's card photos or videos. Add "not financial advice" to any buy idea.
             <br />
             <b style={{ color: "#C9A227" }}>Repurpose:</b> the same Short can go to TikTok and Instagram Reels later — one filming session, several posts.
           </div>
