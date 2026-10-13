@@ -47,6 +47,55 @@ function estimateGradingTurnaroundDays(service, declaredValueAUD) {
   return null;
 }
 
+// ===== Grading chances =====
+// The PSA 10 / PSA 9 chances used when a raw card has no Grade Check photo or set gem rate.
+// The app swaps in your own results (blended toward these defaults) when you turn that on in the
+// Grading Tracker.
+const DEFAULT_GRADE_RATES = { p10: 0.35, p9: 0.45, mine: false };
+let PERSONAL_GRADE_RATES = null;
+function defaultGradeRates() {
+  return PERSONAL_GRADE_RATES || DEFAULT_GRADE_RATES;
+}
+
+// What a card was expected to grade when it was sent — kept so results can be compared later.
+function gradingExpectationFor(c) {
+  const a = c.gradeAnalysis;
+  if (a && a.psa10Prob != null) {
+    return { p10: Number(a.psa10Prob) || 0, p9: Number(a.psa9Prob) || 0, source: "Grade Check photo", low: a.predictedGradeLow ?? null, high: a.predictedGradeHigh ?? null };
+  }
+  const gem = c.setGemRate !== "" && c.setGemRate != null && !Number.isNaN(Number(c.setGemRate)) ? Math.max(0, Math.min(1, Number(c.setGemRate) / 100)) : null;
+  if (gem != null) return { p10: gem, p9: Math.min(1 - gem, 0.4), source: "Set gem rate" };
+  const d = defaultGradeRates();
+  return { p10: d.p10, p9: d.p9, source: d.mine ? "Your rate" : "Default" };
+}
+
+// The bookkeeping that goes with a status change, wherever it's made: sale and listing dates,
+// the grading fee and send date, what the card was expected to grade, and the grade it got.
+function applyStatusTransitions(prev, next) {
+  if (!prev || prev.status === next.status) return next;
+  const today = new Date().toISOString().slice(0, 10);
+  const out = { ...next };
+  if (out.status === "Sold" && (!out.dateSold || out.dateSold === prev.dateSold)) out.dateSold = today;
+  if (out.status === "Listed" && (!out.dateListed || out.dateListed === prev.dateListed)) {
+    Object.assign(out, { dateListed: today, listingActions: [], lastListingActionAt: null });
+  }
+  if (out.status === "At Grading") {
+    // Sending a card locks in the fee at that moment (declared value from current comps) —
+    // unless the caller already set it (the submission planner does).
+    if (!out.gradingSentDate || out.gradingSentDate === prev.gradingSentDate) {
+      const declaredValue = Math.max(Number(prev.psa9Avg) || 0, Number(prev.psa10Avg) || 0, Number(prev.rawAvg) || 0);
+      out.gradingCostPaid = gradingCost(out.gradingService || prev.gradingService, declaredValue);
+      out.gradingSentDate = today;
+    }
+    out.gradingExpectation = gradingExpectationFor(prev);
+    out.gradingResult = null;
+  }
+  if (prev.status === "At Grading" && out.status !== "At Grading" && out.status !== "Raw" && out.grade) {
+    out.gradingResult = { grade: out.grade, returnedAt: today, expected: prev.gradingExpectation || gradingExpectationFor(prev) };
+  }
+  return out;
+}
+
 // Grade groups for the engine's two graded value slots (psa9Avg / psa10Avg). The slot only says
 // where a graded card's value lives — the value itself comes from comps for the card's own grade
 // (a BGS 9.5 card stores BGS 9.5 sales in the "9" slot, not PSA 9 prices).
@@ -237,8 +286,7 @@ function computeCard(c) {
                  p9 * (netPsa9Sell - totalCost - futureGCost) + 
                  pBelow * (netRawSell - totalCost - futureGCost);
     } else {
-      const p10Prob = c.psa10Prob ?? 0.35;
-      const p9Prob = c.psa9Prob ?? 0.45;
+      const { p10: p10Prob, p9: p9Prob } = defaultGradeRates();
       gradedEV = p10Prob * (netPsa10Sell - totalCost - futureGCost) + p9Prob * (netPsa9Sell - totalCost - futureGCost);
     }
   }
@@ -410,8 +458,7 @@ function computePokemonCard(c) {
                  p9 * (netPsa9Sell - totalCost - futureGCost) + 
                  pBelow * (netRawSell - totalCost - futureGCost);
     } else {
-      const p10Prob = c.psa10Prob ?? 0.35;
-      const p9Prob = c.psa9Prob ?? 0.45;
+      const { p10: p10Prob, p9: p9Prob } = defaultGradeRates();
       gradedEV = p10Prob * (netPsa10Sell - totalCost - futureGCost) + p9Prob * (netPsa9Sell - totalCost - futureGCost);
     }
   }
@@ -627,7 +674,7 @@ function computeBuy(b) {
           belowValue * (1 - fees) * analysis.belowProb;
         gradedEVBuy = expectedRevenue - totalCostGraded;
       } else {
-        gradedEVBuy = (b.psa10Prob ?? 0.35) * (psa10GGRBuy ?? 0) + (b.psa9Prob ?? 0.45) * (psa9GGRBuy ?? 0);
+        gradedEVBuy = defaultGradeRates().p10 * (psa10GGRBuy ?? 0) + defaultGradeRates().p9 * (psa9GGRBuy ?? 0);
       }
       if (psa10GGRBuy >= 20 && psa9GGRBuy >= 0 && gradedEVBuy >= (rawGGRBuy ?? -Infinity)) gradeCallBuy = "YES";
       else if (psa10GGRBuy >= 20 && psa9GGRBuy >= -10 && psa9GGRBuy < 0 && gradedEVBuy >= (rawGGRBuy ?? -Infinity)) gradeCallBuy = "HIGH RISK";

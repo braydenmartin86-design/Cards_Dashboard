@@ -348,12 +348,22 @@ function GlobalStyle() {
       label { font-size: 12px; color: #8B90A0; margin-bottom: 4px; display: block; }
       .modalOverlay { position: fixed; inset: 0; background: rgba(10,11,15,0.72); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
       .modalBox { background: #191B22; border: 1px solid #2C303B; border-radius: 14px; max-width: 480px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 24px; }
-      /* Phones: tabs on one row you swipe sideways, so the page content starts on the first screen. */
+      /* Side menu: fixed column on wide screens, slide-in drawer (opened with ☰ Menu) on narrow ones. */
+      .appShell { display: flex; align-items: flex-start; min-height: 100vh; }
+      .sidebar { width: 210px; flex-shrink: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 2.5rem 10px 2rem; border-right: 1px solid #24272F; background: #121419; box-sizing: border-box; }
+      .navItem { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: transparent; border: none; border-radius: 7px; color: #A7ADBB; padding: 7px 10px; font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: 'Inter', sans-serif; }
+      .navItem:hover { background: #1D2028; color: #EDEAE1; }
+      .navItem.active { background: #C9A2271f; color: #EDEAE1; box-shadow: inset 3px 0 0 #C9A227; }
+      .menuBtn { display: none !important; }
+      .sidebarBackdrop { position: fixed; inset: 0; background: rgba(10,11,15,0.6); z-index: 60; }
+      @media (max-width: 900px) {
+        .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 61; transform: translateX(-100%); transition: transform 0.2s ease; padding-top: 1.25rem; box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
+        .sidebar.open { transform: none; }
+        .menuBtn { display: inline-flex !important; }
+      }
+      @media (min-width: 901px) { .sidebarBackdrop { display: none; } }
       @media (max-width: 640px) {
         .appPage { padding: 1.25rem 1rem 3rem !important; }
-        .tabBar { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-        .tabBar::-webkit-scrollbar { display: none; }
-        .tabBar > button { flex-shrink: 0; white-space: nowrap; }
         .modalOverlay { padding: 8px; }
         .modalBox { padding: 16px; max-height: 94vh; }
       }

@@ -170,7 +170,146 @@ function SubmissionPlanner({ cards, pokemonCards, onUpdateCardIn }) {
   );
 }
 
-function GradingTracker({ cards, pokemonCards, onUpdateCardIn }) {
+// ===== Grading results =====
+// Every card you've had graded, the grade it came back, and what it was expected to get when it
+// was sent — so you can see your real PSA 10 rate and how good your picks (and Grade Check's
+// photo calls) are. Your rate can replace the default 35% / 45% in the grade-or-sell maths.
+
+const GRADING_SETTINGS_KEY = "cardflip_ev_grading_settings_v1";
+const MY_RATES_MIN_RESULTS = 5;
+// Your results are blended with the defaults as if you'd already graded this many cards at the
+// default rates, so a lucky first few slabs don't swing the maths.
+const MY_RATES_PRIOR = 5;
+
+function gradeBucket(grade) {
+  const g = String(grade || "").toLowerCase();
+  return PSA10_GRADES.includes(g) ? 10 : PSA9_GRADES.includes(g) ? 9 : "below";
+}
+
+function gradingResultsFrom(cards, pokemonCards) {
+  return [...cards, ...pokemonCards]
+    .filter((c) => c.gradingResult || (c.gradingSentDate && c.grade && c.status !== "At Grading" && c.gradingService !== "Bought Graded"))
+    .map((c) => {
+      const r = c.gradingResult || {};
+      const grade = r.grade || c.grade;
+      return { card: c, grade, bucket: gradeBucket(grade), returnedAt: r.returnedAt || c.gradingSentDate, expected: r.expected || null };
+    })
+    .sort((a, b) => String(b.returnedAt).localeCompare(String(a.returnedAt)));
+}
+
+function gradingStats(results) {
+  const n = results.length;
+  const count = (b) => results.filter((r) => r.bucket === b).length;
+  const n10 = count(10);
+  const n9 = count(9);
+  const withExp = results.filter((r) => r.expected);
+  const photo = withExp.filter((r) => r.expected.source === "Grade Check photo" && r.expected.low != null);
+  const numeric = (g) => {
+    const m = String(g).match(/(\d+(?:\.\d)?)/);
+    return m ? Number(m[1]) : null;
+  };
+  return {
+    n,
+    n10,
+    n9,
+    nBelow: n - n10 - n9,
+    expected10: withExp.reduce((s, r) => s + (Number(r.expected.p10) || 0), 0),
+    actual10WithExp: withExp.filter((r) => r.bucket === 10).length,
+    nWithExp: withExp.length,
+    photoN: photo.length,
+    photoInRange: photo.filter((r) => {
+      const g = numeric(r.grade);
+      return g != null && g >= r.expected.low && g <= r.expected.high;
+    }).length,
+    blended: {
+      p10: (n10 + DEFAULT_GRADE_RATES.p10 * MY_RATES_PRIOR) / (n + MY_RATES_PRIOR),
+      p9: (n9 + DEFAULT_GRADE_RATES.p9 * MY_RATES_PRIOR) / (n + MY_RATES_PRIOR),
+      mine: true,
+    },
+  };
+}
+
+function GradingResults({ cards, pokemonCards, useMyRates, onToggleMyRates }) {
+  const [showAll, setShowAll] = useState(false);
+  const results = useMemo(() => gradingResultsFrom(cards, pokemonCards), [cards, pokemonCards]);
+  const s = useMemo(() => gradingStats(results), [results]);
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  const canUse = s.n >= MY_RATES_MIN_RESULTS;
+  const box = { border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", marginBottom: 20 };
+  const bucketColor = (b) => (b === 10 ? "#4E8B6B" : b === 9 ? "#C9A227" : "#B4472E");
+
+  let verdict = null;
+  if (s.nWithExp >= 3) {
+    const diff = s.actual10WithExp - s.expected10;
+    verdict =
+      Math.abs(diff) < 0.75
+        ? { color: "#4E8B6B", text: `Right on track: expected about ${s.expected10.toFixed(1)} PSA 10s from these, got ${s.actual10WithExp}.` }
+        : diff > 0
+        ? { color: "#4E8B6B", text: `Better than expected: about ${s.expected10.toFixed(1)} PSA 10s predicted, you got ${s.actual10WithExp}. Your eye for gradeable cards is paying off.` }
+        : { color: "#B4472E", text: `Worse than expected: about ${s.expected10.toFixed(1)} PSA 10s predicted, you got ${s.actual10WithExp}. Be pickier — check centering and corners closely, and run Grade Check before sending.` };
+  }
+
+  return (
+    <div>
+      <SectionTitle>📊 Your grading results</SectionTitle>
+      {s.n === 0 ? (
+        <div style={{ ...box, fontSize: 12.5, color: "#5C6270" }}>
+          No results yet. When a card comes back, use <b>Mark as returned</b> above (or change its status from At Grading in its details) and pick the grade it got. Cards sent from now on also save what they were expected to grade, so you can see how your picks compare.
+        </div>
+      ) : (
+        <div style={box}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 10 }}>
+            <MiniStat label="Cards graded" value={s.n} />
+            <MiniStat label="Got a 10" value={`${s.n10} · ${pct(s.n10 / s.n)}`} color="#4E8B6B" />
+            <MiniStat label="Got a 9 / 9.5" value={`${s.n9} · ${pct(s.n9 / s.n)}`} color="#C9A227" />
+            <MiniStat label="8 or lower" value={`${s.nBelow} · ${pct(s.nBelow / s.n)}`} color={s.nBelow ? "#B4472E" : undefined} />
+          </div>
+          {verdict && <div style={{ fontSize: 12.5, color: verdict.color, marginBottom: 6 }}>{verdict.text}</div>}
+          {s.photoN > 0 && (
+            <div style={{ fontSize: 12, color: "#8B90A0", marginBottom: 6 }}>
+              Grade Check's photo prediction was right (grade within its range) for {s.photoInRange} of {s.photoN} card{s.photoN === 1 ? "" : "s"}.
+            </div>
+          )}
+
+          <div style={{ borderTop: "1px solid #24272F", paddingTop: 10, marginTop: 6 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: canUse ? "#EDEAE1" : "#6B7180", cursor: canUse ? "pointer" : "default" }}>
+              <input type="checkbox" checked={useMyRates && canUse} disabled={!canUse} onChange={(e) => onToggleMyRates(e.target.checked)} style={{ width: "auto", margin: 0 }} />
+              Use my real rates in the grade-or-sell maths: PSA 10 {pct(s.blended.p10)}, PSA 9 {pct(s.blended.p9)} (instead of 35% / 45%)
+            </label>
+            <div style={{ fontSize: 11, color: "#6B7180", marginTop: 4, lineHeight: 1.5 }}>
+              {canUse
+                ? `Applies to raw cards without a Grade Check photo or set gem rate. Your ${s.n} results are blended with the defaults so a lucky or unlucky few don't swing it — the more you grade, the more it's your own number.`
+                : `Available once you have ${MY_RATES_MIN_RESULTS} results (${s.n} so far).`}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            {(showAll ? results : results.slice(0, 8)).map((r) => (
+              <div key={r.card.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5, padding: "5px 0", borderTop: "1px solid #24272F", flexWrap: "wrap" }}>
+                <span className="mono" style={{ color: "#6B7180", fontSize: 11, minWidth: 78 }}>{r.returnedAt}</span>
+                <span style={{ fontWeight: 600 }}>{r.card.player}</span>
+                <span style={{ color: "#6B7180", flex: 1, minWidth: 100 }}>{r.card.card}</span>
+                <span style={{ fontSize: 11, color: "#8B90A0" }}>
+                  {r.expected
+                    ? `expected ${pct(r.expected.p10)} chance of 10${r.expected.low != null ? ` (photo: ${r.expected.low}–${r.expected.high})` : ` · ${r.expected.source.toLowerCase()}`}`
+                    : "no prediction saved"}
+                </span>
+                <span className="mono" style={{ fontWeight: 700, color: bucketColor(r.bucket), minWidth: 70, textAlign: "right" }}>{r.grade}</span>
+              </div>
+            ))}
+            {results.length > 8 && (
+              <button type="button" className="btnSecondary" style={{ fontSize: 11, padding: "3px 9px", marginTop: 6 }} onClick={() => setShowAll((v) => !v)}>
+                {showAll ? "Show recent only" : `Show all ${results.length}`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GradingTracker({ cards, pokemonCards, onUpdateCardIn, useMyRates, onToggleMyRates }) {
   const atGrading = useMemo(() => {
     const own = cards.map((c) => ({ ...computeCard(c), _src: "cards" }));
     const pkmn = pokemonCards.map((c) => ({ ...computePokemonCard(c), _src: "pokemon" }));
@@ -203,6 +342,9 @@ function GradingTracker({ cards, pokemonCards, onUpdateCardIn }) {
           ))}
         </div>
       )}
+
+      <div style={{ height: 24 }} />
+      <GradingResults cards={cards} pokemonCards={pokemonCards} useMyRates={useMyRates} onToggleMyRates={onToggleMyRates} />
     </div>
   );
 }

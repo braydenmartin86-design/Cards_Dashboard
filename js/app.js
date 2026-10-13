@@ -27,6 +27,28 @@ function App() {
   const [, setFxTick] = useState(0);
   useEffect(() => onExchangeRateChange(() => setFxTick((t) => t + 1)), []);
 
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Your own PSA 10 / 9 rates from graded cards, used in place of the defaults when turned on in
+  // the Grading Tracker. Set before anything below renders, so every calculation sees it.
+  const [useMyRates, setUseMyRates] = useState(false);
+  useEffect(() => {
+    storageGet(GRADING_SETTINGS_KEY).then((s) => s && s.useMyRates && setUseMyRates(true));
+  }, []);
+  const myGradeStats = useMemo(() => gradingStats(gradingResultsFrom(cards, pokemonCards)), [cards, pokemonCards]);
+  PERSONAL_GRADE_RATES = useMyRates && myGradeStats.n >= MY_RATES_MIN_RESULTS ? myGradeStats.blended : null;
+  const ratesKey = PERSONAL_GRADE_RATES ? `${PERSONAL_GRADE_RATES.p10}-${PERSONAL_GRADE_RATES.p9}` : "default";
+  useEffect(() => {
+    // New array references so tabs that cache their calculations by card list recompute.
+    setCards((p) => [...p]);
+    setPokemonCards((p) => [...p]);
+    setBuyList((p) => [...p]);
+  }, [ratesKey]);
+  function toggleMyRates(on) {
+    setUseMyRates(on);
+    storageSet(GRADING_SETTINGS_KEY, { useMyRates: on });
+  }
+
   // Prevent the mouse scroll wheel from silently changing a focused number input's value —
   // a common browser default that causes accidental edits while scrolling past a field.
   useEffect(() => {
@@ -266,23 +288,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
 
   function updateCard(id, updates) {
     setActiveCards((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        const next = { ...c, ...updates };
-        if (updates.status === "Sold" && c.status !== "Sold") next.dateSold = new Date().toISOString().slice(0, 10);
-        // Listing through the status menu (rather than the listing helper) still starts the
-        // day count the Listing check-up on Home works from.
-        if (updates.status === "Listed" && c.status !== "Listed" && (!updates.dateListed || updates.dateListed === c.dateListed)) Object.assign(next, { dateListed: new Date().toISOString().slice(0, 10), listingActions: [], lastListingActionAt: null });
-        // Sending a card to grading locks in the cost at that moment (declared value based on
-        // current comps) and adds it to the card's total cost — recalculating later if market
-        // prices move would be misleading, since you already paid a fixed fee.
-        if (updates.status === "At Grading" && c.status !== "At Grading") {
-          const declaredValue = Math.max(Number(c.psa9Avg) || 0, Number(c.psa10Avg) || 0, Number(c.rawAvg) || 0);
-          next.gradingCostPaid = gradingCost(next.gradingService || c.gradingService, declaredValue);
-          next.gradingSentDate = new Date().toISOString().slice(0, 10);
-        }
-        return next;
-      })
+      prev.map((c) => (c.id === id ? applyStatusTransitions(c, { ...c, ...updates }) : c))
     );
   }
 
@@ -349,13 +355,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   function updateCardIn(source, id, updates) {
     const setter = source === "pokemon" ? setPokemonCards : setCards;
     setter((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        const next = { ...c, ...updates };
-        if (updates.status === "Sold" && c.status !== "Sold") next.dateSold = new Date().toISOString().slice(0, 10);
-        if (updates.status === "Listed" && c.status !== "Listed" && (!updates.dateListed || updates.dateListed === c.dateListed)) Object.assign(next, { dateListed: new Date().toISOString().slice(0, 10), listingActions: [], lastListingActionAt: null });
-        return next;
-      })
+      prev.map((c) => (c.id === id ? applyStatusTransitions(c, { ...c, ...updates }) : c))
     );
   }
 
@@ -469,8 +469,11 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
   return (
     <div style={styles.app}>
       <GlobalStyle />
-      <div className="appPage" style={{ maxWidth: 1180, margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
+      <div className="appShell">
+      <Sidebar tab={tab} setTab={setTab} open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <div className="appPage" style={{ flex: 1, minWidth: 0, maxWidth: 1180, margin: "0 auto", padding: "2.5rem 1.5rem 4rem" }}>
         <Header tab={tab} setTab={setTab} onAdd={() => setShowAdd(true)} onExport={exportAllData} onImport={importAllData} backupStatus={backupStatus} />
+        <PageTitle tab={tab} onMenu={() => setMenuOpen(true)} />
         <CardSightQuotaBanner />
 
         {pendingImport && (
@@ -561,7 +564,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
 
         {tab === "gradecheck" && <GradeCheck cards={cards} pokemonCards={pokemonCards} onUpdateCardIn={updateCardIn} />}
 
-        {tab === "gradingtracker" && <GradingTracker cards={cards} pokemonCards={pokemonCards} onUpdateCardIn={updateCardIn} />}
+        {tab === "gradingtracker" && <GradingTracker cards={cards} pokemonCards={pokemonCards} onUpdateCardIn={updateCardIn} useMyRates={useMyRates} onToggleMyRates={toggleMyRates} />}
 
         {/* Always mounted (just hidden on other tabs) so a scan in progress survives switching tabs. */}
         <div style={{ display: tab === "lotscanner" ? "block" : "none" }}>
@@ -609,6 +612,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
         {tab === "buy" && <BuyEvaluator buyList={buyList} setBuyList={setBuyList} onWin={handleBuyWin} />}
         {tab === "tips" && <TipsAndTricks />}
       </div>
+      </div>
 
       {showAdd && (
         <AddCardModal onClose={() => setShowAdd(false)} onSave={addCard} playerLabel={isPokemon ? "Pokémon" : "Player"} />
@@ -620,11 +624,14 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
         
         if (!selectedCard) return null;
 
+        // Status changes made in the card's details go through the same bookkeeping as everywhere
+        // else (sale/listing dates, grading fee, expected vs actual grade).
         const handleUpdate = (updatedCard) => {
+          const apply = (prev) => prev.map((c) => (c.id === updatedCard.id ? applyStatusTransitions(c, updatedCard) : c));
           if (isPokemon || pokemonCards.some((c) => c.id === updatedCard.id)) {
-            setPokemonCards((prev) => prev.map((c) => (c.id === updatedCard.id ? updatedCard : c)));
+            setPokemonCards(apply);
           } else {
-            setCards((prev) => prev.map((c) => (c.id === updatedCard.id ? updatedCard : c)));
+            setCards(apply);
           }
           setSelected(null);
         };
@@ -697,89 +704,93 @@ function Header({ tab, setTab, onAdd, onExport, onImport, backupStatus }) {
           )}
         </div>
       </div>
-      <div className="tabBar" style={{ display: "flex", gap: 8, marginTop: 22, borderBottom: "1px solid #2C303B", flexWrap: "wrap" }}>
-        <TabButton active={tab === "home"} onClick={() => setTab("home")} icon={<span style={{ fontSize: 13 }}>🏠</span>}>
-          Home
-        </TabButton>
-        <TabButton active={tab === "portfolio"} onClick={() => setTab("portfolio")} icon={<TrendingUp size={14} />}>
-          My Cards
-        </TabButton>
-        <TabButton active={tab === "pokemon"} onClick={() => setTab("pokemon")} icon={<span style={{ fontSize: 13 }}>🧬</span>}>
-          Pokémon
-        </TabButton>
-        <TabButton active={tab === "sales"} onClick={() => setTab("sales")} icon={<span style={{ fontSize: 13 }}>💰</span>}>
-          My Sales
-        </TabButton>
-        <TabButton active={tab === "boxbreaks"} onClick={() => setTab("boxbreaks")} icon={<span style={{ fontSize: 13 }}>📦</span>}>
-          Box Breaks
-        </TabButton>
-        <TabButton active={tab === "gradecheck"} onClick={() => setTab("gradecheck")} icon={<span style={{ fontSize: 13 }}>🔍</span>}>
-          Grade Check
-        </TabButton>
-        <TabButton active={tab === "gradingtracker"} onClick={() => setTab("gradingtracker")} icon={<span style={{ fontSize: 13 }}>🏷️</span>}>
-          Grading Tracker
-        </TabButton>
-        <TabButton active={tab === "lotscanner"} onClick={() => setTab("lotscanner")} icon={<span style={{ fontSize: 13 }}>🗃️</span>}>
-          Lot Scanner
-        </TabButton>
-        <TabButton active={tab === "quickscan"} onClick={() => setTab("quickscan")} icon={<span style={{ fontSize: 13 }}>📷</span>}>
-          Quick Scan
-        </TabButton>
-        <TabButton active={tab === "cardshow"} onClick={() => setTab("cardshow")} icon={<span style={{ fontSize: 13 }}>🎪</span>}>
-          Card Show
-        </TabButton>
-        <TabButton active={tab === "targets"} onClick={() => setTab("targets")} icon={<span style={{ fontSize: 13 }}>🎯</span>}>
-          Monthly Targets
-        </TabButton>
-        <TabButton active={tab === "sellplaybook"} onClick={() => setTab("sellplaybook")} icon={<span style={{ fontSize: 13 }}>📮</span>}>
-          Selling Playbook
-        </TabButton>
-        <TabButton active={tab === "taxsummary"} onClick={() => setTab("taxsummary")} icon={<span style={{ fontSize: 13 }}>🧾</span>}>
-          Business Summary
-        </TabButton>
-        <TabButton active={tab === "content"} onClick={() => setTab("content")} icon={<span style={{ fontSize: 13 }}>🎥</span>}>
-          Content Creation
-        </TabButton>
-        <TabButton active={tab === "buy"} onClick={() => setTab("buy")} icon={<Gavel size={14} />}>
-          Buy Evaluator
-        </TabButton>
-        <TabButton active={tab === "tips"} onClick={() => setTab("tips")} icon={<BookOpen size={14} />}>
-          Tips &amp; Tricks
-        </TabButton>
-      </div>
     </>
   );
 }
 
-function TabButton({ active, onClick, children, icon }) {
-  // On phones the tab row scrolls sideways; keep the selected tab in view.
-  const ref = useRef(null);
-  useEffect(() => {
-    if (active && ref.current && ref.current.parentElement.scrollWidth > ref.current.parentElement.clientWidth) {
-      ref.current.scrollIntoView({ inline: "nearest", block: "nearest" });
-    }
-  }, [active]);
+// Every page, grouped for the side menu.
+const NAV_GROUPS = [
+  { title: null, items: [{ key: "home", icon: "🏠", label: "Home" }] },
+  {
+    title: "Collection",
+    items: [
+      { key: "portfolio", icon: "📈", label: "My Cards" },
+      { key: "pokemon", icon: "🧬", label: "Pokémon" },
+      { key: "sales", icon: "💰", label: "My Sales" },
+    ],
+  },
+  {
+    title: "Buying",
+    items: [
+      { key: "buy", icon: "🔨", label: "Buy Evaluator" },
+      { key: "targets", icon: "🎯", label: "Monthly Targets" },
+      { key: "quickscan", icon: "📷", label: "Quick Scan" },
+      { key: "lotscanner", icon: "🗃️", label: "Lot Scanner" },
+      { key: "cardshow", icon: "🎪", label: "Card Show" },
+    ],
+  },
+  {
+    title: "Grading",
+    items: [
+      { key: "gradecheck", icon: "🔍", label: "Grade Check" },
+      { key: "gradingtracker", icon: "🏷️", label: "Grading Tracker" },
+    ],
+  },
+  {
+    title: "Selling & money",
+    items: [
+      { key: "sellplaybook", icon: "📮", label: "Selling Playbook" },
+      { key: "taxsummary", icon: "🧾", label: "Business Summary" },
+    ],
+  },
+  {
+    title: "Content & breaks",
+    items: [
+      { key: "content", icon: "🎥", label: "Content Creation" },
+      { key: "boxbreaks", icon: "📦", label: "Box Breaks" },
+    ],
+  },
+  { title: "Learn", items: [{ key: "tips", icon: "📚", label: "Tips & Tricks" }] },
+];
+const NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
+
+// Side menu: always visible on wide screens; on phones it slides in from the ☰ button.
+function Sidebar({ tab, setTab, open, onClose }) {
+  function go(key) {
+    setTab(key);
+    onClose();
+    window.scrollTo({ top: 0 });
+  }
   return (
-    <button
-      ref={ref}
-      onClick={onClick}
-      style={{
-        background: "transparent",
-        border: "none",
-        borderBottom: active ? "2px solid #C9A227" : "2px solid transparent",
-        color: active ? "#EDEAE1" : "#8B90A0",
-        padding: "10px 4px",
-        marginRight: 20,
-        fontSize: 14,
-        fontWeight: 600,
-        cursor: "pointer",
-        fontFamily: "'Inter', sans-serif",
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-      }}
-    >
-      {icon} {children}
-    </button>
+    <>
+      {open && <div className="sidebarBackdrop" onClick={onClose} />}
+      <nav className={`sidebar${open ? " open" : ""}`} aria-label="Pages">
+        {NAV_GROUPS.map((g, i) => (
+          <div key={i} style={{ marginBottom: 10 }}>
+            {g.title && <div className="mono" style={{ fontSize: 10, color: "#5C6270", letterSpacing: "0.1em", textTransform: "uppercase", padding: "6px 12px 4px" }}>{g.title}</div>}
+            {g.items.map((it) => (
+              <button key={it.key} type="button" className={`navItem${tab === it.key ? " active" : ""}`} onClick={() => go(it.key)}>
+                <span style={{ width: 20, textAlign: "center" }}>{it.icon}</span>
+                {it.label}
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+    </>
+  );
+}
+
+// Current page title, with the ☰ button that opens the menu on phones.
+function PageTitle({ tab, onMenu }) {
+  const item = NAV_ITEMS.find((i) => i.key === tab) || NAV_ITEMS[0];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 22, paddingBottom: 10, borderBottom: "1px solid #2C303B" }}>
+      <button type="button" className="menuBtn btnSecondary" onClick={onMenu} aria-label="Open menu">☰ Menu</button>
+      <h2 className="oswald" style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
+        <span style={{ marginRight: 8 }}>{item.icon}</span>
+        {item.label}
+      </h2>
+    </div>
   );
 }

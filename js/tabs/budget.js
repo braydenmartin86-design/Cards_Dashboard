@@ -45,6 +45,7 @@ function defaultBudget() {
     includeApp: true,
     checks: {},
     entries: [],
+    income: [],
   };
 }
 
@@ -66,6 +67,11 @@ function scheduledDeposits(b, until) {
   }
   return out.sort((a, c) => a.date.localeCompare(c.date));
 }
+
+// Income you log yourself; card flipping and box breaks are worked out from the app.
+const INCOME_STREAMS = ["YouTube", "TikTok", "Sponsorship", "Whatnot", "Other"];
+const AUTO_STREAMS = ["Card flipping", "Box breaks"];
+const INCOME_MONTHS = 6;
 
 const BUDGET_ENTRY_TYPES = {
   deposit: { label: "Deposit", sign: 1 },
@@ -155,6 +161,7 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
   const tally = [
     ...schedule.filter((s) => b.checks[s.key]).map((s) => ({ date: s.date, item: s.label, amount: Number(b.checks[s.key].amount) || 0, source: "schedule" })),
     ...b.entries.filter((e) => e.date >= b.startDate).map((e) => ({ date: e.date, item: `${BUDGET_ENTRY_TYPES[e.type].label}${e.description ? `: ${e.description}` : ""}`, amount: BUDGET_ENTRY_TYPES[e.type].sign * (Number(e.amount) || 0), source: "entry", entryId: e.id })),
+    ...(b.income || []).filter((e) => e.toCardSpace && e.date >= b.startDate).map((e) => ({ date: e.date, item: `${e.stream} income${e.description ? `: ${e.description}` : ""}`, amount: Number(e.amount) || 0, source: "income", incomeId: e.id })),
     ...appRows,
   ].sort((a, c) => a.date.localeCompare(c.date) || c.amount - a.amount);
   let running = Number(b.openingBalance) || 0;
@@ -180,6 +187,7 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
     setForm({ ...form, description: "", amount: "" });
   }
   function removeRow(r) {
+    if (r.source === "income") update({ income: b.income.map((x) => (x.id === r.incomeId ? { ...x, toCardSpace: false } : x)) });
     if (r.source === "entry") update({ entries: b.entries.filter((x) => x.id !== r.entryId) });
     if (r.source === "expense") setManualExpenses((prev) => prev.filter((x) => x.id !== r.expenseId));
   }
@@ -369,7 +377,7 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
                 <div style={{ textAlign: "right", color: r.amount >= 0 ? "#4E8B6B" : "#B4472E" }}>{r.amount >= 0 ? "+" : ""}{fmtMoney(r.amount)}</div>
                 <div style={{ textAlign: "right", fontWeight: 600 }}>{fmtMoney(r.balance)}</div>
                 <div style={{ textAlign: "right" }}>
-                  {(r.source === "entry" || r.source === "expense") && (
+                  {(r.source === "entry" || r.source === "expense" || r.source === "income") && (
                     <button type="button" onClick={() => removeRow(r)} title="Delete" style={{ background: "none", border: "none", color: "#6B7180", cursor: "pointer", padding: 0 }}>×</button>
                   )}
                 </div>
@@ -382,6 +390,130 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
             )}
           </>
         )}
+      </div>
+
+      <IncomeStreams b={b} update={update} cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} />
+    </div>
+  );
+}
+
+// ===== Income streams =====
+// What each side of the business earns per month: card flipping (realised profit on cards sold)
+// and box breaks come from the app; YouTube, TikTok, sponsorships, Whatnot and anything else are
+// logged here. Logged income can also count as money into the Card Space tally.
+function IncomeStreams({ b, update, cards, pokemonCards, boxBreaks }) {
+  const [form, setForm] = useState({ date: isoLocal(new Date()), stream: "YouTube", description: "", amount: "", toCardSpace: true });
+
+  const rows = useMemo(() => {
+    const out = [];
+    for (const c of [...cards.map((x) => computeCard(x)), ...pokemonCards.map((x) => computePokemonCard(x))]) {
+      if (c.status === "Sold" && c.dateSold && c.realisedProfit != null) out.push({ date: c.dateSold, stream: "Card flipping", amount: c.realisedProfit * (Number(c.quantity) || 1) });
+    }
+    for (const box of boxBreaks) if (box.date) out.push({ date: box.date, stream: "Box breaks", amount: boxTotals(box).profit });
+    for (const e of b.income || []) out.push({ date: e.date, stream: e.stream, amount: Number(e.amount) || 0 });
+    return out;
+  }, [cards, pokemonCards, boxBreaks, b.income]);
+
+  // The last few months, newest first, plus a 12-month total per stream.
+  const now = new Date();
+  const months = Array.from({ length: INCOME_MONTHS }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    return { key: isoLocal(d).slice(0, 7), label: d.toLocaleDateString("en-AU", { month: "short", year: "2-digit" }) };
+  });
+  const yearStart = isoLocal(new Date(now.getFullYear(), now.getMonth() - 11, 1));
+  const byMonth = (key, stream) => rows.filter((r) => r.date.slice(0, 7) === key && r.stream === stream).reduce((s, r) => s + r.amount, 0);
+  const streams = [...AUTO_STREAMS, ...INCOME_STREAMS].filter((s) => rows.some((r) => r.stream === s) || AUTO_STREAMS.includes(s));
+  const yearByStream = streams.map((s) => ({ s, total: rows.filter((r) => r.stream === s && r.date >= yearStart).reduce((t, r) => t + r.amount, 0) }));
+  const yearTotal = yearByStream.reduce((t, x) => t + x.total, 0);
+  const thisMonth = streams.reduce((t, s) => t + byMonth(months[0].key, s), 0);
+  const best = [...yearByStream].sort((a, c) => c.total - a.total)[0];
+  const nonCard = yearByStream.filter((x) => x.s !== "Card flipping").reduce((t, x) => t + x.total, 0);
+
+  function addIncome(e) {
+    e.preventDefault();
+    const amount = Number(form.amount);
+    if (!(amount > 0)) return;
+    update({ income: [...(b.income || []), { id: crypto.randomUUID(), date: form.date, stream: form.stream, description: form.description, amount, toCardSpace: form.toCardSpace }] });
+    setForm({ ...form, description: "", amount: "" });
+  }
+  const logged = [...(b.income || [])].sort((a, c) => c.date.localeCompare(a.date));
+  const money = (v) => (v ? `${v < 0 ? "-" : ""}${fmtMoney(Math.abs(v))}` : "—");
+  const box = { border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", marginBottom: 14 };
+  const cell = { padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" };
+
+  return (
+    <div style={box}>
+      <div className="oswald" style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>💵 Income streams</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <MiniStat label="This month" value={fmtMoney(thisMonth)} color={thisMonth >= 0 ? "#4E8B6B" : "#B4472E"} />
+        <MiniStat label="Last 12 months" value={fmtMoney(yearTotal)} color={yearTotal >= 0 ? "#4E8B6B" : "#B4472E"} />
+        <MiniStat label="Outside card flipping" value={fmtMoney(nonCard)} />
+        <MiniStat label="Biggest stream" value={best && best.total > 0 ? best.s : "—"} />
+      </div>
+
+      <div style={{ overflowX: "auto", marginBottom: 12 }}>
+        <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse", color: "#C6CAD4" }}>
+          <thead>
+            <tr style={{ color: "#6B7180", fontSize: 10.5, textTransform: "uppercase" }}>
+              <th style={{ ...cell, textAlign: "left" }}>Stream</th>
+              {months.map((m) => <th key={m.key} style={cell}>{m.label}</th>)}
+              <th style={cell}>12 mo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {streams.map((s) => (
+              <tr key={s} style={{ borderTop: "1px solid #24272F" }}>
+                <td style={{ ...cell, textAlign: "left", fontWeight: 600 }}>{s}{AUTO_STREAMS.includes(s) && <span style={{ fontSize: 10, color: "#6B7180", fontWeight: 400 }}> · auto</span>}</td>
+                {months.map((m) => {
+                  const v = byMonth(m.key, s);
+                  return <td key={m.key} style={{ ...cell, color: v > 0 ? "#4E8B6B" : v < 0 ? "#B4472E" : "#5C6270" }}>{money(v)}</td>;
+                })}
+                <td style={{ ...cell, fontWeight: 700 }}>{money(yearByStream.find((x) => x.s === s).total)}</td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: "1px solid #2C303B", fontWeight: 700 }}>
+              <td style={{ ...cell, textAlign: "left" }}>Total</td>
+              {months.map((m) => {
+                const v = streams.reduce((t, s) => t + byMonth(m.key, s), 0);
+                return <td key={m.key} style={{ ...cell, color: v >= 0 ? "#EDEAE1" : "#B4472E" }}>{money(v)}</td>;
+              })}
+              <td style={cell}>{money(yearTotal)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <form onSubmit={addIncome} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Field label="Stream">
+          <select value={form.stream} onChange={(e) => setForm({ ...form, stream: e.target.value })} style={{ width: "auto" }}>
+            {INCOME_STREAMS.map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field label="Date"><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+        <Field label="Amount (A$)"><input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={{ width: 100 }} required /></Field>
+        <Field label="Note"><input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="e.g. AdSense payout" style={{ minWidth: 150 }} /></Field>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#C6CAD4", paddingBottom: 8, cursor: "pointer" }}>
+          <input type="checkbox" checked={form.toCardSpace} onChange={(e) => setForm({ ...form, toCardSpace: e.target.checked })} style={{ width: "auto", margin: 0 }} />
+          Paid into Card Space
+        </label>
+        <button className="btnPrimary" type="submit" style={{ fontSize: 12.5 }}>Add income</button>
+      </form>
+
+      {logged.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          {logged.slice(0, 8).map((e) => (
+            <div key={e.id} style={{ display: "flex", gap: 8, fontSize: 12.5, padding: "4px 0", borderTop: "1px solid #24272F", alignItems: "center" }}>
+              <span className="mono" style={{ color: "#6B7180", fontSize: 11.5, minWidth: 80 }}>{e.date}</span>
+              <span style={{ fontWeight: 600 }}>{e.stream}</span>
+              <span style={{ color: "#6B7180", flex: 1 }}>{e.description}{e.toCardSpace ? " · in Card Space" : ""}</span>
+              <span style={{ color: "#4E8B6B" }}>{fmtMoney(Number(e.amount))}</span>
+              <button type="button" onClick={() => update({ income: b.income.filter((x) => x.id !== e.id) })} title="Delete" style={{ background: "none", border: "none", color: "#6B7180", cursor: "pointer", padding: 0 }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "#6B7180", marginTop: 8, lineHeight: 1.6 }}>
+        Card flipping is realised profit on cards sold that month (after costs and fees); box breaks are each break's profit. Keep records of all of it — if this grows into a real second income, the ATO may treat it as a business rather than a hobby, so it's worth a chat with an accountant at that point.
       </div>
     </div>
   );
