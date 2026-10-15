@@ -538,6 +538,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     />
 
     <BulkCompRefresh key={isPokemon ? "pokemon" : "cards"} cards={activeCards} setCards={setActiveCards} isPokemon={isPokemon} />
+    <MonthlyPriceCheck key={isPokemon ? "pokemon-check" : "cards-check"} cards={activeCards} setCards={setActiveCards} />
 
     {/* 3. Card Table receives the specific category list with full EV & Grade Call logic */}
     <CardTable

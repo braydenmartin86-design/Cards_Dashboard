@@ -46,7 +46,17 @@ function defaultBudget() {
     checks: {},
     entries: [],
     income: [],
+    subscriptions: [],
   };
+}
+
+// Added for budgets saved before subscriptions existed.
+const STARTER_SUBSCRIPTIONS = [{ id: "market-movers", name: "Market Movers", amount: 11, day: 28, startDate: "2026-10-15", endDate: "" }];
+
+// A monthly bill's date in a month — day 29–31 falls back to the month's last day.
+function billDate(year, monthIdx, day) {
+  const last = new Date(year, monthIdx + 1, 0).getDate();
+  return isoLocal(new Date(year, monthIdx, Math.min(Number(day) || 1, last)));
 }
 
 // Every scheduled deposit from the start date up to `until` (inclusive).
@@ -64,6 +74,12 @@ function scheduledDeposits(b, until) {
   for (let y = s.getFullYear(), m = s.getMonth(); y < u.getFullYear() || (y === u.getFullYear() && m <= u.getMonth()); m === 11 ? (y++, (m = 0)) : m++) {
     const d = lastWorkingDay(y, m);
     if (d >= b.startDate && d <= until) out.push({ key: `volunteer-${y}-${String(m + 1).padStart(2, "0")}`, date: d, kind: "volunteer", label: "Volunteer payment", expected: Number(b.volunteerAmount) || null });
+    for (const sub of b.subscriptions || []) {
+      const bd = billDate(y, m, sub.day);
+      if (bd >= b.startDate && bd >= (sub.startDate || "") && (!sub.endDate || bd <= sub.endDate) && bd <= until) {
+        out.push({ key: `sub-${sub.id}-${y}-${String(m + 1).padStart(2, "0")}`, date: bd, kind: "subscription", label: `${sub.name} subscription`, expected: Number(sub.amount) || null, out: true });
+      }
+    }
   }
   return out.sort((a, c) => a.date.localeCompare(c.date));
 }
@@ -95,7 +111,7 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
     storageGet(BUDGET_STORAGE_KEY).then((data) => {
       if (!alive) return;
       const fresh = !data;
-      setB({ ...defaultBudget(), ...(data || {}) });
+      setB({ ...defaultBudget(), ...(data || {}), subscriptions: data && data.subscriptions ? data.subscriptions : STARTER_SUBSCRIPTIONS });
       if (fresh) setShowSettings(true);
     });
     return () => {
@@ -128,6 +144,8 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
       }
     }
     for (const ex of manualExpenses) {
+      // Ticked subscriptions are already in the tally from the schedule.
+      if (ex.subKey) continue;
       if (ex.date && ex.date >= b.startDate) rows.push({ date: ex.date, item: ex.description || "Expense", amount: -(Number(ex.amount) || 0), source: "expense", expenseId: ex.id });
     }
     return rows;
@@ -150,16 +168,22 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
     if (!(amt > 0)) return;
     update({ checks: { ...b.checks, [s.key]: { amount: amt, doneAt: today } } });
     if (s.kind === "volunteer" && !b.volunteerAmount) update({ volunteerAmount: amt });
+    // Subscriptions also go into Business Summary's expenses, so they count for tax.
+    if (s.kind === "subscription") setManualExpenses((prev) => [{ id: s.key, subKey: s.key, date: s.date, description: s.label, amount: amt, category: "Subscriptions" }, ...prev.filter((x) => x.id !== s.key)]);
   }
   function untick(s) {
     const next = { ...b.checks };
     delete next[s.key];
     update({ checks: next });
+    if (s.kind === "subscription") setManualExpenses((prev) => prev.filter((x) => x.id !== s.key));
+  }
+  function updateSub(id, patch) {
+    update({ subscriptions: b.subscriptions.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
   }
 
   // ----- Running tally -----
   const tally = [
-    ...schedule.filter((s) => b.checks[s.key]).map((s) => ({ date: s.date, item: s.label, amount: Number(b.checks[s.key].amount) || 0, source: "schedule" })),
+    ...schedule.filter((s) => b.checks[s.key]).map((s) => ({ date: s.date, item: s.label, amount: (s.out ? -1 : 1) * (Number(b.checks[s.key].amount) || 0), source: "schedule" })),
     ...b.entries.filter((e) => e.date >= b.startDate).map((e) => ({ date: e.date, item: `${BUDGET_ENTRY_TYPES[e.type].label}${e.description ? `: ${e.description}` : ""}`, amount: BUDGET_ENTRY_TYPES[e.type].sign * (Number(e.amount) || 0), source: "entry", entryId: e.id })),
     ...(b.income || []).filter((e) => e.toCardSpace && e.date >= b.startDate).map((e) => ({ date: e.date, item: `${e.stream} income${e.description ? `: ${e.description}` : ""}`, amount: Number(e.amount) || 0, source: "income", incomeId: e.id })),
     ...appRows,
@@ -168,10 +192,10 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
   const withBalance = tally.map((r) => ({ ...r, balance: (running += r.amount) }));
   const balance = running;
   const sum = (f) => tally.filter(f).reduce((s, r) => s + r.amount, 0);
-  const deposited = sum((r) => r.source === "schedule" || (r.source === "entry" && r.amount > 0));
-  const withdrawn = -sum((r) => r.source === "entry" && r.item.startsWith("Withdrawal"));
+  const deposited = sum((r) => (r.source === "schedule" || r.source === "entry") && r.amount > 0);
+  const withdrawn = 0 - sum((r) => r.source === "entry" && r.item.startsWith("Withdrawal"));
   const cardProfit = appRows.filter((r) => r.profit != null).reduce((s, r) => s + r.profit, 0);
-  const expenses = -sum((r) => r.source === "expense");
+  const expenses = 0 - sum((r) => r.source === "expense" || (r.source === "schedule" && r.amount < 0));
   const cardCash = sum((r) => r.source === "app");
 
   function addEntry(e) {
@@ -223,7 +247,8 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
           ⚙️ Budget settings {showSettings ? "▲" : "▼"}
         </button>
         <span style={{ fontSize: 11.5, color: "#6B7180", marginLeft: 10 }}>
-          {fmtMoney(Number(b.fortnightAmount) || 0)} every second Thursday from {b.anchor} · volunteer payment on the last working day · tally from {b.startDate}
+          {fmtMoney(Number(b.fortnightAmount) || 0)} every second Thursday from {b.anchor} · volunteer payment on the last working day
+          {(b.subscriptions || []).filter((x) => !x.endDate || x.endDate >= today).map((x) => ` · ${x.name} ${fmtMoney(Number(x.amount) || 0)} on the ${x.day}${[11, 12, 13].includes(x.day % 100) ? "th" : ({ 1: "st", 2: "nd", 3: "rd" })[x.day % 10] || "th"}`).join("")} · tally from {b.startDate}
         </span>
         {showSettings && (
           <div style={{ marginTop: 12 }}>
@@ -249,6 +274,23 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
               <input type="checkbox" checked={b.includeApp} onChange={(e) => update({ includeApp: e.target.checked })} style={{ width: "auto", margin: 0 }} />
               Include card buys, sales (after fees), grading, box breaks and expenses from the app in the tally
             </label>
+            <div className="oswald" style={{ fontSize: 13.5, fontWeight: 600, margin: "14px 0 6px" }}>Monthly subscriptions</div>
+            {(b.subscriptions || []).map((x) => (
+              <div key={x.id} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 6 }}>
+                <Field label="Name"><input value={x.name} onChange={(e) => updateSub(x.id, { name: e.target.value })} style={{ width: 140 }} /></Field>
+                <Field label="Amount (A$)"><input type="number" step="0.01" min="0" value={x.amount} onChange={(e) => updateSub(x.id, { amount: e.target.value })} style={{ width: 90 }} /></Field>
+                <Field label="Billed on day"><input type="number" min="1" max="31" value={x.day} onChange={(e) => updateSub(x.id, { day: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })} style={{ width: 70 }} /></Field>
+                <Field label="From"><input type="date" value={x.startDate} onChange={(e) => updateSub(x.id, { startDate: e.target.value })} /></Field>
+                <Field label="Cancelled on (optional)"><input type="date" value={x.endDate} onChange={(e) => updateSub(x.id, { endDate: e.target.value })} /></Field>
+                <button type="button" className="btnSecondary" style={{ ...small, marginBottom: 6 }} onClick={() => update({ subscriptions: b.subscriptions.filter((y) => y.id !== x.id) })}>Remove</button>
+              </div>
+            ))}
+            <button type="button" className="btnSecondary" style={small} onClick={() => update({ subscriptions: [...(b.subscriptions || []), { id: crypto.randomUUID(), name: "", amount: "", day: new Date().getDate(), startDate: today, endDate: "" }] })}>
+              + Add subscription
+            </button>
+            <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6, lineHeight: 1.6 }}>
+              Bills show on the calendar as money out. Charged in US$? Type what your bank actually took when you tick it — it's saved to Business Summary expenses for tax. Set "Cancelled on" rather than removing, so past months stay in the tally.
+            </div>
             <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6, lineHeight: 1.6 }}>
               Pick any Thursday you transfer on — the fortnights count forward and back from it. Turn the app activity off if you pay for cards from a different account. Only activity on or after the start date counts.
             </div>
@@ -309,7 +351,7 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
                   <span className="mono" style={{ color: late ? "#B4472E" : "#6B7180", minWidth: 78 }}>{parseLocal(s.date).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}</span>
                   <span style={{ flex: 1, color: done ? "#6B7180" : "#EDEAE1", textDecoration: done ? "line-through" : "none" }}>{s.label}</span>
                   {done ? (
-                    <span style={{ color: "#4E8B6B", fontWeight: 600 }}>{fmtMoney(done.amount)}</span>
+                    <span style={{ color: s.out ? "#B4472E" : "#4E8B6B", fontWeight: 600 }}>{s.out ? "-" : ""}{fmtMoney(done.amount)}</span>
                   ) : (
                     <input
                       type="number"
@@ -326,7 +368,7 @@ function BudgetCalendar({ cards, pokemonCards, boxBreaks, manualExpenses, setMan
               );
             })
           )}
-          <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 6 }}>Tick each one once it's in the account; type the amount first if it was different. The last working day ignores public holidays.</div>
+          <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 6 }}>Tick each one once it's in (or out of) the account; type the amount first if it was different. The last working day ignores public holidays.</div>
         </div>
 
         {/* ----- Add an entry ----- */}

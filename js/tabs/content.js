@@ -220,6 +220,27 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     }
   }
 
+  // 6b. Your collection, then vs now (from the monthly price check on My Cards).
+  if (typeof thenVsNow === "function") {
+    const recent = all.filter((c) => c.status === "Raw" || c.status === "Graded").map(thenVsNow).filter((m) => m && daysAgo(m.now.date) <= 35).sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+    if (recent.length >= 2) {
+      const then = recent.reduce((s, m) => s + m.then.value, 0);
+      const now = recent.reduce((s, m) => s + m.now.value, 0);
+      const pct = (n) => `${n >= 0 ? "+" : ""}${Math.round(n * 100)}%`;
+      ideas.push({
+        key: `collection-${month}`,
+        when: "Monthly price check",
+        title: `My collection: last month vs now (${pct((now - then) / then)})`,
+        pillar: "Market Moves",
+        hook: `"Last month my cards were worth ${money0(then)}. Here's what they're worth now."`,
+        beats: [`The total then: ${money0(then)}`, ...recent.slice(0, 3).map((m) => `${m.card.player}: ${money0(m.then.value)} → ${money0(m.now.value)} (${pct(m.change)})`), `The total now: ${money0(now)}`, "What you're doing about the biggest mover"],
+        onScreen: [`Then: ${money0(then)}`, ...recent.slice(0, 3).map((m) => `${m.card.player} ${pct(m.change)}`), `Now: ${money0(now)}`],
+        caption: `Collection check-in ${now >= then ? "📈" : "📉"} ${hashtagsFor(recent[0].card.sport)}`,
+        source: "From the Monthly price check on My Cards. A monthly series people can follow along with.",
+      });
+    }
+  }
+
   // 7. Is it worth grading? (a raw card the maths says to grade)
   const gradeCandidate = all.filter((c) => c.status === "Raw" && c.sellDecision === "Grade First").sort((a, b) => (b.gradedEV || 0) - (a.gradedEV || 0))[0];
   if (gradeCandidate) {
@@ -452,7 +473,10 @@ function IdeaCard({ idea, open, onToggle, onAdd }) {
 }
 
 function MarketKitMaker({ onAdd }) {
-  const empty = { fmt: "move", card: "", sport: "NBA", a: "", b: "", other: "", extra: "" };
+  const empty = { fmt: "move", card: "", sport: "NBA", a: "", b: "", other: "", extra: "", usd: false };
+  const cur = (label) => label.replace("A$", f.usd ? "US$" : "A$");
+  // Market Movers, 130 Point and US eBay show US$ — converted to A$ for the video.
+  const toAud = (v) => (v === "" || !f.usd ? v : Math.round(convertUsdToAud(Number(v))));
   const [f, setF] = useState(empty);
   const [preview, setPreview] = useState(null);
   const fmt = MARKET_FORMATS.find((x) => x.key === f.fmt);
@@ -462,7 +486,7 @@ function MarketKitMaker({ onAdd }) {
   return (
     <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", marginBottom: 24 }}>
       <div style={{ fontSize: 12.5, color: "#A7ADBB", lineHeight: 1.6, marginBottom: 12 }}>
-        Make a kit for any card, owned or not. Look up the prices on eBay sold listings first, then type them here.
+        Make a kit for any card, owned or not. Look up the prices first (eBay sold, Terapeak, or Market Movers for older sales and price charts), then type them here.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10, marginBottom: 12 }}>
         <div style={{ gridColumn: "1 / -1" }}>
@@ -484,12 +508,12 @@ function MarketKitMaker({ onAdd }) {
           <select value={f.sport} onChange={set("sport")}>{Object.keys(SPORT_TAGS).map((s) => <option key={s}>{s}</option>)}</select>
         </div>
         <div>
-          <label style={lbl}>{fmt.a}</label>
+          <label style={lbl}>{cur(fmt.a)}</label>
           <input type="number" min="0" value={f.a} onChange={set("a")} />
         </div>
         {fmt.b && (
           <div>
-            <label style={lbl}>{fmt.b}</label>
+            <label style={lbl}>{cur(fmt.b)}</label>
             <input type="number" min="0" value={f.b} onChange={set("b")} />
           </div>
         )}
@@ -500,10 +524,104 @@ function MarketKitMaker({ onAdd }) {
           </div>
         )}
       </div>
-      <button className="btnPrimary" disabled={!(Number(f.a) > 0)} onClick={() => setPreview(buildMarketIdea(f))}>Make the kit</button>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <button className="btnPrimary" disabled={!(Number(f.a) > 0)} onClick={() => setPreview(buildMarketIdea({ ...f, a: toAud(f.a), b: toAud(f.b) }))}>Make the kit</button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#C6CAD4", cursor: "pointer" }}>
+          <input type="checkbox" checked={f.usd} onChange={(e) => { setF({ ...f, usd: e.target.checked }); setPreview(null); }} style={{ width: "auto", margin: 0 }} />
+          Prices are in US$ (130 Point, US eBay) — convert to A$
+        </label>
+      </div>
       {preview && (
         <div style={{ marginTop: 12, maxWidth: 520 }}>
           <IdeaCard idea={preview} open onAdd={(idea) => { onAdd(idea); setPreview(null); setF(empty); }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----- This week's movers: typed in from Market Movers' movers list -----
+const MOVERS_STORAGE_KEY = "cardflip_ev_movers_v1";
+
+function MoversBox({ onAdd }) {
+  const [data, setData] = useState(null);
+  const blank = { card: "", sport: "NBA", then: "", now: "" };
+  const [form, setForm] = useState(blank);
+  const [preview, setPreview] = useState(null);
+
+  useEffect(() => {
+    storageGet(MOVERS_STORAGE_KEY).then((d) => setData(d || { startedAt: new Date().toISOString().slice(0, 10), rows: [] }));
+  }, []);
+  function save(next) {
+    setData(next);
+    storageSet(MOVERS_STORAGE_KEY, next);
+  }
+  if (!data) return null;
+
+  const rows = data.rows.map((r) => ({ ...r, change: (r.now - r.then) / r.then })).sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+  const pct = (n) => `${n >= 0 ? "+" : ""}${Math.round(n * 100)}%`;
+  const age = Math.floor(daysAgo(data.startedAt));
+
+  function addRow(e) {
+    e.preventDefault();
+    const then = Number(form.then);
+    const now = Number(form.now);
+    if (!form.card.trim() || !(then > 0) || !(now > 0)) return;
+    save({ ...data, rows: [...data.rows, { id: crypto.randomUUID(), card: form.card.trim(), sport: form.sport, then, now }] });
+    setForm({ ...blank, sport: form.sport });
+  }
+
+  const roundup =
+    rows.length >= 2
+      ? {
+          key: `movers-${data.startedAt}`,
+          when: "This week's movers",
+          title: `This week's biggest card movers (${rows.length})`,
+          pillar: "Market Moves",
+          hook: `"${rows[0].card} ${rows[0].change >= 0 ? "jumped" : "dropped"} ${Math.abs(Math.round(rows[0].change * 100))}% this week. Here's who else moved."`,
+          beats: [...rows.slice(0, 5).map((r) => `${r.card}: ${money0(r.then)} → ${money0(r.now)} (${pct(r.change)})`), "Why the biggest one moved — a game, news, hype", "Ask: which one would you buy right now?"],
+          onScreen: rows.slice(0, 5).map((r) => `${r.change >= 0 ? "📈" : "📉"} ${r.card} ${pct(r.change)}`),
+          shots: MARKET_SHOTS,
+          caption: `Biggest movers this week 📈📉 ${NFA} ${hashtagsFor(rows[0].sport)}`,
+          source: "From your movers list. Make it a weekly series: same day, same format.",
+        }
+      : null;
+
+  return (
+    <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", marginBottom: 24 }}>
+      <div style={{ fontSize: 12.5, color: "#A7ADBB", lineHeight: 1.6, marginBottom: 10 }}>
+        Once a week, open the movers list in Market Movers (in AUD) and type in the 3–5 most interesting cards. You'll get a weekly roundup Short, plus a kit for any single card.
+        {age >= 7 && rows.length > 0 && <span style={{ color: "#C9A227" }}> This list is {age} days old. Clear it for a new week.</span>}
+      </div>
+      <form onSubmit={addRow} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+        <input value={form.card} onChange={(e) => setForm({ ...form, card: e.target.value })} placeholder="Card (e.g. Flagg Chrome RC PSA 10)" style={{ flex: 1, minWidth: 200 }} />
+        <select value={form.sport} onChange={(e) => setForm({ ...form, sport: e.target.value })} style={{ width: "auto" }}>
+          {Object.keys(SPORT_TAGS).map((s) => <option key={s}>{s}</option>)}
+        </select>
+        <input type="number" min="0" step="0.01" value={form.then} onChange={(e) => setForm({ ...form, then: e.target.value })} placeholder="Was A$" style={{ width: 90 }} />
+        <input type="number" min="0" step="0.01" value={form.now} onChange={(e) => setForm({ ...form, now: e.target.value })} placeholder="Now A$" style={{ width: 90 }} />
+        <button className="btnPrimary" type="submit" style={{ fontSize: 12.5 }}>Add</button>
+      </form>
+
+      {rows.map((r) => (
+        <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, padding: "5px 0", borderTop: "1px solid #24272F", flexWrap: "wrap" }}>
+          <span style={{ flex: 1, minWidth: 160, fontWeight: 600 }}>{r.card} <span style={{ color: "#6B7180", fontWeight: 400 }}>· {r.sport}</span></span>
+          <span className="mono" style={{ color: "#8B90A0" }}>{money0(r.then)} → {money0(r.now)}</span>
+          <span style={{ fontWeight: 600, color: r.change >= 0 ? "#4E8B6B" : "#B4472E", minWidth: 44, textAlign: "right" }}>{pct(r.change)}</span>
+          <button type="button" className="btnSecondary" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={() => setPreview(buildMarketIdea({ fmt: "move", card: r.card, sport: r.sport, a: r.then, b: r.now, other: "", extra: "this week" }))}>🎬 Kit</button>
+          <button type="button" onClick={() => save({ ...data, rows: data.rows.filter((x) => x.id !== r.id) })} title="Remove" style={{ background: "none", border: "none", color: "#6B7180", cursor: "pointer", padding: 0 }}>×</button>
+        </div>
+      ))}
+      {rows.length > 0 && (
+        <button type="button" className="btnSecondary" style={{ fontSize: 11.5, padding: "4px 10px", marginTop: 8 }} onClick={() => { save({ startedAt: new Date().toISOString().slice(0, 10), rows: [] }); setPreview(null); }}>
+          Clear for a new week
+        </button>
+      )}
+
+      {(preview || roundup) && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12, marginTop: 12 }}>
+          {roundup && <IdeaCard idea={roundup} open onAdd={onAdd} />}
+          {preview && <IdeaCard idea={preview} open onAdd={(idea) => { onAdd(idea); setPreview(null); }} />}
         </div>
       )}
     </div>
@@ -638,6 +756,9 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
 
       <SectionTitle>🔭 Cards you don't own — market kit maker</SectionTitle>
       <MarketKitMaker onAdd={addFromIdea} />
+
+      <SectionTitle>📈 This week's movers</SectionTitle>
+      <MoversBox onAdd={addFromIdea} />
 
       {/* ----- Plan ----- */}
       <SectionTitle>📋 Your content plan</SectionTitle>

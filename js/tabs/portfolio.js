@@ -930,7 +930,7 @@ function CompFinder({ card, grade, onApply, title = "🔄 Update Comps", applyNo
                 <a href={ebaySoldUrl(tierSearchText(details, grade))} target="_blank" rel="noreferrer" style={{ color: "#2FA89A" }}>
                   eBay sold search ↗
                 </a>{" "}
-                (or 130 Point / CardHedger), press <b>Ctrl+A</b> then <b>Ctrl+C</b>, and paste the whole page here. Gemini reads the sales and the same matching rules pick out this exact card.
+                (or 130 Point / CardHedger / the card's recent sales in Market Movers), press <b>Ctrl+A</b> then <b>Ctrl+C</b>, and paste the whole page here. Gemini reads the sales and the same matching rules pick out this exact card.
               </div>
               <textarea
                 value={pasteText}
@@ -1204,6 +1204,49 @@ function trendChangePct(points) {
   return start > 0 ? (end - start) / start : null;
 }
 
+// The card's page in Market Movers (it has no public API, so you find the card there once and
+// paste its link). Until then: copy a search for the card to paste into Market Movers.
+function MarketMoversLink({ card, grade, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [url, setUrl] = useState(card.mmUrl || "");
+  const [copied, setCopied] = useState(false);
+  const style = { fontSize: 12, padding: "6px 12px", textDecoration: "none", display: "inline-flex", alignItems: "center", borderColor: "#8B6FD666", color: "#B9A3F0" };
+
+  function copySearch() {
+    const text = tierSearchText(compSearchDefaults(card), grade).replace(/ -\w+/g, "");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  function save() {
+    const clean = url.trim();
+    if (clean && !/^https?:\/\//i.test(clean)) return;
+    onSave(clean);
+    setEditing(false);
+  }
+
+  if (card.mmUrl && !editing) {
+    return (
+      <span style={{ display: "inline-flex", gap: 4 }}>
+        <a href={card.mmUrl} target="_blank" rel="noreferrer" className="btnSecondary" style={style}>📊 Market Movers ↗</a>
+        <button type="button" className="btnSecondary" style={{ ...style, padding: "6px 8px" }} title="Change the Market Movers link" onClick={() => { setUrl(card.mmUrl); setEditing(true); }}>✎</button>
+      </span>
+    );
+  }
+  if (!editing) {
+    return <button type="button" className="btnSecondary" style={style} onClick={() => setEditing(true)}>📊 Link Market Movers</button>;
+  }
+  return (
+    <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignItems: "center", flexBasis: "100%" }}>
+      <button type="button" className="btnSecondary" style={style} onClick={copySearch} title="Copy a search for this card, then paste it into Market Movers">{copied ? "Copied ✓" : "1. Copy search"}</button>
+      <input value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }} placeholder="2. Paste the card's Market Movers link" style={{ flex: 1, minWidth: 200, padding: "5px 8px", fontSize: 12.5 }} />
+      <button type="button" className="btnPrimary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={save} disabled={Boolean(url.trim()) && !/^https?:\/\//i.test(url.trim())}>Save</button>
+      <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 10px" }} onClick={() => setEditing(false)}>Cancel</button>
+    </span>
+  );
+}
+
 function CompUpdater({ card, onUpdate }) {
   return (
     <CompFinder
@@ -1211,6 +1254,7 @@ function CompUpdater({ card, onUpdate }) {
       grade={card.grade || null}
       savedTrend={card.priceTrend}
       updatedAt={card.compsUpdatedAt}
+      headerExtra={<MarketMoversLink key={card.id} card={card} grade={card.grade || null} onSave={(mmUrl) => onUpdate({ ...card, mmUrl })} />}
       onApply={({ values, details, trend, extra }) => onUpdate({ ...cardWithCompValues(card, values, details, trend), ...(extra || {}) })}
     />
   );
@@ -1665,6 +1709,126 @@ function BulkCompRefresh({ cards, setCards, isPokemon = false }) {
               ))}
               <div style={{ marginTop: 4, color: "#6B7180" }}>Open a card and use "Update Comps" to check its sales and apply them by hand.</div>
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Monthly price check (then vs now) =====
+// Once a month: open each card in Market Movers (set it to AUD), type today's value, and see how
+// far it moved since last time. Each value goes into the card's price history, so Home's price
+// moves and the Content tab's ideas pick it up.
+const MM_CHECK_KEY = "cardflip_ev_mm_check_open";
+
+function ownTierKey(c) {
+  return c.grade ? tierKeyForGrade(c.grade) : "raw";
+}
+// The last two values in a card's history for the grade it's held in.
+function thenVsNow(c) {
+  const key = ownTierKey(c);
+  if (!key) return null;
+  const pts = (c[TIER_FIELDS[key].history] || []).filter((p) => p && Number(p.value) > 0);
+  if (pts.length < 2) return null;
+  const then = pts[pts.length - 2];
+  const now = pts[pts.length - 1];
+  return { card: c, key, then, now, change: (now.value - then.value) / then.value };
+}
+
+function MonthlyPriceCheck({ cards, setCards }) {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(MM_CHECK_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  });
+  const [values, setValues] = useState({});
+  const today = new Date().toISOString().slice(0, 10);
+
+  const held = cards.filter((c) => (c.status === "Raw" || c.status === "Graded") && ownTierKey(c));
+  const lastChecked = (c) => [c.compsUpdatedAt, c.compsCheckedAt].filter(Boolean).sort().pop();
+  const due = held
+    .filter((c) => {
+      const d = lastChecked(c);
+      return !d || (Date.now() - new Date(d).getTime()) / 86400000 >= STALE_COMPS_DAYS;
+    })
+    .sort((a, b) => Boolean(b.mmUrl) - Boolean(a.mmUrl) || (Number(b[TIER_FIELDS[ownTierKey(b)].avg]) || 0) - (Number(a[TIER_FIELDS[ownTierKey(a)].avg]) || 0));
+  // Cards checked in the last 35 days that have something to compare against.
+  const recent = held
+    .map(thenVsNow)
+    .filter((m) => m && (Date.now() - new Date(m.now.date).getTime()) / 86400000 <= 35)
+    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+  const totalThen = recent.reduce((s, m) => s + m.then.value * (Number(m.card.quantity) || 1), 0);
+  const totalNow = recent.reduce((s, m) => s + m.now.value * (Number(m.card.quantity) || 1), 0);
+
+  function toggle() {
+    setOpen((v) => {
+      try {
+        localStorage.setItem(MM_CHECK_KEY, v ? "0" : "1");
+      } catch (e) {}
+      return !v;
+    });
+  }
+  function save(c, value) {
+    if (!(value > 0)) return;
+    setCards((prev) => prev.map((x) => (x.id === c.id ? { ...cardWithCompValues(x, { [ownTierKey(x)]: value }, null, null), compsCheckedAt: today } : x)));
+    setValues((v) => ({ ...v, [c.id]: "" }));
+  }
+  const pct = (n) => `${n >= 0 ? "+" : ""}${Math.round(n * 100)}%`;
+  const label = (c) => [c.player, c.card].filter(Boolean).join(" · ");
+
+  if (!held.length) return null;
+  return (
+    <div style={{ marginTop: 12, border: `1px solid ${due.length ? "#8B6FD655" : "#2C303B"}`, borderRadius: 10, padding: "12px 14px", background: "#191B22" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <button type="button" className="btnSecondary" style={{ fontSize: 12.5, padding: "7px 14px", borderColor: "#8B6FD666", color: "#B9A3F0" }} onClick={toggle}>
+          📊 Monthly price check {open ? "▲" : "▼"}
+        </button>
+        <span style={{ fontSize: 12, color: due.length ? "#C9A227" : "#4E8B6B" }}>{due.length ? `${due.length} card${due.length === 1 ? "" : "s"} due` : "All checked this month ✓"}</span>
+        {recent.length > 0 && (
+          <span style={{ fontSize: 12, color: "#8B90A0", marginLeft: "auto" }}>
+            This month: {fmtMoney(totalThen)} → <b style={{ color: totalNow >= totalThen ? "#4E8B6B" : "#B4472E" }}>{fmtMoney(totalNow)}</b> ({pct(totalThen ? (totalNow - totalThen) / totalThen : 0)}) across {recent.length} card{recent.length === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 11.5, color: "#6B7180", marginBottom: 8, lineHeight: 1.6 }}>
+            Open each card in Market Movers (set its currency to AUD), type today's value for the grade you hold, and press Enter. Cards with a saved link are at the top. Same price as before? Type it anyway — it marks the card checked.
+          </div>
+          {due.map((c) => {
+            const key = ownTierKey(c);
+            const was = Number(c[TIER_FIELDS[key].avg]) || null;
+            const v = values[c.id] ?? "";
+            const n = Number(v);
+            return (
+              <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "7px 0", borderTop: "1px solid #24272F", fontSize: 12.5 }}>
+                <span style={{ flex: 1, minWidth: 180 }}>
+                  <b>{label(c)}</b> <span style={{ color: "#6B7180" }}>· {c.grade || "Raw"} · was {was ? fmtMoney(was) : "—"}{lastChecked(c) ? ` on ${lastChecked(c)}` : ""}</span>
+                </span>
+                <MarketMoversLink key={c.id} card={c} grade={c.grade || null} onSave={(mmUrl) => setCards((prev) => prev.map((x) => (x.id === c.id ? { ...x, mmUrl } : x)))} />
+                <input type="number" min="0" step="0.01" placeholder="Now A$" value={v} onChange={(e) => setValues({ ...values, [c.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && save(c, n)} style={{ width: 90, padding: "5px 8px", fontSize: 12.5 }} />
+                {n > 0 && was ? <span style={{ fontSize: 11.5, color: n >= was ? "#4E8B6B" : "#B4472E", minWidth: 40 }}>{pct((n - was) / was)}</span> : null}
+                <button type="button" className="btnPrimary" style={{ fontSize: 12, padding: "5px 12px" }} disabled={!(n > 0)} onClick={() => save(c, n)}>Save</button>
+              </div>
+            );
+          })}
+
+          {recent.length > 0 && (
+            <>
+              <div className="oswald" style={{ fontSize: 13.5, fontWeight: 600, margin: "14px 0 4px" }}>Then vs now</div>
+              {recent.slice(0, 10).map((m) => (
+                <div key={m.card.id} style={{ display: "flex", gap: 8, fontSize: 12.5, padding: "4px 0", borderTop: "1px solid #24272F", flexWrap: "wrap" }}>
+                  <span style={{ flex: 1, minWidth: 180 }}>{label(m.card)} <span style={{ color: "#6B7180" }}>· {m.card.grade || "Raw"}</span></span>
+                  <span className="mono" style={{ color: "#8B90A0" }}>{fmtMoney(m.then.value)} ({m.then.date}) → {fmtMoney(m.now.value)}</span>
+                  <span style={{ fontWeight: 600, color: m.change >= 0 ? "#4E8B6B" : "#B4472E", minWidth: 44, textAlign: "right" }}>{pct(m.change)}</span>
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6 }}>Big moves show up as video ideas in Content Creation.</div>
+            </>
           )}
         </div>
       )}

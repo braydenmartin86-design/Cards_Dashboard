@@ -593,7 +593,12 @@ function BuyDetailModal({ t, onUpdate, onRemove, onWin, onClose }) {
           applyNoun="price"
           defaultOpen={t.marketPrice <= 0}
           updatedAt={t.compsUpdatedAt}
-          headerExtra={<BuySoldLinks t={t} />}
+          headerExtra={
+            <>
+              <BuySoldLinks t={t} />
+              <MarketMoversLink key={t.id} card={t} grade={buyGrade(t)} onSave={(mmUrl) => onUpdate(t.id, { mmUrl })} />
+            </>
+          }
           onApply={({ values, details }) => onUpdate(t.id, buyCompPatch(values, details))}
         />
 
