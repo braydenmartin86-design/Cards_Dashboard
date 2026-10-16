@@ -386,6 +386,7 @@ function ListingAlerts({ allEnriched, setTab }) {
             <span style={{ fontWeight: 600 }}>{k.card.player}</span>
             {k.totalDays != null && <ListingDaysBox days={k.totalDays} />}
             <span style={{ color: k.color, marginLeft: 8 }}>{k.text}</span>
+            {["relist", "stop"].includes(k.stage) && <AuctionTip plan={auctionPlan(k)} compact />}
           </div>
         ))}
         {due.length > 4 && <div style={{ fontSize: 11, color: "#8B90A0" }}>+ {due.length - 4} more on My Sales</div>}

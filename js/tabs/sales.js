@@ -567,6 +567,7 @@ function ListingCheckRow({ check, onUpdate, onPlan }) {
         </div>
       )}
       <div style={{ fontSize: 11.5, color: check.color, marginTop: 3 }}>{check.text}</div>
+      {["relist", "stop"].includes(check.stage) && <AuctionTip plan={auctionPlan(check)} compact />}
       <ListingCheckActions check={check} onUpdate={onUpdate} />
     </div>
   );
@@ -697,8 +698,25 @@ function auctionPlan(check) {
   };
 }
 
-function AuctionTip({ plan }) {
+function AuctionTip({ plan, compact = false }) {
   if (!plan) return null;
+  // One line for the check-up cards; the full box (with the reasoning) in the plan.
+  if (compact) {
+    return (
+      <div style={{ fontSize: 11.5, marginTop: 4, color: plan.risky ? "#B4472E" : "#2FA89A" }}>
+        🔨 Auction:{" "}
+        {plan.expect ? (
+          <>
+            {plan.start ? <>start <b>{plan.start}</b> · </> : "starts at 99c · "}
+            likely <b>{plan.expect}</b> · keep <b>{plan.keep}</b>
+            {plan.risky && " · could finish under break-even"}
+          </>
+        ) : (
+          plan.note
+        )}
+      </div>
+    );
+  }
   return (
     <div style={{ marginTop: 6, padding: "7px 10px", borderRadius: 6, background: "#14161C", border: `1px solid ${plan.risky ? "#B4472E55" : "#2FA89A55"}`, fontSize: 12 }}>
       <div style={{ fontWeight: 600, color: plan.risky ? "#B4472E" : "#2FA89A", marginBottom: 3 }}>🔨 Auction option</div>
