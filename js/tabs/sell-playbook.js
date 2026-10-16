@@ -7,7 +7,7 @@ const FEE_COMPARISON = [
   { platform: "Whatnot (standard)", fee: "~10.9% + $0.30", note: "8% commission + processing, outside promo hours" },
   { platform: "Standard eBay", fee: "~13.25% + $0.30", note: "No Store subscription, always available, no approval gate" },
   { platform: "ShipMyCards Marketplace", fee: "1%", note: "Cheapest, but very few buyers (~24 listings when checked, Oct 2026) — only worth a week's try for cards under US$50" },
-  { platform: "Fanatics Collect auction (via SMC)", fee: "1% (buyer pays 20% premium)", note: "Graded only, US$50+ minimum" },
+  { platform: "Fanatics Collect auction (via SMC)", fee: "1% + US$3 (buyer pays 20% premium)", note: "Graded only, US$50+ minimum" },
   { platform: "PC Sportscards eBay (via SMC)", fee: "~14% + US$1 (18% under US$50)", note: "Fastest ShipMyCards option, eBay's full audience" },
   { platform: "Facebook Marketplace/groups", fee: "0%", note: "No platform fee, but no buyer protection either" },
 ];
@@ -189,8 +189,8 @@ function SellingPlaybook() {
 
 const SMC_OPTIONS = [
   { name: "ShipMyCards Marketplace", fee: "1%", bestFor: "Cards under US$50, for about a week — very few buyers (~24 listings when checked), so don't wait on it" },
-  { name: "Fanatics Collect auction (via SMC)", fee: "0% + 1% SMC (buyer pays 20% premium)", bestFor: "Graded only, $50+ minimum. High-demand slabs; weekly auctions run ~10 days" },
-  { name: "Fanatics Collect Buy Now (via SMC)", fee: "6% + 1% SMC", bestFor: "Graded $50+ when you'd rather set the price than auction it" },
+  { name: "Fanatics Collect auction (via SMC)", fee: "0% + 1% SMC + US$3 (buyer pays 20% premium)", bestFor: "Graded only, $50+ minimum. High-demand slabs; weekly auctions run ~10 days" },
+  { name: "Fanatics Collect Buy Now (via SMC)", fee: "6% + 1% SMC + US$3", bestFor: "Graded $50+ when you'd rather set the price than auction it" },
   { name: "PC Sportscards eBay (via SMC)", fee: "13–17% + US$1 + 1% (8% at $1k+, 5% at $5k+)", bestFor: "Raw $50+, or slabs without much Fanatics demand. Fastest turnaround" },
   { name: "Card Show Consignment", fee: "US$10/card + 2% if sold", bestFor: "Only $200+ cards where $10 is small, and you can wait for a show (~6 a year)" },
   { name: "Purchase Program", fee: "Paid 70–85% of conservative value", bestFor: "Only when you need the money now — $50–$5,000, raw or graded, instant store credit" },

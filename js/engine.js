@@ -189,11 +189,12 @@ function estimateSellingFee(method, price) {
     case "SMC → PC Sportscards (eBay)":
       return pcSportscardsViaSmcFee(p);
     // Enter the hammer price as the sale price. Fanatics charges the seller nothing at auction (the
-    // buyer pays a premium on top), so only ShipMyCards' 1% comes off.
+    // buyer pays a premium on top); ShipMyCards takes 1% plus a US$3 per-card fee (per SMC's
+    // consignment form, Oct 2026).
     case "SMC → Fanatics Collect auction":
-      return p * 0.01;
+      return p * 0.01 + 3 * currentUsdToAudRate();
     case "SMC → Fanatics Collect Buy Now":
-      return p * 0.07;
+      return p * 0.07 + 3 * currentUsdToAudRate();
     case "SMC card show":
       return p * 0.02 + 10 * currentUsdToAudRate();
     case "SMC Purchase Program":
@@ -844,7 +845,7 @@ function suggestedSellingMethod(card, listing) {
     if (isGraded && usd >= 50) {
       return {
         method: "SMC → Fanatics Collect auction",
-        why: `Fanatics Collect's weekly auction through ShipMyCards (graded, US$50+). You keep the full hammer price minus SMC's 1% — but buyers add a 20% premium on top, so bids land below eBay comps. For a card with deep demand (PSA 10 key rookies) that's usually the best net; for a thin market, PC Sportscards' eBay consignment may do better.`,
+        why: `Fanatics Collect's weekly auction through ShipMyCards (graded, US$50+). You keep the full hammer price minus SMC's 1% + US$3 — but buyers add a 20% premium on top, so bids land below eBay comps. For a card with deep demand (PSA 10 key rookies) that's usually the best net; for a thin market, PC Sportscards' eBay consignment may do better.`,
       };
     }
     if (usd < 50) {
