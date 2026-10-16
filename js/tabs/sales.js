@@ -412,11 +412,18 @@ function niceListPrice(v) {
   return v >= 20 ? Math.ceil(v) : Math.ceil(v * 2) / 2;
 }
 
-function listingCheck(c) {
-  // ShipMyCards vault cards are priced in US$ there: advice and suggested prices are worked out in US$.
+// ShipMyCards vault cards are priced in US$ there: advice and suggested prices are worked out in US$.
+function listingMoney(c) {
   const usd = sellsInUsd(c);
-  const fm = (aud) => (usd ? fmtUsd(audToUsd(aud)) : fmtMoney(aud));
-  const nice = (aud) => (usd ? niceListPrice(audToUsd(aud)) * currentUsdToAudRate() : niceListPrice(aud));
+  return {
+    usd,
+    fm: (aud) => (usd ? fmtUsd(audToUsd(aud)) : fmtMoney(aud)),
+    nice: (aud) => (usd ? niceListPrice(audToUsd(aud)) * currentUsdToAudRate() : niceListPrice(aud)),
+  };
+}
+
+function listingCheck(c) {
+  const { usd, fm, nice } = listingMoney(c);
   const totalDays = daysSince(c.dateListed);
   if (totalDays == null) return { card: c, stage: "noDate", priority: 1, color: "#8B90A0", text: "No listing date saved — enter when you listed it." };
   const stepDays = daysSince(c.lastListingActionAt) ?? totalDays;
@@ -428,7 +435,11 @@ function listingCheck(c) {
   const compsAge = compsAgeDays(c);
   const trend = c.priceTrend && c.priceTrend.points ? trendChangePct(c.priceTrend.points) : null;
   const falling = trend != null && trend <= -0.05;
-  const ebay = !c.sellingMethod || /ebay/i.test(c.sellingMethod);
+  // Consigned through ShipMyCards (PC Sportscards / Fanatics): you can't relist or send offers
+  // yourself — price changes go through SMC.
+  const consigned = /^SMC → (PC Sportscards|Fanatics)/.test(c.sellingMethod || "");
+  const ebay = !consigned && (!c.sellingMethod || /ebay/i.test(c.sellingMethod));
+  const relistHow = consigned ? "ask ShipMyCards to relist it (or switch it to auction)" : ebay ? "end it and relist with Sell similar" : "repost or bump it";
   // The ShipMyCards Marketplace has very few buyers, so it only gets a week. After that: under
   // US$50 bring it home to sell in a lot; over, consign it (Fanatics for slabs, else PC Sportscards).
   const smcMarketplace = c.sellingMethod === "ShipMyCards Marketplace";
@@ -440,7 +451,8 @@ function listingCheck(c) {
       ? "move it to Fanatics Collect's weekly auction through ShipMyCards"
       : "move it to PC Sportscards' eBay consignment through ShipMyCards";
   const atFloor = price != null && price <= breakEven * 1.02;
-  const base = { card: c, totalDays, stepDays, price, value, breakEven, compsAge };
+  const base = { card: c, totalDays, stepDays, price, value, breakEven, compsAge, ebay, consigned, relistHow, smcMarketplace, smcNext, falling };
+  const viaSmc = consigned ? " (ask ShipMyCards to change the price)" : "";
   const step = (stage, priority, color, text, suggested) => ({ ...base, stage, priority, color, text, suggested: suggested != null && suggested < price ? suggested : null });
 
   if (smcMarketplace && stepDays >= SMC_MARKETPLACE_TRY_DAYS) {
@@ -457,7 +469,7 @@ function listingCheck(c) {
   if (price > value * (1 + LISTING_OVERPRICED_PCT) && !atFloor) {
     const target = Math.max(nice(value), floorPrice);
     const pct = Math.round((price / value - 1) * 100);
-    return step("over", 2, "#B4472E", `Listed ${pct}% above comps (${fm(value)}). Lower it to ${fm(target)}${floorPrice > nice(value) ? " — your break-even, the lowest to go" : ""}.`, target);
+    return step("over", 2, "#B4472E", `Listed ${pct}% above comps (${fm(value)}). Lower it to ${fm(target)}${floorPrice > nice(value) ? " — your break-even, the lowest to go" : ""}${viaSmc}.`, target);
   }
 
   if (atFloor) {
@@ -465,20 +477,20 @@ function listingCheck(c) {
       if (falling && c.totalCost < CHEAP_CARD_COST) {
         return step("stop", 2, "#B4472E", `At break-even after ${totalDays} days and prices are falling. It's a cheap card — fine to drop to ${fm(value)} to get the cash back, or add it to a lot.`, nice(value));
       }
-      return step("stop", 3, "#B4472E", `At break-even after ${totalDays} days — stop cutting. Take it down and hold, add it to a team lot, or try ${ebay ? "Facebook or Instagram" : "eBay"}.`);
+      return step("stop", 3, "#B4472E", consigned ? `At break-even after ${totalDays} days — stop cutting. Ask ShipMyCards to pull it back to your vault and hold it for the sell window, or bring it home for a lot.` : `At break-even after ${totalDays} days — stop cutting. Take it down and hold, add it to a team lot, or try ${ebay ? "Facebook or Instagram" : "eBay"}.`);
     }
     if (stepDays >= LISTING_STEPS.relist) {
-      return step("relist", 4, "#5C7A99", ebay ? `At break-even with no room to cut — end it and relist with Sell similar for a fresh run in search.` : `At break-even with no room to cut — repost or bump it.`);
+      return step("relist", 4, "#5C7A99", `At break-even with no room to cut — ${relistHow}${ebay ? " for a fresh run in search" : ""}.`);
     }
     return step("hold", 6, "#8B90A0", `Already at break-even (${fm(breakEven)}) — leave the price. Relist at ${LISTING_STEPS.relist} days if it hasn't sold.`);
   }
 
   if (stepDays >= LISTING_STEPS.relist) {
-    return step("relist", 4, "#5C7A99", ebay ? `Up ${stepDays} days at a fair price — end it and relist with Sell similar. New listings get more search visibility.` : `Up ${stepDays} days at a fair price — repost or bump it.`);
+    return step("relist", 4, "#5C7A99", `Up ${stepDays} days at a fair price — ${relistHow}.${ebay ? " New listings get more search visibility." : ""}`);
   }
   if (stepDays >= LISTING_STEPS.cut) {
     const target = Math.max(nice(price * (1 - LISTING_CUT_PCT)), floorPrice);
-    return step("cut", 3, "#C9A227", `Priced near comps (${fm(value)}) but no sale in ${stepDays} days — lower to ${fm(target)}${ebay ? ", or send watchers an offer at that price" : ""}.`, target);
+    return step("cut", 3, "#C9A227", `Priced near comps (${fm(value)}) but no sale in ${stepDays} days — lower to ${fm(target)}${ebay ? ", or send watchers an offer at that price" : viaSmc}.`, target);
   }
   return step("watch", 5, "#4E8B6B", `Priced at market (comps ${fm(value)}). Give it until day ${LISTING_STEPS.cut}${ebay ? " — if it has watchers, send them an offer" : ""}.`);
 }
@@ -522,7 +534,48 @@ function ListingDaysBox({ days }) {
   );
 }
 
-function ListingCheckRow({ check, onUpdate, onOpen }) {
+function ListingCheckRow({ check, onUpdate, onPlan }) {
+  const c = check.card;
+  const usd = sellsInUsd(c);
+  const money = (aud) => (usd ? `${fmtUsd(audToUsd(aud))} (${fmtMoney(aud).replace("$", "A$")})` : fmtMoney(aud));
+  const cutSummary = listingCutSummary(c, usd ? (aud) => fmtUsd(audToUsd(aud)) : fmtMoney);
+  const belowFloor = check.price != null && check.breakEven != null && check.price < check.breakEven * 0.98;
+
+  return (
+    <div
+      className="cardRow"
+      style={{ padding: "8px", borderRadius: 6, fontSize: 12.5, cursor: "pointer" }}
+      title="Open its plan and next steps"
+      onClick={(e) => {
+        // Buttons and inputs do their own thing; anywhere else opens the plan.
+        if (e.target.closest("button, input, a")) return;
+        onPlan(c);
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
+        <span style={{ fontWeight: 600 }}>{c.player}</span>
+        {c.grade && <span style={{ color: "#6B7180", marginLeft: 6 }}>{c.grade}</span>}
+        {check.totalDays != null && <ListingDaysBox days={check.totalDays} />}
+        {usd && <span className="mono" title="In the ShipMyCards vault — prices shown in US dollars" style={{ fontSize: 9.5, color: "#C9A227", marginLeft: 8 }}>💵 SMC · PRICES IN US$</span>}
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "#2FA89A" }}>View plan ›</span>
+      </div>
+      {check.stage !== "noDate" && (
+        <div style={{ fontSize: 11.5, color: "#8B90A0", marginTop: 2 }}>
+          {check.price != null ? `Listed ${money(check.price)}` : "No list price"}
+          {check.value != null && ` · comps ${money(check.value)}`}
+          {check.breakEven != null && <> · break-even <span style={{ color: belowFloor ? "#B4472E" : undefined }}>{money(check.breakEven)}</span></>}
+          {cutSummary && ` · ${cutSummary}`}
+          {check.stepDays !== check.totalDays && ` · ${check.stepDays}d since last change`}
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: check.color, marginTop: 3 }}>{check.text}</div>
+      <ListingCheckActions check={check} onUpdate={onUpdate} />
+    </div>
+  );
+}
+
+// The buttons for a listing's current step (lower, other price, relisted, take down, or set the date).
+function ListingCheckActions({ check, onUpdate }) {
   const c = check.card;
   const [editing, setEditing] = useState(false);
   const [newPrice, setNewPrice] = useState("");
@@ -531,9 +584,8 @@ function ListingCheckRow({ check, onUpdate, onOpen }) {
   const actions = c.listingActions || [];
   const btn = { fontSize: 11, padding: "3px 9px" };
   const save = (patch) => onUpdate(c._source, c.id, patch);
-  // ShipMyCards vault cards are priced in US$ there, so show both (prices are stored in A$).
+  // ShipMyCards vault cards are priced in US$ there.
   const usd = sellsInUsd(c);
-  const money = (aud) => (usd ? `${fmtUsd(audToUsd(aud))} (${fmtMoney(aud).replace("$", "A$")})` : fmtMoney(aud));
 
   // Typed prices are in US$ for vault cards; everything is stored in A$ (with the US$ kept too).
   const typedToAud = (v) => (usd ? Number(v) * currentUsdToAudRate() : Number(v));
@@ -551,28 +603,8 @@ function ListingCheckRow({ check, onUpdate, onOpen }) {
     save({ status: c.grade ? "Graded" : "Raw", dateListed: null, lastListingActionAt: null, listingActions: [...actions, { date: today, type: "down", price: check.price }] });
   }
 
-  const cutSummary = listingCutSummary(c, usd ? (aud) => fmtUsd(audToUsd(aud)) : fmtMoney);
-  const belowFloor = check.price != null && check.breakEven != null && check.price < check.breakEven * 0.98;
-
   return (
-    <div className="cardRow" style={{ padding: "8px", borderRadius: 6, fontSize: 12.5 }}>
-      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
-        <span style={{ fontWeight: 600, cursor: "pointer" }} title="Open its sale details" onClick={() => onOpen(c)}>{c.player}</span>
-        {c.grade && <span style={{ color: "#6B7180", marginLeft: 6 }}>{c.grade}</span>}
-        {check.totalDays != null && <ListingDaysBox days={check.totalDays} />}
-        {usd && <span className="mono" title="In the ShipMyCards vault — prices shown in US dollars" style={{ fontSize: 9.5, color: "#C9A227", marginLeft: 8 }}>💵 SMC · PRICES IN US$</span>}
-      </div>
-      {check.stage !== "noDate" && (
-        <div style={{ fontSize: 11.5, color: "#8B90A0", marginTop: 2 }}>
-          {check.price != null ? `Listed ${money(check.price)}` : "No list price"}
-          {check.value != null && ` · comps ${money(check.value)}`}
-          {check.breakEven != null && <> · break-even <span style={{ color: belowFloor ? "#B4472E" : undefined }}>{money(check.breakEven)}</span></>}
-          {cutSummary && ` · ${cutSummary}`}
-          {check.stepDays !== check.totalDays && ` · ${check.stepDays}d since last change`}
-        </div>
-      )}
-      <div style={{ fontSize: 11.5, color: check.color, marginTop: 3 }}>{check.text}</div>
-
+    <div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6, alignItems: "center" }}>
         {check.stage === "noDate" ? (
           <>
@@ -612,6 +644,173 @@ function ListingCheckRow({ check, onUpdate, onOpen }) {
   );
 }
 
+// ===== One listing's plan =====
+// Opened from a Listing check-up card: the card at a glance, what to do now (with the same
+// buttons), the upcoming steps with dates and prices, a plan B if it never sells, and its history.
+// Dates as local calendar days, so time zones never shift them by one.
+function localDay(iso) {
+  const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+function addDaysIso(dateStr, n) {
+  const d = localDay(dateStr);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const shortDate = (iso) => localDay(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+
+function listingTimeline(check) {
+  const c = check.card;
+  if (check.totalDays == null) return [];
+  const { fm, nice } = listingMoney(c);
+  const start = c.lastListingActionAt || c.dateListed;
+  const floor = check.breakEven != null ? nice(check.breakEven) : null;
+  const cutTo = check.price != null ? Math.max(nice(check.price * (1 - LISTING_CUT_PCT)), floor || 0) : null;
+  const steps = check.smcMarketplace
+    ? [{ day: SMC_MARKETPLACE_TRY_DAYS, from: start, text: `No sale yet → ${check.smcNext}` }]
+    : [
+        { day: LISTING_STEPS.check, from: start, text: `Check comps${check.compsAge != null && check.compsAge >= STALE_COMPS_DAYS ? " (yours are out of date)" : ""} — is the price still right?` },
+        {
+          day: LISTING_STEPS.cut,
+          from: start,
+          text:
+            cutTo != null && check.price != null && cutTo < check.price
+              ? `Lower about 7% to ${fm(cutTo)}${check.ebay ? " — or send watchers an offer at that price" : check.consigned ? " (ask ShipMyCards to change it)" : ""}`
+              : `Price is already at break-even — don't cut, wait for the relist`,
+        },
+        { day: LISTING_STEPS.relist, from: start, text: check.relistHow[0].toUpperCase() + check.relistHow.slice(1) },
+        { day: LISTING_STEPS.stop, from: c.dateListed, text: `Still unsold at break-even? Stop cutting — go to plan B below${floor != null ? ` (never below ${fm(floor)})` : ""}` },
+      ];
+  return steps.map((s) => {
+    const date = addDaysIso(s.from, s.day);
+    const elapsed = s.from === c.dateListed ? check.totalDays : check.stepDays;
+    return { ...s, date, state: elapsed >= s.day ? "due" : "upcoming", inDays: s.day - elapsed };
+  });
+}
+
+function ListingPlanModal({ card, onUpdate, onEdit, onClose }) {
+  const check = listingCheck(card);
+  const c = card;
+  const { usd, fm } = listingMoney(c);
+  const both = (aud) => (aud == null ? "—" : usd ? `${fmtUsd(audToUsd(aud))} (A${fmtMoney(aud)})` : fmtMoney(aud));
+  const timeline = listingTimeline(check);
+  const next = timeline.find((s) => s.state === "upcoming");
+  const actions = c.listingActions || [];
+  // What you'd keep if it sold at today's price.
+  const methodFee = check.price != null && c.sellingMethod ? estimateSellingFee(c.sellingMethod, check.price) : null;
+  const fee = check.price == null ? null : methodFee != null ? methodFee : check.price * (c.feesPct || 0.13);
+  const profitNow = check.price != null && fee != null ? check.price - fee - (Number(c.totalCost) || 0) : null;
+  const season = typeof seasonalSellCheck === "function" ? seasonalSellCheck(c.sport) : null;
+  const cardName = [c.year, c.card, c.cardNum ? `#${String(c.cardNum).replace(/^#/, "")}` : null].filter(Boolean).join(" ");
+  const box = { border: "1px solid #2C303B", borderRadius: 8, padding: "10px 12px" };
+  const label = { fontSize: 10.5, color: "#6B7180", textTransform: "uppercase", letterSpacing: "0.4px" };
+
+  const planB = check.smcMarketplace
+    ? [check.smcNext[0].toUpperCase() + check.smcNext.slice(1) + "."]
+    : [
+        season && !season.isGoodTiming && season.nextSellMonth ? `Take it down and hold for the ${season.sportLabel} sell window (${season.nextSellMonth}) — prices are usually higher then.` : null,
+        "Add it to a team or player lot with your other slow cards.",
+        check.consigned ? null : check.ebay ? "Try Facebook groups or Instagram, or bring it to a card show (add it to your Card Show planner)." : "Try eBay — it has the most buyers.",
+        check.consigned
+          ? /Fanatics/.test(c.sellingMethod)
+            ? "Ask ShipMyCards to move it to PC Sportscards' eBay consignment — eBay has more buyers."
+            : `Ask ShipMyCards to ${c.grade ? "try Fanatics' weekly auction instead (graded US$50+), or " : ""}pull it back to your vault and hold.`
+          : c.location === "ShipMyCards Vault"
+          ? "From the vault: PC Sportscards consignment (or Fanatics for in-demand slabs)."
+          : null,
+      ].filter(Boolean);
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalBox" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <ModalHeader title={`${c.player}${c.grade ? ` · ${c.grade}` : ""}`} onClose={onClose} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: 12.5, color: "#8B90A0", marginTop: -6 }}>
+            {cardName || "—"} · {c.sellingMethod || "no selling method set"}
+            {check.totalDays != null && <ListingDaysBox days={check.totalDays} />}
+            {usd && <span className="mono" style={{ fontSize: 9.5, color: "#C9A227", marginLeft: 8 }}>💵 SMC · PRICES IN US$</span>}
+          </div>
+
+          {/* At a glance */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
+            {[
+              ["Listed at", both(check.price)],
+              ["Comps", check.value != null ? `${both(check.value)}${check.compsAge != null ? ` · ${check.compsAge}d old` : ""}` : "none saved"],
+              ["Break-even", both(check.breakEven)],
+              ["Profit if it sells now", profitNow == null ? "—" : `${profitNow >= 0 ? "+" : ""}${fmtMoney(profitNow)}`],
+            ].map(([k, v]) => (
+              <div key={k} style={{ ...box, padding: "8px 10px" }}>
+                <div style={label}>{k}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2, color: k.startsWith("Profit") && profitNow != null ? (profitNow >= 0 ? "#4E8B6B" : "#B4472E") : "#EDEAE1" }}>{v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Now */}
+          <div style={{ ...box, borderColor: `${check.color || "#4E8B6B"}66`, background: `${check.color || "#4E8B6B"}0d` }}>
+            <div style={{ ...label, color: check.color || "#4E8B6B" }}>Do now</div>
+            <div style={{ fontSize: 13, color: "#EDEAE1", marginTop: 3, lineHeight: 1.5 }}>
+              {check.stage === "fresh" ? `Nothing yet — it's been ${check.stepDays} day${check.stepDays === 1 ? "" : "s"}.${next ? ` Next step on ${shortDate(next.date)}.` : ""}` : check.text}
+            </div>
+            <ListingCheckActions check={check} onUpdate={onUpdate} />
+          </div>
+
+          {/* Timeline */}
+          {timeline.length > 0 && (
+            <div style={box}>
+              <div style={label}>Next steps</div>
+              {timeline.map((s, i) => {
+                const isNext = next && s === next;
+                return (
+                  <div key={i} style={{ display: "flex", gap: 10, padding: "6px 0", borderTop: i ? "1px solid #24272F" : "none", fontSize: 12.5, alignItems: "baseline" }}>
+                    <span className="mono" style={{ minWidth: 64, color: s.state === "due" ? "#C9A227" : isNext ? "#2FA89A" : "#6B7180" }}>{shortDate(s.date)}</span>
+                    <span style={{ flex: 1, color: s.state === "due" ? "#8B90A0" : "#EDEAE1" }}>{s.text}</span>
+                    <span style={{ fontSize: 11, color: s.state === "due" ? "#C9A227" : isNext ? "#2FA89A" : "#6B7180", whiteSpace: "nowrap" }}>
+                      {s.state === "due" ? "due" : s.inDays === 1 ? "tomorrow" : `in ${s.inDays} days`}
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 4 }}>Cutting the price or pressing Relisted restarts the 14 / 21 / 30-day steps.</div>
+            </div>
+          )}
+
+          {/* Plan B */}
+          <div style={box}>
+            <div style={label}>If it still won't sell</div>
+            <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12.5, color: "#C6CAD4", lineHeight: 1.7 }}>{planB.map((t, i) => <li key={i}>{t}</li>)}</ul>
+            {season && (
+              <div style={{ fontSize: 11.5, color: season.isGoodTiming ? "#4E8B6B" : "#8B90A0", marginTop: 6 }}>
+                📅 {season.monthName} is a <b>{season.currentAction}</b> month for {season.sportLabel}{season.isGoodTiming ? " — a good time to have it listed." : season.nextSellMonth ? `. Next sell window: ${season.nextSellMonth}.` : "."}
+              </div>
+            )}
+          </div>
+
+          {/* History */}
+          {(c.dateListed || actions.length > 0) && (
+            <div style={box}>
+              <div style={label}>History</div>
+              <div style={{ fontSize: 12, color: "#A7ADBB", marginTop: 4, lineHeight: 1.7 }}>
+                {c.dateListed && <div>{shortDate(c.dateListed)} · listed{actions.find((a) => a.type === "cut") ? ` at ${fm(Number(actions.find((a) => a.type === "cut").from))}` : check.price != null ? ` at ${fm(check.price)}` : ""}</div>}
+                {actions.filter((a) => a.date >= (c.dateListed || "")).map((a, i) => (
+                  <div key={i}>
+                    {shortDate(a.date)} · {a.type === "cut" ? `lowered ${fm(Number(a.from))} → ${fm(Number(a.to))}` : a.type === "relist" ? "relisted" : "taken down"}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="btnSecondary" style={{ fontSize: 12.5 }} onClick={onEdit}>Edit sale details</button>
+            <button type="button" className="btnSecondary" style={{ fontSize: 12.5 }} onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Stages where something should actually be done (the rest just say "leave it for now").
 const LISTING_ACTION_STAGES = ["noDate", "noPrice", "comps", "over", "cut", "relist", "stop"];
 
@@ -624,7 +823,11 @@ function listingsNeedingAction(cards) {
 }
 
 function ListingCheckup({ items, onUpdate, onOpen }) {
+  const [planFor, setPlanFor] = useState(null); // { _source, id }
+  const [showFresh, setShowFresh] = useState(false);
   const checks = useMemo(() => items.filter((c) => c.status === "Listed").map(listingCheck), [items]);
+  const planCard = planFor ? items.find((i) => i._source === planFor._source && i.id === planFor.id) : null;
+  const openPlan = (c) => setPlanFor({ _source: c._source, id: c.id });
   const stats = useMemo(() => firstListPriceStats(items.filter((c) => c.status === "Sold")), [items]);
   if (!checks.length) return null;
 
@@ -647,15 +850,38 @@ function ListingCheckup({ items, onUpdate, onOpen }) {
         {due.length === 0 ? (
           <EmptyRow text={`Nothing due — all listings are under ${LISTING_STEPS.check} days since listing or the last change.`} />
         ) : (
-          due.slice(0, 10).map((k) => <ListingCheckRow key={`${k.card._source}-${k.card.id}`} check={k} onUpdate={onUpdate} onOpen={onOpen} />)
+          due.slice(0, 10).map((k) => <ListingCheckRow key={`${k.card._source}-${k.card.id}`} check={k} onUpdate={onUpdate} onPlan={openPlan} />)
         )}
         {due.length > 10 && <div style={{ fontSize: 11, color: "#6B7180" }}>+ {due.length - 10} more</div>}
-        {fresh.length > 0 && due.length > 0 && (
+        {fresh.length > 0 && (
           <div style={{ fontSize: 11, color: "#5C6270", padding: "2px 8px" }}>
-            {fresh.length} newer listing{fresh.length === 1 ? "" : "s"} — nothing to do yet.
+            {fresh.length} newer listing{fresh.length === 1 ? "" : "s"} — nothing to do yet.{" "}
+            <button type="button" onClick={() => setShowFresh((v) => !v)} style={{ background: "none", border: "none", color: "#2FA89A", cursor: "pointer", padding: 0, fontSize: 11 }}>
+              {showFresh ? "Hide" : "Show their plans"}
+            </button>
           </div>
         )}
+        {showFresh &&
+          fresh.map((k) => (
+            <div key={`${k.card._source}-${k.card.id}`} className="cardRow" onClick={() => openPlan(k.card)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 8px", borderRadius: 6, fontSize: 12.5, cursor: "pointer" }}>
+              <span style={{ fontWeight: 600 }}>{k.card.player}</span>
+              {k.card.grade && <span style={{ color: "#6B7180", marginLeft: 4 }}>{k.card.grade}</span>}
+              {k.totalDays != null && <ListingDaysBox days={k.totalDays} />}
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "#2FA89A" }}>View plan ›</span>
+            </div>
+          ))}
       </DashCard>
+      {planCard && (
+        <ListingPlanModal
+          card={planCard}
+          onUpdate={onUpdate}
+          onClose={() => setPlanFor(null)}
+          onEdit={() => {
+            setPlanFor(null);
+            onOpen(planCard);
+          }}
+        />
+      )}
     </div>
   );
 }
