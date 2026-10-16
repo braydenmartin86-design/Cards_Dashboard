@@ -6,6 +6,15 @@
 
 const CONTENT_PILLARS = ["Flip Breakdowns", "Grading Reveals", "Pickups & Hauls", "Is It Worth Grading?", "Budget Picks", "Market Moves", "Box Breaks", "Behind the Scenes"];
 const CONTENT_PLATFORMS = ["YouTube Shorts", "YouTube (long-form)", "TikTok", "Instagram Reels", "Multiple"];
+const PLATFORM_ICON = { "YouTube Shorts": "▶️", "YouTube (long-form)": "📺", TikTok: "🎵", "Instagram Reels": "📸", Multiple: "🔁" };
+// Platforms one short video can be cross-posted to.
+const SHORT_PLATFORMS = ["YouTube Shorts", "TikTok", "Instagram Reels"];
+// Each platform's own hashtags in place of #shorts.
+const PLATFORM_TAGS = { "YouTube Shorts": "#shorts", TikTok: "#cardtok", "Instagram Reels": "#reels #cardcommunity" };
+function captionFor(caption, platform) {
+  const base = String(caption || "").replace(/#shorts|#cardtok|#reels|#cardcommunity|#fyp/gi, "").replace(/\s{2,}/g, " ").trim();
+  return `${base} ${PLATFORM_TAGS[platform] || ""}`.trim();
+}
 const CONTENT_STATUS = ["Idea", "Scripted", "Filmed", "Edited", "Posted"];
 const CONTENT_STATUS_COLOR = { Idea: "#5C7A99", Scripted: "#C9A227", Filmed: "#8B6FD6", Edited: "#2FA89A", Posted: "#4E8B6B" };
 const CHANNEL_STORAGE_KEY = "cardflip_ev_channel_log_v1";
@@ -18,6 +27,12 @@ const PRIVACY_CHECKS = [
   { key: "voice", label: "Happy with the voice (or used captions / text-to-speech)" },
   { key: "location", label: "No location tags, school or work in the background" },
 ];
+
+// TikTok pushes accounts to people you know unless these are off.
+const TIKTOK_PRIVACY_CHECK = { key: "tiktokSuggest", label: "TikTok: contact/Facebook syncing and \"Suggest your account to others\" are off" };
+function privacyChecksFor(item) {
+  return item.platform === "TikTok" ? [...PRIVACY_CHECKS, TIKTOK_PRIVACY_CHECK] : PRIVACY_CHECKS;
+}
 
 const FACELESS_SHOTS = [
   "Overhead, plain dark mat: hands bring the card into frame",
@@ -676,12 +691,13 @@ function countPostedInPeriod(contentPlan, period) {
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - (period === "week" ? 7 : 30));
-  return (contentPlan || []).filter((c) => c.status === "Posted" && c.datePosted && new Date(c.datePosted) >= cutoff).length;
+  // One video cross-posted to several platforms counts once.
+  return new Set((contentPlan || []).filter((c) => c.status === "Posted" && c.datePosted && new Date(c.datePosted) >= cutoff).map((c) => c.groupId || c.id)).size;
 }
 
 // Consecutive weeks (Mon–Sun, ending last week) that hit the weekly goal.
 function weeklyStreak(contentPlan, perWeek) {
-  const posted = (contentPlan || []).filter((c) => c.status === "Posted" && c.datePosted).map((c) => new Date(c.datePosted));
+  const posted = (contentPlan || []).filter((c) => c.status === "Posted" && c.datePosted).map((c) => ({ d: new Date(c.datePosted), g: c.groupId || c.id }));
   const monday = new Date();
   monday.setHours(0, 0, 0, 0);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
@@ -691,7 +707,7 @@ function weeklyStreak(contentPlan, perWeek) {
     start.setDate(start.getDate() - 7 * w);
     const end = new Date(start);
     end.setDate(end.getDate() + 7);
-    if (posted.filter((d) => d >= start && d < end).length >= perWeek) streak++;
+    if (new Set(posted.filter((p) => p.d >= start && p.d < end).map((p) => p.g)).size >= perWeek) streak++;
     else break;
   }
   return streak;
@@ -701,6 +717,7 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
   const [showAdd, setShowAdd] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("active");
+  const [platformFilter, setPlatformFilter] = useState("all");
   const [showPlan, setShowPlan] = useState(null);
   const [openIdea, setOpenIdea] = useState(null);
   const [showTips, setShowTips] = useState(false);
@@ -736,10 +753,42 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
     setContentPlan((prev) => prev.filter((c) => c.id !== id));
     setSelectedId(null);
   }
+  // The same video on other platforms: a linked copy per platform, each with its own status,
+  // post date, privacy check and stats.
+  // `postedOn`: a date when it's already been posted there (logged as Posted, same privacy ticks).
+  function crossPost(id, platforms, postedOn = null) {
+    setContentPlan((prev) => {
+      const src = prev.find((c) => c.id === id);
+      if (!src) return prev;
+      const groupId = src.groupId || src.id;
+      const have = new Set(prev.filter((c) => (c.groupId || c.id) === groupId).map((c) => c.platform));
+      const copies = platforms
+        .filter((p) => !have.has(p))
+        .map((p) => ({
+          ...src,
+          id: crypto.randomUUID(),
+          groupId,
+          platform: p,
+          status: postedOn ? "Posted" : src.status === "Posted" ? "Edited" : src.status,
+          datePosted: postedOn || undefined,
+          stats: {},
+          resultNotes: "",
+          privacy: postedOn ? { ...(src.privacy || {}) } : {},
+          caption: captionFor(src.caption, p),
+          plannedFor: postedOn || new Date().toISOString().slice(0, 10),
+          ideaKey: undefined,
+          dateAdded: new Date().toISOString().slice(0, 10),
+        }));
+      return [...copies, ...prev.map((c) => (c.id === id ? { ...c, groupId } : c))];
+    });
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const byDate = (a, b) => (a.plannedFor || "9999").localeCompare(b.plannedFor || "9999");
-  const visible = (statusFilter === "active" ? contentPlan.filter((c) => c.status !== "Posted") : statusFilter === "all" ? contentPlan : contentPlan.filter((c) => c.status === statusFilter)).slice().sort(byDate);
+  const byStatus = statusFilter === "active" ? contentPlan.filter((c) => c.status !== "Posted") : statusFilter === "all" ? contentPlan : contentPlan.filter((c) => c.status === statusFilter);
+  const visible = (platformFilter === "all" ? byStatus : byStatus.filter((c) => c.platform === platformFilter)).slice().sort(byDate);
+  const platformsUsed = CONTENT_PLATFORMS.filter((p) => contentPlan.some((c) => c.platform === p));
+  const groupOf = (c) => contentPlan.filter((x) => (x.groupId || x.id) === (c.groupId || c.id));
   const selected = selectedId ? contentPlan.find((c) => c.id === selectedId) : null;
   const postedInPeriod = countPostedInPeriod(contentPlan, contentGoal.period);
   const goalHit = postedInPeriod >= contentGoal.count;
@@ -801,6 +850,15 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
           <Plus size={16} /> Add your own
         </button>
       </div>
+      {platformsUsed.length > 1 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+          {[["all", "All platforms"], ...platformsUsed.map((p) => [p, `${PLATFORM_ICON[p] || ""} ${p}`])].map(([k, label]) => (
+            <button key={k} className={`filterBtn ${platformFilter === k ? "active" : ""}`} onClick={() => setPlatformFilter(k)}>
+              {label} <span style={{ opacity: 0.6 }}>({k === "all" ? byStatus.length : byStatus.filter((c) => c.platform === k).length})</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {visible.length === 0 ? (
         <div style={{ ...box, textAlign: "center", color: "#5C6270", padding: "2rem" }}>Nothing here — add an idea above.</div>
@@ -811,8 +869,11 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
             return (
               <div key={c.id} onClick={() => setSelectedId(c.id)} className="cardRow" style={{ display: "flex", gap: 10, padding: "10px 14px", borderTop: "1px solid #24272F", cursor: "pointer", alignItems: "center", fontSize: 13, flexWrap: "wrap" }}>
                 <span className="mono" style={{ fontSize: 11, color: late ? "#B4472E" : "#6B7180", minWidth: 74 }}>{c.plannedFor || "no date"}</span>
-                <span style={{ fontWeight: 600, flex: 1, minWidth: 160 }}>{c.title}</span>
-                <span style={{ fontSize: 11.5, color: "#8B90A0" }}>{c.platform}</span>
+                <span style={{ fontWeight: 600, flex: 1, minWidth: 160 }}>
+                  {c.title}
+                  {groupOf(c).length > 1 && <span title={groupOf(c).map((x) => `${x.platform}: ${x.status}`).join("\n")} style={{ fontSize: 11, color: "#6B7180", fontWeight: 400, marginLeft: 6 }}>🔗 {groupOf(c).map((x) => PLATFORM_ICON[x.platform] || "•").join("")}</span>}
+                </span>
+                <span style={{ fontSize: 11.5, color: "#8B90A0" }}>{PLATFORM_ICON[c.platform] || ""} {c.platform}</span>
                 <span className="mono" style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 999, background: `${CONTENT_STATUS_COLOR[c.status]}22`, color: CONTENT_STATUS_COLOR[c.status] }}>{c.status}</span>
               </div>
             );
@@ -852,7 +913,7 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
       </div>
 
       {showAdd && <ContentAddModal onClose={() => setShowAdd(false)} onSave={addItem} />}
-      {selected && <ContentDetailModal item={selected} onUpdate={updateItem} onDelete={deleteItem} onClose={() => setSelectedId(null)} />}
+      {selected && <ContentDetailModal item={selected} group={groupOf(selected)} onCrossPost={crossPost} onOpen={setSelectedId} onUpdate={updateItem} onDelete={deleteItem} onClose={() => setSelectedId(null)} />}
     </div>
   );
 }
@@ -899,12 +960,66 @@ function ContentAddModal({ onClose, onSave }) {
   );
 }
 
-function ContentDetailModal({ item, onUpdate, onDelete, onClose }) {
+function CrossPostBox({ item, group, onCrossPost, onOpen }) {
+  const have = new Set(group.map((x) => x.platform));
+  const options = SHORT_PLATFORMS.filter((p) => !have.has(p));
+  const [picked, setPicked] = useState([]);
+  const [already, setAlready] = useState(false);
+  const [postedOn, setPostedOn] = useState(new Date().toISOString().slice(0, 10));
+  const toggle = (p) => setPicked((v) => (v.includes(p) ? v.filter((x) => x !== p) : [...v, p]));
+  const others = group.filter((x) => x.id !== item.id);
+
+  return (
+    <div style={{ border: "1px solid #2C303B", borderRadius: 8, padding: "10px 12px" }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#EDEAE1", marginBottom: 6 }}>📤 This video on other platforms</div>
+      {others.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          {others.map((x) => (
+            <button key={x.id} type="button" onClick={() => onOpen(x.id)} style={{ display: "flex", gap: 8, alignItems: "center", background: "none", border: "none", color: "#C6CAD4", cursor: "pointer", padding: "2px 0", fontSize: 12.5 }}>
+              <span>{PLATFORM_ICON[x.platform] || "•"} {x.platform}</span>
+              <span className="mono" style={{ fontSize: 10.5, padding: "1px 8px", borderRadius: 999, background: `${CONTENT_STATUS_COLOR[x.status]}22`, color: CONTENT_STATUS_COLOR[x.status] }}>{x.status}</span>
+              <span style={{ color: "#6B7180", fontSize: 11 }}>open →</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {options.length > 0 ? (
+        <>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            {options.map((p) => (
+              <label key={p} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#C6CAD4", cursor: "pointer" }}>
+                <input type="checkbox" checked={picked.includes(p)} onChange={() => toggle(p)} style={{ width: "auto", margin: 0 }} />
+                {PLATFORM_ICON[p]} {p}
+              </label>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#C6CAD4", cursor: "pointer" }}>
+              <input type="checkbox" checked={already} onChange={(e) => setAlready(e.target.checked)} style={{ width: "auto", margin: 0 }} />
+              Already posted there, on
+            </label>
+            <input type="date" value={postedOn} onChange={(e) => setPostedOn(e.target.value)} disabled={!already} style={{ width: "auto", padding: "4px 8px", fontSize: 12.5 }} />
+            <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "5px 12px" }} disabled={!picked.length} onClick={() => { onCrossPost(item.id, picked, already ? postedOn : null); setPicked([]); setAlready(false); }}>
+              {already ? "Log as posted" : "Add to plan"}
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6, lineHeight: 1.5 }}>
+            Adds a linked copy for each platform with its own status, privacy check and stats. The caption swaps in that platform's tags (#cardtok, #reels). Upload your original export to each one, not a download with another app's watermark.
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 11.5, color: "#6B7180" }}>Already planned on every short-video platform.</div>
+      )}
+    </div>
+  );
+}
+
+function ContentDetailModal({ item, group = [item], onCrossPost, onOpen, onUpdate, onDelete, onClose }) {
   const [writing, setWriting] = useState(false);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const privacy = item.privacy || {};
-  const allClear = PRIVACY_CHECKS.every((p) => privacy[p.key]);
+  const allClear = privacyChecksFor(item).every((p) => privacy[p.key]);
 
   async function write() {
     setWriting(true);
@@ -980,9 +1095,11 @@ function ContentDetailModal({ item, onUpdate, onDelete, onClose }) {
             <button type="button" className="btnSecondary" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={copyCaption} disabled={!item.caption}>{copied ? "Copied ✓" : "Copy caption"}</button>
           </div>
 
+          {onCrossPost && <CrossPostBox key={item.id} item={item} group={group} onCrossPost={onCrossPost} onOpen={onOpen} />}
+
           <div style={{ border: `1px solid ${allClear ? "#4E8B6B55" : "#C9A22755"}`, borderRadius: 8, padding: "10px 12px", background: allClear ? "#4E8B6B0f" : "#C9A2270f" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: allClear ? "#4E8B6B" : "#C9A227", marginBottom: 6 }}>🔒 Privacy check before posting</div>
-            {PRIVACY_CHECKS.map((p) => (
+            {privacyChecksFor(item).map((p) => (
               <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#C6CAD4", padding: "2px 0", cursor: "pointer" }}>
                 <input type="checkbox" checked={Boolean(privacy[p.key])} onChange={(e) => onUpdate(item.id, { privacy: { ...privacy, [p.key]: e.target.checked } })} style={{ width: "auto", margin: 0 }} />
                 {p.label}
@@ -1098,6 +1215,21 @@ function resultInsights(rows) {
     pillars.sort((a, b) => b.avg - a.avg);
     out.push(`By type: ${pillars.map((x) => `${x.p} ${fmtCount(x.avg)} avg views (${x.n})`).join(" · ")}. Make more of "${pillars[0].p}".`);
   }
+  // Same video on different platforms.
+  const groups = {};
+  for (const r of withStats) (groups[r.item.groupId || r.item.id] = groups[r.item.groupId || r.item.id] || []).push(r);
+  for (const g of Object.values(groups).filter((g) => g.length >= 2)) {
+    const sorted = [...g].sort((a, b) => (statNum(b.s.views) || 0) - (statNum(a.s.views) || 0));
+    out.push(`"${g[0].item.title}" across platforms: ${sorted.map((r) => `${r.item.platform} ${fmtCount(statNum(r.s.views))} views${statNum(r.s.stayed) != null ? ` (${statNum(r.s.stayed)}% stayed)` : ""}`).join(" vs ")}. Compare at the same checkpoint for a fair test.`);
+  }
+  // By platform overall.
+  const byPlatform = {};
+  for (const r of withStats) (byPlatform[r.item.platform] = byPlatform[r.item.platform] || []).push(statNum(r.s.views) || 0);
+  const plats = Object.entries(byPlatform).map(([p, v]) => ({ p, avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length }));
+  if (plats.length >= 2) {
+    plats.sort((a, b) => b.avg - a.avg);
+    out.push(`By platform: ${plats.map((x) => `${x.p} ${fmtCount(x.avg)} avg views (${x.n})`).join(" · ")}.`);
+  }
   const totalViews = withStats.reduce((s, r) => s + (statNum(r.s.views) || 0), 0);
   const comments = withStats.reduce((s, r) => s + (statNum(r.s.comments) || 0), 0);
   const subs = withStats.reduce((s, r) => s + (statNum(r.s.subs) || 0), 0);
@@ -1165,7 +1297,9 @@ function ContentResults({ contentPlan, onOpen }) {
         {rows.map(({ item, s }) => (
           <div key={item.id} onClick={() => onOpen(item.id)} className="cardRow" style={{ display: "flex", gap: 10, padding: "8px 12px", borderTop: "1px solid #24272F", cursor: "pointer", alignItems: "center", fontSize: 12.5, flexWrap: "wrap" }}>
             <span className="mono" style={{ fontSize: 11, color: "#6B7180", minWidth: 74 }}>{item.datePosted}</span>
-            <span style={{ fontWeight: 600, flex: 1, minWidth: 150 }}>{item.title}</span>
+            <span style={{ fontWeight: 600, flex: 1, minWidth: 150 }}>
+              <span title={item.platform}>{PLATFORM_ICON[item.platform] || ""}</span> {item.title}
+            </span>
             {s ? (
               <span style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
                 <span>👁 {fmtCount(statNum(s.views))}</span>
