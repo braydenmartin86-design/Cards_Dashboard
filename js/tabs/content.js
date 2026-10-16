@@ -46,6 +46,30 @@ const MARKET_SHOTS = [
 ];
 const NFA = "Not financial advice.";
 
+// Sound + pacing: what stops a Short feeling like a flat slideshow. One payoff cue per type of
+// video, plus the basics every Short needs.
+const SOUND_PAYOFF = {
+  "Grading Reveals": "Drumroll before the grade, then a hit or 'ding' + screen shake on the reveal",
+  "Flip Breakdowns": "Ka-ching on each price, cash sound on the profit number",
+  "Market Moves": "Ka-ching on each price reveal; record scratch or bass drop + screen shake on the % change",
+  "Budget Picks": "Pop as each card appears, ka-ching on each price",
+  "Is It Worth Grading?": "Tick-tock tension before the verdict, then a hit on 'grade it' / 'sell raw'",
+  "Pickups & Hauls": "Pop as each card lands in frame, ka-ching on what you paid",
+  "Box Breaks": "Tension build before the big pull, hit + shake when it's revealed",
+  "Behind the Scenes": "Ka-ching on the sale, a drop sound on each fee taken off",
+};
+const SOUND_BASICS = [
+  "Hook on screen from 0:00 (no fade-in) with a whoosh",
+  "Change the picture every 1–2 seconds — a cut, a zoom on the number, or text popping in — with a whoosh or pop on each",
+  "Quiet upbeat music under everything (10–15% volume)",
+  "Voice at 1.1–1.2× speed, short sentences",
+  "End on the question: rising sound + quick zoom out",
+];
+function soundPlanFor(idea) {
+  return [SOUND_PAYOFF[idea && idea.pillar], ...SOUND_BASICS].filter(Boolean);
+}
+const bullets = (list) => list.map((s) => `• ${s}`).join("\n");
+
 function hashtagsFor(sport) {
   return `#shorts #sportscards #thehobby #cardcollector ${SPORT_TAGS[sport] || ""}`.trim();
 }
@@ -61,6 +85,7 @@ function newContentItem(idea) {
     notes: idea?.beats ? idea.beats.map((b) => `• ${b}`).join("\n") : idea?.outline ? idea.outline.join("\n") : "",
     onScreen: idea?.onScreen ? idea.onScreen.join("\n") : "",
     shots: (idea?.shots || FACELESS_SHOTS).map((s) => `• ${s}`).join("\n"),
+    sounds: bullets(idea?.sounds || soundPlanFor(idea)),
     caption: idea?.caption || "",
     plannedFor: "",
     privacy: {},
@@ -454,7 +479,9 @@ function IdeaCard({ idea, open, onToggle, onAdd }) {
             </>
           )}
           <b style={{ color: "#EDEAE1" }}>Shots (hands only)</b>
-          <ul style={{ margin: "2px 0 0", paddingLeft: 18 }}>{(idea.shots || FACELESS_SHOTS).map((s, i) => <li key={i}>{s}</li>)}</ul>
+          <ul style={{ margin: "2px 0 6px", paddingLeft: 18 }}>{(idea.shots || FACELESS_SHOTS).map((s, i) => <li key={i}>{s}</li>)}</ul>
+          <b style={{ color: "#EDEAE1" }}>📣 Sound & pacing</b>
+          <ul style={{ margin: "2px 0 0", paddingLeft: 18 }}>{(idea.sounds || soundPlanFor(idea)).map((s, i) => <li key={i}>{s}</li>)}</ul>
         </div>
       )}
       <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 10, flex: 1 }}>{idea.source}</div>
@@ -636,7 +663,9 @@ Hook idea: ${item.hook || "(write one)"}
 Points to cover:
 ${item.notes || "(use the title)"}
 
-Return ONLY JSON: {"hook":"first sentence, under 15 words, said in the first 2 seconds","beats":["4-6 short lines, each one sentence"],"onScreen":["3-5 short on-screen text overlays"],"caption":"one-line caption with 4-6 relevant hashtags including #shorts"}
+Pacing: the picture should change every 1-2 seconds, so keep each beat short and punchy.
+
+Return ONLY JSON: {"hook":"first sentence, under 15 words, said in the first 2 seconds","beats":["4-6 short lines, each one sentence"],"onScreen":["3-5 short on-screen text overlays"],"sounds":["4-6 sound effect / pacing cues tied to specific moments, e.g. 'ka-ching when $323 appears'"],"caption":"one-line caption with 4-6 relevant hashtags including #shorts"}
 Keep it honest — no hype words like "insane" or guaranteed profits, and say it's not financial advice if you mention buying.`;
   const text = await callGeminiAi(prompt);
   const json = JSON.parse(String(text).replace(/```json|```/g, "").trim());
@@ -791,6 +820,9 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
         </div>
       )}
 
+      <SectionTitle>📊 How your Shorts did</SectionTitle>
+      <ContentResults contentPlan={contentPlan} onOpen={setSelectedId} />
+
       <ChannelTracker />
 
       {/* ----- Tips ----- */}
@@ -801,6 +833,10 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
         {showTips && (
           <div style={{ fontSize: 12.5, color: "#C6CAD4", lineHeight: 1.7, marginTop: 10 }}>
             <b style={{ color: "#C9A227" }}>Setup:</b> phone on an overhead arm or a stack of books, a plain dark mat, one lamp at an angle (it shows corners and shine). Film vertical, 1080p, 30–45 seconds.
+            <br />
+            <b style={{ color: "#C9A227" }}>Pacing & sound:</b> change the picture every 1–2 seconds (cut, zoom on the number, text popping in), with a whoosh or pop on each change and a ka-ching on prices. Quiet music under everything, voice at 1.1–1.2×. Clipchamp: Content library → Audio → Sound effects.
+            <br />
+            <b style={{ color: "#C9A227" }}>Captions:</b> keep them around 75% of the way down, not at the very bottom (YouTube's title covers it), and fix names the auto-captions get wrong. Export at 1080p.
             <br />
             <b style={{ color: "#C9A227" }}>Hook:</b> say the most interesting thing first — the price, the grade, the profit. Put it on screen as text too; lots of people watch muted.
             <br />
@@ -880,6 +916,7 @@ function ContentDetailModal({ item, onUpdate, onDelete, onClose }) {
         notes: (s.beats || []).map((b) => `• ${b}`).join("\n") || item.notes,
         onScreen: (s.onScreen || []).join("\n") || item.onScreen,
         caption: s.caption || item.caption,
+        sounds: Array.isArray(s.sounds) && s.sounds.length ? bullets(s.sounds) : item.sounds,
         status: item.status === "Idea" ? "Scripted" : item.status,
       });
     } catch (e) {
@@ -933,6 +970,9 @@ function ContentDetailModal({ item, onUpdate, onDelete, onClose }) {
           <Field label="Shot list (hands only)">
             <textarea value={item.shots || ""} onChange={(e) => onUpdate(item.id, { shots: e.target.value })} rows={4} style={textareaStyle} />
           </Field>
+          <Field label="📣 Sound & pacing plan">
+            <textarea value={item.sounds ?? bullets(soundPlanFor(item))} onChange={(e) => onUpdate(item.id, { sounds: e.target.value })} rows={5} style={textareaStyle} />
+          </Field>
           <Field label="Caption + hashtags">
             <textarea value={item.caption || ""} onChange={(e) => onUpdate(item.id, { caption: e.target.value })} rows={2} style={textareaStyle} />
           </Field>
@@ -955,10 +995,251 @@ function ContentDetailModal({ item, onUpdate, onDelete, onClose }) {
             )}
           </div>
 
+          {item.status === "Posted" && (
+            <>
+              <Field label="Posted on">
+                <input type="date" value={item.datePosted || ""} onChange={(e) => onUpdate(item.id, { datePosted: e.target.value })} style={{ maxWidth: 180 }} />
+              </Field>
+              <ResultsPanel key={item.id} item={item} onUpdate={onUpdate} />
+            </>
+          )}
+
           <button onClick={() => { onDelete(item.id); onClose(); }} style={{ background: "transparent", border: "1px solid #4a2a24", color: "#B4472E", borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-start" }}>
             <Trash2 size={14} /> Remove
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Results: how each posted Short did =====
+// Stats copied from YouTube Studio (Content → the Short → Analytics) at three checkpoints after
+// posting, then simple insights across videos plus a text summary to paste to Claude for a review.
+const STAT_CHECKPOINTS = [
+  { key: "48h", label: "48 hours", days: 2 },
+  { key: "7d", label: "7 days", days: 7 },
+  { key: "30d", label: "30 days", days: 30 },
+];
+const STAT_FIELDS = [
+  { key: "views", label: "Views" },
+  { key: "stayed", label: "Stayed to watch %", pct: true },
+  { key: "avgViewed", label: "Avg % viewed", pct: true },
+  { key: "likes", label: "Likes" },
+  { key: "comments", label: "Comments" },
+  { key: "shares", label: "Shares" },
+  { key: "subs", label: "Subs gained" },
+];
+// Rough guides for Shorts from creator experience — not official YouTube numbers.
+const STAYED_GOOD = 70;
+const STAYED_OK = 55;
+const VIEWED_GOOD = 80;
+const VIEWED_OK = 60;
+
+const statNum = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
+const fmtCount = (n) => (n == null ? "—" : Math.round(n).toLocaleString("en-AU"));
+
+function latestStats(item) {
+  for (const c of [...STAT_CHECKPOINTS].reverse()) {
+    const s = item.stats && item.stats[c.key];
+    if (s && statNum(s.views) != null) return { ...s, checkpoint: c };
+  }
+  return null;
+}
+// The most recent checkpoint that's passed without stats logged.
+function dueCheckpoint(item) {
+  if (item.status !== "Posted" || !item.datePosted) return null;
+  const age = daysAgo(item.datePosted);
+  return STAT_CHECKPOINTS.filter((c) => age >= c.days && !(item.stats && item.stats[c.key] && statNum(item.stats[c.key].views) != null)).pop() || null;
+}
+function statColor(key, v) {
+  if (v == null) return "#8B90A0";
+  const [good, ok] = key === "stayed" ? [STAYED_GOOD, STAYED_OK] : key === "avgViewed" ? [VIEWED_GOOD, VIEWED_OK] : [null, null];
+  if (good == null) return "#EDEAE1";
+  return v >= good ? "#4E8B6B" : v >= ok ? "#C9A227" : "#B4472E";
+}
+
+// Plain-English takeaways across posted videos with stats.
+function resultInsights(rows) {
+  const withStats = rows.filter((r) => r.s);
+  if (!withStats.length) return [];
+  const out = [];
+  const avg = (key) => {
+    const vals = withStats.map((r) => statNum(r.s[key])).filter((v) => v != null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const stayed = avg("stayed");
+  const viewed = avg("avgViewed");
+  if (stayed != null) {
+    out.push(
+      stayed >= STAYED_GOOD
+        ? `Hooks are working — on average ${Math.round(stayed)}% stay to watch.`
+        : stayed >= STAYED_OK
+        ? `Hooks are OK (${Math.round(stayed)}% stay). Put the most surprising number on screen at 0:00 to push past ${STAYED_GOOD}%.`
+        : `Most people swipe away in the first second (${Math.round(stayed)}% stay). The hook is the thing to fix first: text on screen from 0:00, the biggest number or question up front.`
+    );
+  }
+  if (viewed != null) {
+    out.push(
+      viewed >= VIEWED_GOOD
+        ? `People who stay mostly watch to the end (${Math.round(viewed)}% viewed on average).`
+        : `People drop off in the middle (${Math.round(viewed)}% viewed on average). Cut it shorter, change the picture every 1–2 seconds, and add sound on each change.`
+    );
+  }
+  const best = [...withStats].sort((a, b) => (statNum(b.s.views) || 0) - (statNum(a.s.views) || 0));
+  if (best.length >= 2) {
+    out.push(`Best so far: "${best[0].item.title}" (${fmtCount(statNum(best[0].s.views))} views). Weakest: "${best[best.length - 1].item.title}" (${fmtCount(statNum(best[best.length - 1].s.views))}). Compare their hooks.`);
+  }
+  // By type of video, once there's more than one type with stats.
+  const byPillar = {};
+  for (const r of withStats) (byPillar[r.item.pillar] = byPillar[r.item.pillar] || []).push(statNum(r.s.views) || 0);
+  const pillars = Object.entries(byPillar).map(([p, v]) => ({ p, avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length }));
+  if (pillars.length >= 2) {
+    pillars.sort((a, b) => b.avg - a.avg);
+    out.push(`By type: ${pillars.map((x) => `${x.p} ${fmtCount(x.avg)} avg views (${x.n})`).join(" · ")}. Make more of "${pillars[0].p}".`);
+  }
+  const totalViews = withStats.reduce((s, r) => s + (statNum(r.s.views) || 0), 0);
+  const comments = withStats.reduce((s, r) => s + (statNum(r.s.comments) || 0), 0);
+  const subs = withStats.reduce((s, r) => s + (statNum(r.s.subs) || 0), 0);
+  if (totalViews >= 200) {
+    out.push(`${(comments / totalViews * 1000).toFixed(1)} comments and ${(subs / totalViews * 1000).toFixed(1)} subs per 1,000 views. ${comments / totalViews < 0.003 ? "End every Short on a question people can answer in one word, and pin a comment." : "Good engagement — reply to comments quickly to keep it going."}`);
+  }
+  if (withStats.length < 5) out.push(`Only ${withStats.length} video${withStats.length === 1 ? "" : "s"} with stats so far — patterns get reliable after about 5–10.`);
+  return out;
+}
+
+function reviewText(rows) {
+  const lines = ["My YouTube Shorts results (faceless sports card channel, Australian, prices in AUD). Please review what worked, what didn't, and what to change next.", ""];
+  rows.forEach((r, i) => {
+    const it = r.item;
+    lines.push(`${i + 1}. "${it.title}" — posted ${it.datePosted || "?"} · ${it.pillar} · ${it.platform}`);
+    if (it.hook) lines.push(`   Hook: ${it.hook}`);
+    if (it.onScreen) lines.push(`   On-screen: ${it.onScreen.split("\n").filter(Boolean).join(" | ")}`);
+    if (it.lengthSec) lines.push(`   Length: ${it.lengthSec}s`);
+    for (const c of STAT_CHECKPOINTS) {
+      const s = it.stats && it.stats[c.key];
+      if (!s || statNum(s.views) == null) continue;
+      lines.push(`   ${c.label}: ${STAT_FIELDS.map((f) => (statNum(s[f.key]) == null ? null : `${f.label.replace(" %", "")} ${statNum(s[f.key])}${f.pct ? "%" : ""}`)).filter(Boolean).join(" · ")}`);
+    }
+    if (it.resultNotes) lines.push(`   My notes: ${it.resultNotes}`);
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+
+function ContentResults({ contentPlan, onOpen }) {
+  const [copied, setCopied] = useState(false);
+  const posted = contentPlan.filter((c) => c.status === "Posted").sort((a, b) => String(b.datePosted || "").localeCompare(String(a.datePosted || "")));
+  const rows = posted.map((item) => ({ item, s: latestStats(item), due: dueCheckpoint(item) }));
+  const due = rows.filter((r) => r.due);
+  const insights = resultInsights(rows);
+  const box = { border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", marginBottom: 24 };
+
+  async function copy() {
+    const ok = await copyToClipboard(reviewText(rows.filter((r) => r.s)));
+    setCopied(ok);
+    setTimeout(() => setCopied(false), 1800);
+  }
+
+  if (!posted.length) {
+    return <div style={{ ...box, fontSize: 12.5, color: "#6B7180" }}>Once you mark a Short as posted, log its stats here at 48 hours, 7 days and 30 days to see what's working.</div>;
+  }
+  return (
+    <div style={box}>
+      {due.length > 0 && (
+        <div style={{ border: "1px solid #C9A22755", background: "#C9A2270f", borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#C9A227", marginBottom: 4 }}>⏰ Stats to log</div>
+          {due.map((r) => (
+            <div key={r.item.id} style={{ fontSize: 12.5, padding: "2px 0" }}>
+              <button type="button" onClick={() => onOpen(r.item.id)} style={{ background: "none", border: "none", color: "#EDEAE1", cursor: "pointer", padding: 0, textDecoration: "underline", fontSize: 12.5, textAlign: "left" }}>
+                {r.item.title}
+              </button>{" "}
+              <span style={{ color: "#8B90A0" }}>— {r.due.label} stats</span>
+            </div>
+          ))}
+          <div style={{ fontSize: 11, color: "#6B7180", marginTop: 4 }}>YouTube Studio → Content → Shorts → the video → Analytics. "Stayed to watch" is on the Engagement tab.</div>
+        </div>
+      )}
+
+      <div style={{ border: "1px solid #24272F", borderRadius: 8, overflow: "hidden" }}>
+        {rows.map(({ item, s }) => (
+          <div key={item.id} onClick={() => onOpen(item.id)} className="cardRow" style={{ display: "flex", gap: 10, padding: "8px 12px", borderTop: "1px solid #24272F", cursor: "pointer", alignItems: "center", fontSize: 12.5, flexWrap: "wrap" }}>
+            <span className="mono" style={{ fontSize: 11, color: "#6B7180", minWidth: 74 }}>{item.datePosted}</span>
+            <span style={{ fontWeight: 600, flex: 1, minWidth: 150 }}>{item.title}</span>
+            {s ? (
+              <span style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
+                <span>👁 {fmtCount(statNum(s.views))}</span>
+                <span style={{ color: statColor("stayed", statNum(s.stayed)) }}>stayed {statNum(s.stayed) == null ? "—" : `${statNum(s.stayed)}%`}</span>
+                <span style={{ color: statColor("avgViewed", statNum(s.avgViewed)) }}>viewed {statNum(s.avgViewed) == null ? "—" : `${statNum(s.avgViewed)}%`}</span>
+                <span>💬 {fmtCount(statNum(s.comments))}</span>
+                <span>+{fmtCount(statNum(s.subs))} subs</span>
+                <span style={{ color: "#6B7180" }}>@ {s.checkpoint.label}</span>
+              </span>
+            ) : (
+              <span style={{ fontSize: 11.5, color: "#6B7180" }}>no stats yet</span>
+            )}
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 6 }}>
+        Colours are rough guides for Shorts: stayed to watch <span style={{ color: "#4E8B6B" }}>{STAYED_GOOD}%+ good</span>, <span style={{ color: "#C9A227" }}>{STAYED_OK}%+ OK</span>; average viewed <span style={{ color: "#4E8B6B" }}>{VIEWED_GOOD}%+ good</span> (over 100% means people rewatched).
+      </div>
+
+      {insights.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div className="oswald" style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>What the numbers say</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "#C6CAD4", lineHeight: 1.7 }}>{insights.map((t, i) => <li key={i}>{t}</li>)}</ul>
+        </div>
+      )}
+      {rows.some((r) => r.s) && (
+        <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={copy}>{copied ? "Copied ✓" : "📋 Copy results for a review"}</button>
+          <span style={{ fontSize: 11, color: "#6B7180" }}>Paste it to Claude for a full review: titles, hooks, on-screen text, every checkpoint and your notes.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResultsPanel({ item, onUpdate }) {
+  const stats = item.stats || {};
+  // Open on what's due, else the latest checkpoint logged, else 48 hours.
+  const firstOpen = (dueCheckpoint(item) || (latestStats(item) || {}).checkpoint || STAT_CHECKPOINTS[0]).key;
+  const [cp, setCp] = useState(firstOpen);
+  const cur = stats[cp] || {};
+  const reached = (c) => item.datePosted && daysAgo(item.datePosted) >= c.days;
+
+  function set(field, value) {
+    onUpdate(item.id, { stats: { ...stats, [cp]: { ...cur, [field]: value, loggedAt: new Date().toISOString().slice(0, 10) } } });
+  }
+  return (
+    <div style={{ border: "1px solid #2FA89A55", borderRadius: 8, padding: "10px 12px", background: "#2FA89A0d" }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#2FA89A", marginBottom: 8 }}>📊 Results</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+        {STAT_CHECKPOINTS.map((c) => (
+          <button key={c.key} type="button" className={`filterBtn ${cp === c.key ? "active" : ""}`} onClick={() => setCp(c.key)}>
+            {c.label}{stats[c.key] && statNum(stats[c.key].views) != null ? " ✓" : !reached(c) ? " ·" : ""}
+          </button>
+        ))}
+      </div>
+      {!reached(STAT_CHECKPOINTS.find((c) => c.key === cp)) && <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 6 }}>Not {STAT_CHECKPOINTS.find((c) => c.key === cp).label} yet — numbers logged early won't compare fairly.</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
+        {STAT_FIELDS.map((f) => (
+          <Field key={f.key} label={f.label}>
+            <input type="number" min="0" step="any" value={cur[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} style={{ color: statColor(f.key, statNum(cur[f.key])) }} />
+          </Field>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 8, marginTop: 8 }}>
+        <Field label="Length (sec)">
+          <input type="number" min="0" value={item.lengthSec ?? ""} onChange={(e) => onUpdate(item.id, { lengthSec: e.target.value })} />
+        </Field>
+        <Field label="Notes (what you tried, what you'd change)">
+          <input value={item.resultNotes || ""} onChange={(e) => onUpdate(item.id, { resultNotes: e.target.value })} placeholder="e.g. first video, no sound effects, slow middle" />
+        </Field>
+      </div>
+      <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6, lineHeight: 1.5 }}>
+        From YouTube Studio → Content → Shorts → this video → Analytics. Stayed to watch = the "Stayed to watch" side of "Stayed to watch vs Swiped away".
       </div>
     </div>
   );
