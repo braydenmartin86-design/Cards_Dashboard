@@ -474,11 +474,16 @@ function buildMarketIdea(f) {
   return { ...base, pillar: "Budget Picks", title: `What ${money0(a)} gets you in ${theme} cards right now`, hook: `"I've got ${money0(a)}. Here are the best ${theme} cards it buys right now."`, beats: ["The budget on screen", ...(items.length ? items.map((s) => s) : ["3–4 cards at or under budget, cheapest to best"]), "Which one you'd actually buy", "Ask what they'd pick"], onScreen: [`Budget: ${money0(a)}`, ...items.slice(0, 4)], caption: `${money0(a)} budget picks 💵 ${NFA} ${tags}` };
 }
 
-function IdeaCard({ idea, open, onToggle, onAdd }) {
+function IdeaCard({ idea, open, onToggle, onAdd, onDismiss }) {
   return (
-    <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-        <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: idea.when === "Evergreen" ? "#5C627022" : "#4E8B6B22", color: idea.when === "Evergreen" ? "#8B90A0" : "#4E8B6B" }}>{idea.when}</span>
+    <div style={{ border: "1px solid #2C303B", borderRadius: 10, padding: "14px 16px", background: "#191B22", display: "flex", flexDirection: "column", position: "relative" }}>
+      {onDismiss && (
+        <button type="button" title="Not for me — hide it and get a new idea" onClick={() => onDismiss(idea)} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "#6B7180", cursor: "pointer", fontSize: 14, padding: "2px 6px", lineHeight: 1 }}>
+          ✕
+        </button>
+      )}
+      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap", paddingRight: onDismiss ? 22 : 0 }}>
+        <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: idea.when === "Evergreen" ? "#5C627022" : idea.when === "✨ AI idea" ? "#8B6FD622" : "#4E8B6B22", color: idea.when === "Evergreen" ? "#8B90A0" : idea.when === "✨ AI idea" ? "#B9A3F0" : "#4E8B6B" }}>{idea.when}</span>
         <span className="mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "#C9A22722", color: "#C9A227" }}>{idea.pillar}</span>
       </div>
       <div className="oswald" style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>{idea.title}</div>
@@ -670,6 +675,58 @@ function MoversBox({ onAdd }) {
   );
 }
 
+// ----- Replacing ideas you don't want -----
+// "Not for me" hides an idea and asks Gemini (one call) for a new one shaped by your cards, targets,
+// season calendar and what you've skipped. If the AI is busy, a built-in idea fills the gap.
+const DISMISSED_IDEAS_KEY = "cardflip_ev_content_dismissed_v1";
+const AI_IDEAS_KEY = "cardflip_ev_content_ai_ideas_v1";
+
+const BACKUP_IDEAS = [
+  { key: "pool-rookiewatch", title: "3 rookies I'd watch before the draft", pillar: "Budget Picks", hook: `"These three rookies could jump after the draft. Here's what their cards cost right now."`, beats: ["Why draft time moves prices", "Rookie 1: who, which card, today's price", "Rookie 2", "Rookie 3", "Which one you'd buy — and that it's not advice"] },
+  { key: "pool-showvsebay", title: "Card show prices vs eBay: who's cheaper?", pillar: "Pickups & Hauls", hook: `"The dealer wanted $X. eBay says it sells for $Y."`, beats: ["The card and the dealer's price (your notes, not the dealer)", "The eBay sold price", "Who's cheaper and why", "Tip: always check comps on your phone at shows"] },
+  { key: "pool-overpay", title: "Overpay or steal? Reacting to this week's sales", pillar: "Market Moves", hook: `"Someone paid this for that card. Overpay or steal?"`, beats: ["Sale 1: card and price — your verdict", "Sale 2", "Sale 3", "Ask viewers to vote in the comments"] },
+  { key: "pool-myth", title: "Do PSA 10s always sell for more? (myth buster)", pillar: "Is It Worth Grading?", hook: `"Everyone says grade it. Sometimes that's how you lose money."`, beats: ["The myth", "An example where the PSA 10 premium is tiny", "Grading cost and the 3-month wait from Australia", "Your rule for when it's worth it"] },
+  { key: "pool-mistakes", title: "3 mistakes I made as a new card flipper", pillar: "Behind the Scenes", hook: `"I lost money on my first flips. Here's what I'd do differently."`, beats: ["Mistake 1: not checking sold comps", "Mistake 2: forgetting fees and postage", "Mistake 3: grading cards that weren't 10s", "What you do now"] },
+  { key: "pool-prep", title: "How I prep a card before sending it to grade", pillar: "Behind the Scenes", hook: `"Before any card goes to PSA, it goes through this."`, beats: ["Check centering with a ruler or app", "Corners and surface under a light", "Wipe with a microfibre cloth", "Penny sleeve, semi-rigid, done"] },
+  { key: "pool-newrelease", title: "New release: which cards actually matter?", pillar: "Market Moves", hook: `"This new set just dropped. Only a few cards in it are worth chasing."`, beats: ["What the set is and the box price", "The chase cards", "The rookies that matter", "Buy boxes, buy singles, or wait?"] },
+];
+
+async function generateAiIdea({ cards, pokemonCards, targets, contentPlan, skipped, showing }) {
+  const month0 = new Date().getMonth();
+  const monthName = new Date().toLocaleString("en-AU", { month: "long" });
+  const held = [...(cards || []), ...(pokemonCards || []).map((c) => ({ ...c, sport: "Pokémon" }))].filter((c) => c.status === "Raw" || c.status === "Graded" || c.status === "Listed");
+  const sports = [...new Set(held.map((c) => c.sport).filter(Boolean))];
+  const players = [...new Set(held.map((c) => c.player).filter(Boolean))].slice(0, 8);
+  const watching = (targets || []).filter((t) => t.status === "Watching").map((t) => `${t.player} (${t.sport})`).slice(0, 6);
+  const season = typeof SEASON_ROWS !== "undefined" ? SEASON_ROWS.map((r) => `${r.key}: ${r.blocks[month0]?.t}`).join(", ") : "";
+  const liked = [...new Set((contentPlan || []).map((c) => c.pillar))].join(", ");
+  const prompt = `Suggest ONE new idea for a faceless YouTube Short (30-40 seconds) on an Australian sports card channel. Hands and cards only, voiceover or captions, prices in AUD. Today is ${monthName}.
+Their sports: ${sports.join(", ") || "NBA, NFL, AFL"}. Players they hold: ${players.join(", ") || "none listed"}. Watching: ${watching.join(", ") || "none"}.
+Season calendar this month (BUY/SELL/GRADE/SHIP): ${season}.
+Types they've planned before: ${liked || "none yet"}.
+Already showing (don't repeat): ${showing.slice(0, 15).join(" | ")}.
+They skipped these (avoid similar): ${skipped.slice(-10).join(" | ") || "none"}.
+
+Rules: don't invent prices, stats or news — write [check price] or [check stat] where a real number is needed. No face, no names, no location. Honest, no hype words. If it mentions buying, include "not financial advice" in the caption.
+Return ONLY JSON: {"title":"under 60 chars","pillar":"one of: ${CONTENT_PILLARS.join(", ")}","hook":"first line, under 15 words","beats":["4-5 short lines"],"onScreen":["3-4 short overlays"],"shots":["3 hands-only shots"],"sounds":["3-4 sound effect cues tied to moments"],"caption":"one line with 4-6 hashtags including #shorts"}`;
+  const text = await callGeminiAi(prompt);
+  const j = JSON.parse(String(text).replace(/```json|```/g, "").trim());
+  if (!j.title || !j.hook || !Array.isArray(j.beats) || !j.beats.length) throw new Error("Incomplete idea");
+  return {
+    key: `ai-${crypto.randomUUID()}`,
+    when: "✨ AI idea",
+    title: String(j.title),
+    pillar: CONTENT_PILLARS.includes(j.pillar) ? j.pillar : "Market Moves",
+    hook: String(j.hook),
+    beats: j.beats.map(String),
+    onScreen: Array.isArray(j.onScreen) ? j.onScreen.map(String) : [],
+    shots: Array.isArray(j.shots) && j.shots.length ? j.shots.map(String) : undefined,
+    sounds: Array.isArray(j.sounds) && j.sounds.length ? j.sounds.map(String) : undefined,
+    caption: j.caption ? String(j.caption) : `${hashtagsFor()}`,
+    source: "✨ AI idea from your cards, targets and season calendar. Check any [bracketed] prices or stats before filming.",
+  };
+}
+
 // Optional AI script writer, run only when asked (one call).
 async function writeShortScript(item) {
   const prompt = `Write a faceless YouTube Short script (30-45 seconds) for a sports card channel. The creator never shows their face — hands and cards only, voiceover or on-screen captions. Australian creator, prices in AUD.
@@ -722,13 +779,52 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
   const [openIdea, setOpenIdea] = useState(null);
   const [showTips, setShowTips] = useState(false);
 
+  const [dismissed, setDismissed] = useState([]); // [{ key, title }]
+  const [aiIdeas, setAiIdeas] = useState([]);
+  const [pending, setPending] = useState(0);
+
   useEffect(() => {
     if (typeof SHOW_STORAGE_KEY !== "undefined") storageGet(SHOW_STORAGE_KEY).then((p) => setShowPlan(p || null));
+    storageGet(DISMISSED_IDEAS_KEY).then((d) => setDismissed(Array.isArray(d) ? d : []));
+    storageGet(AI_IDEAS_KEY).then((d) => setAiIdeas(Array.isArray(d) ? d : []));
   }, []);
 
   const ideas = useMemo(() => momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }), [cards, pokemonCards, targets, boxBreaks, showPlan]);
   const plannedKeys = new Set(contentPlan.map((c) => c.ideaKey).filter(Boolean));
-  const freshIdeas = ideas.filter((i) => !plannedKeys.has(i.key));
+  const dismissedKeys = new Set(dismissed.map((d) => d.key));
+  const freshIdeas = [...ideas, ...aiIdeas].filter((i) => !plannedKeys.has(i.key) && !dismissedKeys.has(i.key));
+
+  // Hide an idea and put a new one at the bottom: AI first, a built-in idea if the AI is busy.
+  async function dismissIdea(idea) {
+    const nextDismissed = [...dismissed, { key: idea.key, title: idea.title }].slice(-200);
+    setDismissed(nextDismissed);
+    storageSet(DISMISSED_IDEAS_KEY, nextDismissed);
+    setPending((n) => n + 1);
+    const showing = freshIdeas.filter((i) => i.key !== idea.key).map((i) => i.title);
+    let replacement = null;
+    try {
+      replacement = await generateAiIdea({ cards, pokemonCards, targets, contentPlan, skipped: nextDismissed.map((d) => d.title), showing });
+    } catch (e) {
+      const used = new Set([...nextDismissed.map((d) => d.key), ...freshIdeas.map((i) => i.key), ...plannedKeys]);
+      const backup = BACKUP_IDEAS.find((b) => !used.has(b.key));
+      if (backup) replacement = { ...backup, when: "Evergreen", caption: `${backup.title} ${hashtagsFor()}`, source: "Built-in idea (the AI was busy, so this one's from the backup list)." };
+    } finally {
+      setPending((n) => n - 1);
+    }
+    if (!replacement) return;
+    // Functional update so two quick dismissals don't overwrite each other's new idea; ideas
+    // already planned or hidden are dropped from storage as we go.
+    setAiIdeas((prev) => {
+      const keep = prev.filter((i) => !plannedKeys.has(i.key) && !nextDismissed.some((d) => d.key === i.key));
+      const next = [...keep, replacement];
+      storageSet(AI_IDEAS_KEY, next);
+      return next;
+    });
+  }
+  function restoreHidden() {
+    setDismissed([]);
+    storageSet(DISMISSED_IDEAS_KEY, []);
+  }
 
   function addFromIdea(idea) {
     const item = { ...newContentItem(idea), ideaKey: idea.key, caption: idea.caption };
@@ -828,9 +924,20 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
       <SectionTitle>🎬 Ready to film — from what's happening</SectionTitle>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12, marginBottom: 24 }}>
         {freshIdeas.map((idea) => (
-          <IdeaCard key={idea.key} idea={idea} open={openIdea === idea.key} onToggle={() => setOpenIdea(openIdea === idea.key ? null : idea.key)} onAdd={addFromIdea} />
+          <IdeaCard key={idea.key} idea={idea} open={openIdea === idea.key} onToggle={() => setOpenIdea(openIdea === idea.key ? null : idea.key)} onAdd={addFromIdea} onDismiss={dismissIdea} />
+        ))}
+        {Array.from({ length: pending }, (_, i) => (
+          <div key={`pending-${i}`} style={{ border: "1px dashed #C9A22766", borderRadius: 10, padding: "14px 16px", background: "#191B22", color: "#C9A227", fontSize: 12.5, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 120 }}>
+            ✨ Finding a new idea…
+          </div>
         ))}
       </div>
+      {dismissed.length > 0 && (
+        <div style={{ fontSize: 11.5, color: "#6B7180", marginTop: -16, marginBottom: 24 }}>
+          {dismissed.length} idea{dismissed.length === 1 ? "" : "s"} hidden ·{" "}
+          <button type="button" onClick={restoreHidden} style={{ background: "none", border: "none", color: "#2FA89A", cursor: "pointer", padding: 0, fontSize: 11.5 }}>show them again</button>
+        </div>
+      )}
 
       <SectionTitle>🔭 Cards you don't own — market kit maker</SectionTitle>
       <MarketKitMaker onAdd={addFromIdea} />
