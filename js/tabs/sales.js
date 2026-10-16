@@ -441,14 +441,12 @@ function listingCheck(c) {
   const ebay = !consigned && (!c.sellingMethod || /ebay/i.test(c.sellingMethod));
   const relistHow = consigned ? "ask ShipMyCards to relist it (or switch it to auction)" : ebay ? "end it and relist with Sell similar" : "repost or bump it";
   // The ShipMyCards Marketplace has very few buyers, so it only gets a week. After that: under
-  // US$50 bring it home to sell in a lot; over, consign it (Fanatics for slabs, else PC Sportscards).
+  // US$50 bring it home to sell in a lot; over, consign it to PC Sportscards.
   const smcMarketplace = c.sellingMethod === "ShipMyCards Marketplace";
   const priceUsd = price != null ? audToUsd(price) : null;
   const smcNext =
     priceUsd != null && priceUsd < 50
       ? "bring it home with your other cheap vault cards in one shipment and sell them as a team lot"
-      : c.grade
-      ? "move it to Fanatics Collect's weekly auction through ShipMyCards"
       : "move it to PC Sportscards' eBay consignment through ShipMyCards";
   const atFloor = price != null && price <= breakEven * 1.02;
   const base = { card: c, totalDays, stepDays, price, value, breakEven, compsAge, ebay, consigned, relistHow, smcMarketplace, smcNext, falling };
@@ -714,9 +712,9 @@ function ListingPlanModal({ card, onUpdate, onEdit, onClose }) {
         check.consigned
           ? /Fanatics/.test(c.sellingMethod)
             ? "Ask ShipMyCards to move it to PC Sportscards' eBay consignment — eBay has more buyers."
-            : `Ask ShipMyCards to ${c.grade ? "try Fanatics' weekly auction instead (graded US$50+), or " : ""}pull it back to your vault and hold.`
+            : "Ask ShipMyCards to pull it back to your vault and hold it, or ship it home to sell in a lot or at a show."
           : c.location === "ShipMyCards Vault"
-          ? "From the vault: PC Sportscards consignment (or Fanatics for in-demand slabs)."
+          ? "From the vault: PC Sportscards' eBay consignment (US$50+)."
           : null,
       ].filter(Boolean);
 

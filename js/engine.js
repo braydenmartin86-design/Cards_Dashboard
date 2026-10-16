@@ -830,8 +830,10 @@ function recommendedListing(card) {
 
 // Which route to actually sell through, using the same rules as the Selling Playbook. Cards in
 // the ShipMyCards vault are sold from there (never shipped home first) using SMC's own consignment
-// partners: Fanatics Collect auction for graded US$50+, PC Sportscards' eBay consignment for the
-// rest over US$50. SMC's own Marketplace has very few buyers (about 24 listings when checked in
+// partner PC Sportscards (eBay consignment) for anything US$50+, graded or raw. Fanatics Collect's
+// auction looks cheaper (1% + US$3) but buyers pay a ~20% premium on top, so hammer prices land
+// about 17% under eBay comps — e.g. a US$100 slab nets ~US$79 at Fanatics vs ~US$85 through PC
+// Sportscards. SMC's own Marketplace has very few buyers (about 24 listings when checked in
 // Oct 2026), so it's only worth a short try for cards under US$50. Cards in hand = self-list.
 const SMC_MARKETPLACE_TRY_DAYS = 7;
 
@@ -842,12 +844,6 @@ function suggestedSellingMethod(card, listing) {
   const isGraded = card.status === "Graded" || Boolean(card.grade);
 
   if (card.location === "ShipMyCards Vault") {
-    if (isGraded && usd >= 50) {
-      return {
-        method: "SMC → Fanatics Collect auction",
-        why: `Fanatics Collect's weekly auction through ShipMyCards (graded, US$50+). You keep the full hammer price minus SMC's 1% + US$3 — but buyers add a 20% premium on top, so bids land below eBay comps. For a card with deep demand (PSA 10 key rookies) that's usually the best net; for a thin market, PC Sportscards' eBay consignment may do better.`,
-      };
-    }
     if (usd < 50) {
       return {
         method: "ShipMyCards Marketplace",
@@ -856,7 +852,7 @@ function suggestedSellingMethod(card, listing) {
     }
     return {
       method: "SMC → PC Sportscards (eBay)",
-      why: `PC Sportscards' eBay consignment through ShipMyCards — fastest payout and the biggest audience. About ${usd < 1000 ? "14%" : usd < 5000 ? "9%" : "6%"} + US$1 all in. Ask for fixed price with an auto-decline at your break-even, since their auctions start at 99c.`,
+      why: `PC Sportscards' eBay consignment through ShipMyCards — fastest payout and the biggest audience. About ${usd < 1000 ? "14%" : usd < 5000 ? "9%" : "6%"} + US$1 all in. Ask for fixed price with an auto-decline at your break-even, since their auctions start at 99c.${isGraded ? " Usually nets more than Fanatics' auction, where the buyer's ~20% premium pushes bids under eBay prices — Fanatics only wins for very in-demand slabs." : ""}`,
     };
   }
 

@@ -56,8 +56,8 @@ function SellingPlaybook() {
           color="#4E8B6B"
           body="Never bring it home first — see the golden rule above. Sell it while it's still in the US so you only pay one domestic shipping leg, not two international ones."
           steps={[
-            "Graded and US$50+? Consign it straight to Fanatics Collect's weekly auction through SMC (you keep the hammer minus 1%)",
-            "Raw US$50+, or a slab without much demand? Send it straight to PC Sportscards' eBay consignment through SMC (~14% + US$1 under US$1,000) — fastest payout",
+            "US$50+, graded or raw? Send it straight to PC Sportscards' eBay consignment through SMC (~14% + US$1 under US$1,000) — biggest audience, fastest payout, and usually the best net",
+            "Fanatics Collect's auction looks cheaper (1% + US$3), but buyers pay a ~20% premium on top so bids land under eBay prices — only worth it for very in-demand slabs",
             "Under US$50? Don't consign — try the ShipMyCards Marketplace (1%) for about a week, then batch cheap cards into one shipment home and sell them as team lots",
             "Skip the Marketplace for anything over US$50 — it has very few buyers, so it mostly just costs you time",
             "Need cash now? The SMC Purchase Program pays 70–85% of conservative value instantly — usually a worse deal than waiting a week for PC Sportscards",
@@ -105,7 +105,7 @@ function SellingPlaybook() {
           color="#B4472E"
           body="If none of the above quite fits, work through these in order."
           steps={[
-            "Is it still in the ShipMyCards vault and you don't want to keep it? → Don't ship it home. Fanatics (graded US$50+) or PC Sportscards (US$50+), or a week on the Marketplace if it's under US$50 (see below).",
+            "Is it still in the ShipMyCards vault and you don't want to keep it? → Don't ship it home. PC Sportscards (US$50+), or a week on the Marketplace if it's under US$50 (see below).",
             "Is it worth $1,000+? → Look at Fanatics Collect (formerly PWCC) or a specialist high-value consignor for better exposure, not a generic listing",
             "Is it AFL or otherwise Australia-specific? → Check local groups before defaulting to eBay's global audience",
             "Do you have eBay Live access or the ability to go live on Whatnot during AU promo hours? → Use whichever is cheaper for that item",
@@ -122,8 +122,8 @@ function SellingPlaybook() {
           <li style={{ marginBottom: 6 }}>
             <b style={{ color: "#EDEAE1" }}>US$50+: consign it straight away.</b>
             <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-              <li><b style={{ color: "#C9A227" }}>Graded, strong demand</b> (e.g. a PSA 10 of a key rookie): Fanatics weekly auction.</li>
-              <li><b style={{ color: "#C9A227" }}>Everything else:</b> PC Sportscards. Their auctions start at 99c, so ask for fixed price with an auto-decline at your break-even; they allow that on cards US$50+.</li>
+              <li><b style={{ color: "#C9A227" }}>Default, graded or raw:</b> PC Sportscards. Their auctions start at 99c, so ask for fixed price with an auto-decline at your break-even; they allow that on cards US$50+.</li>
+              <li><b style={{ color: "#C9A227" }}>Why not Fanatics?</b> Its auction fee is lower (1% + US$3), but buyers add a ~20% premium, so bids land about 17% under eBay prices. A US$100 slab nets about US$79 there vs about US$85 through PC Sportscards. Only consider it for very in-demand slabs (e.g. a PSA 10 of a hot key rookie).</li>
             </ul>
           </li>
           <li style={{ marginBottom: 6 }}>
@@ -189,9 +189,9 @@ function SellingPlaybook() {
 
 const SMC_OPTIONS = [
   { name: "ShipMyCards Marketplace", fee: "1%", bestFor: "Cards under US$50, for about a week — very few buyers (~24 listings when checked), so don't wait on it" },
-  { name: "Fanatics Collect auction (via SMC)", fee: "0% + 1% SMC + US$3 (buyer pays 20% premium)", bestFor: "Graded only, $50+ minimum. High-demand slabs; weekly auctions run ~10 days" },
+  { name: "Fanatics Collect auction (via SMC)", fee: "0% + 1% SMC + US$3 (buyer pays 20% premium)", bestFor: "Graded only, $50+ minimum. Only very in-demand slabs — the buyer premium pushes bids under eBay prices; weekly auctions run ~10 days" },
   { name: "Fanatics Collect Buy Now (via SMC)", fee: "6% + 1% SMC + US$3", bestFor: "Graded $50+ when you'd rather set the price than auction it" },
-  { name: "PC Sportscards eBay (via SMC)", fee: "13–17% + US$1 + 1% (8% at $1k+, 5% at $5k+)", bestFor: "Raw $50+, or slabs without much Fanatics demand. Fastest turnaround" },
+  { name: "PC Sportscards eBay (via SMC)", fee: "13–17% + US$1 + 1% (8% at $1k+, 5% at $5k+)", bestFor: "The default for $50+, graded or raw — usually the best net. Fastest turnaround" },
   { name: "Card Show Consignment", fee: "US$10/card + 2% if sold", bestFor: "Only $200+ cards where $10 is small, and you can wait for a show (~6 a year)" },
   { name: "Purchase Program", fee: "Paid 70–85% of conservative value", bestFor: "Only when you need the money now — $50–$5,000, raw or graded, instant store credit" },
 ];
