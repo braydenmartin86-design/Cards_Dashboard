@@ -657,6 +657,63 @@ function addDaysIso(dateStr, n) {
 }
 const shortDate = (iso) => localDay(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 
+// Running it as an auction instead: where to start the bidding, where it's likely to finish, and
+// what you'd keep. Only for eBay (self-listed) and PC Sportscards consignment, whose auctions start
+// at 99c and can't be changed — so there the question is whether the likely finish clears break-even.
+function auctionPlan(check) {
+  const c = check.card;
+  const pcs = c.sellingMethod === "SMC → PC Sportscards (eBay)";
+  if (!check.ebay && !pcs) return null;
+  const { fm, nice } = listingMoney(c);
+  if (check.value == null) return { note: "Update its comps first — an auction needs a realistic idea of where it'll finish." };
+  const cost = Number(c.totalCost) || 0;
+  const method = pcs ? c.sellingMethod : "eBay";
+  const keepAt = (price) => price - (estimateSellingFee(method, price) ?? price * (c.feesPct || 0.13)) - cost;
+  const low = check.value * 0.85; // auctions often finish a little under average sold prices
+  const floor = check.breakEven != null ? nice(check.breakEven) : null;
+  const risky = floor != null && floor > low;
+  // AFL buyers are mostly in Australia; everything else sells to US buyers on eBay.com.
+  const ending = c.sport === "AFL" ? "Sunday evening, Australian time" : "Sunday evening US time (Monday morning in Australia)";
+  if (pcs) {
+    return {
+      start: null,
+      expect: `${fm(low)}–${fm(check.value)}`,
+      keep: `${fm(keepAt(low))} to ${fm(keepAt(check.value))}`,
+      risky,
+      note: risky
+        ? `PC Sportscards' auctions start at 99c with no reserve, and a finish around ${fm(low)} would be under your break-even (${fm(floor)}). Safer to stay at fixed price.`
+        : `PC Sportscards' auctions start at 99c (no reserve). The likely finish clears your break-even, so an auction is a reasonable way to get it sold.`,
+    };
+  }
+  const start = floor != null ? floor : nice(low);
+  return {
+    start: fm(start),
+    expect: `${fm(low)}–${fm(check.value)}`,
+    keep: `${fm(keepAt(low))} to ${fm(keepAt(check.value))}`,
+    risky,
+    note: risky
+      ? `Comps suggest it'd finish under break-even. Starting at ${fm(start)} protects you, but it may not get a bid — holding for the sell window could be better.`
+      : `Start the bidding at your break-even so it can't sell at a loss. 7 days, ending ${ending}, when most buyers are online.`,
+  };
+}
+
+function AuctionTip({ plan }) {
+  if (!plan) return null;
+  return (
+    <div style={{ marginTop: 6, padding: "7px 10px", borderRadius: 6, background: "#14161C", border: `1px solid ${plan.risky ? "#B4472E55" : "#2FA89A55"}`, fontSize: 12 }}>
+      <div style={{ fontWeight: 600, color: plan.risky ? "#B4472E" : "#2FA89A", marginBottom: 3 }}>🔨 Auction option</div>
+      {plan.expect && (
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", color: "#EDEAE1", marginBottom: 3 }}>
+          {plan.start && <span>Start bid: <b>{plan.start}</b></span>}
+          <span>Likely finish: <b>{plan.expect}</b></span>
+          <span>You'd keep: <b>{plan.keep}</b></span>
+        </div>
+      )}
+      <div style={{ color: "#8B90A0", lineHeight: 1.5 }}>{plan.note}</div>
+    </div>
+  );
+}
+
 function listingTimeline(check) {
   const c = check.card;
   if (check.totalDays == null) return [];
@@ -676,7 +733,7 @@ function listingTimeline(check) {
               ? `Lower about 7% to ${fm(cutTo)}${check.ebay ? " — or send watchers an offer at that price" : check.consigned ? " (ask ShipMyCards to change it)" : ""}`
               : `Price is already at break-even — don't cut, wait for the relist`,
         },
-        { day: LISTING_STEPS.relist, from: start, text: check.relistHow[0].toUpperCase() + check.relistHow.slice(1) },
+        { day: LISTING_STEPS.relist, from: start, text: `${check.relistHow[0].toUpperCase() + check.relistHow.slice(1)}${check.ebay ? " — or try a 7-day auction" : ""}`, auction: true },
         { day: LISTING_STEPS.stop, from: c.dateListed, text: `Still unsold at break-even? Stop cutting — go to plan B below${floor != null ? ` (never below ${fm(floor)})` : ""}` },
       ];
   return steps.map((s) => {
@@ -693,6 +750,8 @@ function ListingPlanModal({ card, onUpdate, onEdit, onClose }) {
   const both = (aud) => (aud == null ? "—" : usd ? `${fmtUsd(audToUsd(aud))} (A${fmtMoney(aud)})` : fmtMoney(aud));
   const timeline = listingTimeline(check);
   const next = timeline.find((s) => s.state === "upcoming");
+  const auction = auctionPlan(check);
+  const auctionNow = ["relist", "stop"].includes(check.stage);
   const actions = c.listingActions || [];
   // What you'd keep if it sold at today's price.
   const methodFee = check.price != null && c.sellingMethod ? estimateSellingFee(c.sellingMethod, check.price) : null;
@@ -750,6 +809,7 @@ function ListingPlanModal({ card, onUpdate, onEdit, onClose }) {
             <div style={{ fontSize: 13, color: "#EDEAE1", marginTop: 3, lineHeight: 1.5 }}>
               {check.stage === "fresh" ? `Nothing yet — it's been ${check.stepDays} day${check.stepDays === 1 ? "" : "s"}.${next ? ` Next step on ${shortDate(next.date)}.` : ""}` : check.text}
             </div>
+            {auctionNow && <AuctionTip plan={auction} />}
             <ListingCheckActions check={check} onUpdate={onUpdate} />
           </div>
 
@@ -760,12 +820,20 @@ function ListingPlanModal({ card, onUpdate, onEdit, onClose }) {
               {timeline.map((s, i) => {
                 const isNext = next && s === next;
                 return (
-                  <div key={i} style={{ display: "flex", gap: 10, padding: "6px 0", borderTop: i ? "1px solid #24272F" : "none", fontSize: 12.5, alignItems: "baseline" }}>
-                    <span className="mono" style={{ minWidth: 64, color: s.state === "due" ? "#C9A227" : isNext ? "#2FA89A" : "#6B7180" }}>{shortDate(s.date)}</span>
-                    <span style={{ flex: 1, color: s.state === "due" ? "#8B90A0" : "#EDEAE1" }}>{s.text}</span>
-                    <span style={{ fontSize: 11, color: s.state === "due" ? "#C9A227" : isNext ? "#2FA89A" : "#6B7180", whiteSpace: "nowrap" }}>
-                      {s.state === "due" ? "due" : s.inDays === 1 ? "tomorrow" : `in ${s.inDays} days`}
-                    </span>
+                  <div key={i} style={{ padding: "6px 0", borderTop: i ? "1px solid #24272F" : "none", fontSize: 12.5 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+                      <span className="mono" style={{ minWidth: 64, color: s.state === "due" ? "#C9A227" : isNext ? "#2FA89A" : "#6B7180" }}>{shortDate(s.date)}</span>
+                      <span style={{ flex: 1, color: s.state === "due" ? "#8B90A0" : "#EDEAE1" }}>{s.text}</span>
+                      <span style={{ fontSize: 11, color: s.state === "due" ? "#C9A227" : isNext ? "#2FA89A" : "#6B7180", whiteSpace: "nowrap" }}>
+                        {s.state === "due" ? "due" : s.inDays === 1 ? "tomorrow" : `in ${s.inDays} days`}
+                      </span>
+                    </div>
+                    {/* The auction numbers under the relist step when that's what's coming up next. */}
+                    {s.auction && isNext && !auctionNow && (
+                      <div style={{ marginLeft: 74 }}>
+                        <AuctionTip plan={auction} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
