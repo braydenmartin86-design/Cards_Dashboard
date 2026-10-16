@@ -17,6 +17,8 @@ const SELL_DECISION_STYLE = {
   "Grade First": { color: "#8B6FD6", label: "Grade First" },
   "Sell PSA 10": { color: "#4E8BC9", label: "Sell PSA 10" },
   "Sell PSA 9": { color: "#4E8BC9", label: "Sell PSA 9" },
+  // A slab with no price for its own grade yet (or one that may be another grade's price).
+  "Check Comps": { color: "#D9822B", label: "Update Comps" },
   Hold: { color: "#5C7A99", label: "Hold" },
   Listed: { color: "#2FA89A", label: "Listed" },
   Sold: { color: "#4E8B6B", label: "Sold" },

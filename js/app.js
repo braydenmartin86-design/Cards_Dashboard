@@ -230,7 +230,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     let list = enriched.filter((c) => c.status === "Raw" || c.status === "Graded");
     if (statusFilter === "action") {
       list = list.filter((c) =>
-        ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10"].includes(c.sellDecision)
+        ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10", "Check Comps"].includes(c.sellDecision)
       );
     } else if (statusFilter !== "all") {
       list = list.filter((c) => c.status === statusFilter);

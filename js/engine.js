@@ -102,14 +102,22 @@ function applyStatusTransitions(prev, next) {
 const PSA9_GRADES = ["psa 9", "sgc 9", "sgc 9.5", "bgs 9", "bgs 9.5", "cgc 9", "cgc 9.5", "tag 9"];
 const PSA10_GRADES = ["psa 10", "sgc 10", "bgs 10", "cgc 10", "tag 10"];
 
+// Which value slot a graded card's own-grade price lives in: 10s (any grader) in "psa10", every
+// other grade — 9s, 9.5s, and 8-or-lower slabs too — in "psa9". Slot names are storage only; the
+// price itself is always for the card's own grade (see compsGradeMismatch).
+function valueSlotForGrade(grade) {
+  const g = String(grade || "").toLowerCase().trim();
+  if (!g) return null;
+  return PSA10_GRADES.includes(g) ? "psa10" : "psa9";
+}
+
 // The label for a value slot on a specific card: a graded card's own grade ("BGS 9.5") for the
 // slot it lives in, otherwise the generic PSA name used for raw cards' grading estimates.
 function gradeSlotLabel(card, slot) {
   const generic = slot === "psa10" ? "PSA 10" : slot === "psa9" ? "PSA 9" : "Raw";
   const g = String((card && card.grade) || "").toLowerCase();
   if (!g || slot === "raw") return generic;
-  const own = PSA10_GRADES.includes(g) ? "psa10" : PSA9_GRADES.includes(g) ? "psa9" : null;
-  return own === slot ? card.grade : generic;
+  return valueSlotForGrade(g) === slot ? card.grade : generic;
 }
 
 // The sell-decision badge text, naming the card's own grade ("Sell BGS 9.5", not "Sell PSA 9").
@@ -123,11 +131,31 @@ function sellDecisionLabel(card, decision) {
 // e.g. PSA 9 prices saved before it came back BGS 9.5. Comps saved since this was tracked
 // record their grade in `compsGrade`.
 function compsGradeMismatch(card) {
-  const g = String((card && card.grade) || "");
-  if (!g || /^psa\b/i.test(g)) return false;
-  const slot = PSA10_GRADES.includes(g.toLowerCase()) ? "psa10Avg" : PSA9_GRADES.includes(g.toLowerCase()) ? "psa9Avg" : null;
-  if (!slot || card[slot] == null) return false;
-  return String(card.compsGrade || "").toLowerCase() !== g.toLowerCase();
+  const g = String((card && card.grade) || "").toLowerCase().trim();
+  // PSA 9 and PSA 10 are the slots' native grades, so their prices are always right.
+  if (!g || g === "psa 9" || g === "psa 10") return false;
+  const slot = valueSlotForGrade(g) === "psa10" ? "psa10Avg" : "psa9Avg";
+  if (card[slot] == null) return false;
+  return String(card.compsGrade || "").toLowerCase().trim() !== g;
+}
+
+// Sell decision for a slab, judged only on prices for its own grade. No trustworthy own-grade
+// price (missing, or maybe a PSA price on an SGC/BGS slab) → "Check Comps" instead of a guess.
+function gradedSellDecision(c, psa9GGR, psa10GGR) {
+  if (ownGradeValue(c) == null) return "Check Comps";
+  const slot = valueSlotForGrade(c.grade);
+  if (slot === "psa10" && (psa10GGR ?? 0) >= 20) return "Sell PSA 10";
+  if (slot === "psa9" && (psa9GGR ?? 0) >= 0) return "Sell PSA 9";
+  return "Hold";
+}
+
+// A graded card's value for its own grade, or null when there isn't one you can trust yet
+// (missing, or possibly saved for a different grade).
+function ownGradeValue(card) {
+  const slot = valueSlotForGrade(card && card.grade);
+  if (!slot) return null;
+  const v = slot === "psa10" ? card.psa10Avg : card.psa9Avg;
+  return v == null || compsGradeMismatch(card) ? null : v;
 }
 
 // ===== Selling method fee estimator =====
@@ -240,7 +268,8 @@ function computeCard(c) {
 
   const raw = c.rawAvg ?? 0;
   const psa9 = c.psa9Avg ?? 0;
-  const psa10 = c.psa10Avg ?? c.psa9Avg ?? 0;
+  // A raw card with no PSA 10 price yet borrows the PSA 9 one for its estimates; a slab never does.
+  const psa10 = c.psa10Avg ?? (status === "Graded" ? null : c.psa9Avg) ?? 0;
 
   const netRawSell = raw * (1 - fees);
   const netPsa9Sell = psa9 * (1 - fees);
@@ -263,10 +292,10 @@ function computeCard(c) {
   const futureGCost = status === "Raw" && isSelfGraded ? autoGradingCost : 0;
 
   const rawGGR = isActive ? (status === "Graded" ? null : netRawSell - totalCost) : null;
-  const psa9Eligible = isActive && (status === "Raw" || PSA9_GRADES.includes(grade));
+  const psa9Eligible = isActive && (status === "Raw" || valueSlotForGrade(grade) === "psa9");
   const psa9GGR = psa9Eligible ? netPsa9Sell - totalCost - futureGCost : null;
 
-  const psa10Eligible = isActive && (status === "Raw" || PSA10_GRADES.includes(grade));
+  const psa10Eligible = isActive && (status === "Raw" || valueSlotForGrade(grade) === "psa10");
   const psa10GGR = psa10Eligible ? netPsa10Sell - totalCost - futureGCost : null;
 
 // 1. Calculate Graded EV (with PSA 8/below penalty on setGemRate)
@@ -316,9 +345,7 @@ let sellDecision = "";
   } else if (status === "At Grading") {
     sellDecision = "At Grading";
   } else if (status === "Graded") {
-    if (PSA10_GRADES.includes(grade) && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
-    else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
-    else sellDecision = "Hold";
+    sellDecision = gradedSellDecision(c, psa9GGR, psa10GGR);
   } else {
     const minRoiThreshold = 0.20;
     const minDollarProfit = 3.00;
@@ -345,6 +372,7 @@ let sellDecision = "";
   if (sellDecision === "") sellPriority = 9;
   else if (sellDecision === "Sell PSA 9" || sellDecision === "Sell PSA 10") sellPriority = 1;
   else if (sellDecision === "Sell Raw First") sellPriority = 2;
+  else if (sellDecision === "Check Comps") sellPriority = 2.5;
   else if (gradeCall === "YES" && sellDecision === "Grade First") sellPriority = 3;
   else if (gradeCall === "HIGH RISK" && sellDecision === "Grade First") sellPriority = 4;
   else if (gradeCall === "NO" && sellDecision === "Grade First") sellPriority = 5;
@@ -362,8 +390,8 @@ let sellDecision = "";
   const realisedProfit = netSale != null ? netSale - totalCost : null;
 
   let projectedNetSell = null;
-  if (PSA10_GRADES.includes(grade)) projectedNetSell = c.psa10Avg != null ? netPsa10Sell : null;
-  else if (PSA9_GRADES.includes(grade)) projectedNetSell = c.psa9Avg != null ? netPsa9Sell : null;
+  if (valueSlotForGrade(grade) === "psa10") projectedNetSell = c.psa10Avg != null ? netPsa10Sell : null;
+  else if (valueSlotForGrade(grade) === "psa9") projectedNetSell = c.psa9Avg != null ? netPsa9Sell : null;
   else if (c.rawAvg != null) projectedNetSell = netRawSell;
   const saleVariance = netSale != null && projectedNetSell != null ? netSale - projectedNetSell : null;
   const saleVariancePct = saleVariance != null && projectedNetSell > 0 ? saleVariance / projectedNetSell : null;
@@ -415,7 +443,8 @@ function computePokemonCard(c) {
 
   const raw = c.rawAvg ?? 0;
   const psa9 = c.psa9Avg ?? 0;
-  const psa10 = c.psa10Avg ?? c.psa9Avg ?? 0;
+  // A raw card with no PSA 10 price yet borrows the PSA 9 one for its estimates; a slab never does.
+  const psa10 = c.psa10Avg ?? (status === "Graded" ? null : c.psa9Avg) ?? 0;
 
   const netRawSell = raw * (1 - fees);
   const netPsa9Sell = psa9 * (1 - fees);
@@ -425,7 +454,7 @@ function computePokemonCard(c) {
   const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
 
   const isSelfGraded = [
-    "PSA via Australia", 
+    "PSA via Australia",
     "PSA via ShipMyCards", 
     "SGC via Australia"
   ].includes(c.gradingService);
@@ -492,9 +521,7 @@ function computePokemonCard(c) {
   } else if (status === "At Grading") {
     sellDecision = "At Grading";
   } else if (status === "Graded") {
-    if (PSA10_GRADES.includes(grade) && (psa10GGR ?? 0) >= 20) sellDecision = "Sell PSA 10";
-    else if (PSA9_GRADES.includes(grade) && (psa9GGR ?? 0) >= 0) sellDecision = "Sell PSA 9";
-    else sellDecision = "Hold";
+    sellDecision = gradedSellDecision(c, psa9GGR, psa10GGR);
   } else {
     const minRoiThreshold = 0.20;
     const minDollarProfit = 3.00;
@@ -520,6 +547,7 @@ function computePokemonCard(c) {
   if (sellDecision === "") sellPriority = 9;
   else if (sellDecision === "Sell PSA 9" || sellDecision === "Sell PSA 10") sellPriority = 1;
   else if (sellDecision === "Sell Raw First") sellPriority = 2;
+  else if (sellDecision === "Check Comps") sellPriority = 2.5;
   else if (gradeCall === "YES" && sellDecision === "Grade First") sellPriority = 3;
   else if (gradeCall === "HIGH RISK" && sellDecision === "Grade First") sellPriority = 4;
   else if (gradeCall === "NO" && sellDecision === "Grade First") sellPriority = 5;
@@ -537,8 +565,8 @@ function computePokemonCard(c) {
 
   const pkmnGrade = (c.grade || "").toLowerCase();
   let projectedNetSell = null;
-  if (PSA10_GRADES.includes(pkmnGrade)) projectedNetSell = c.psa10Avg != null ? netPsa10Sell : null;
-  else if (PSA9_GRADES.includes(pkmnGrade)) projectedNetSell = c.psa9Avg != null ? netPsa9Sell : null;
+  if (valueSlotForGrade(pkmnGrade) === "psa10") projectedNetSell = c.psa10Avg != null ? netPsa10Sell : null;
+  else if (valueSlotForGrade(pkmnGrade) === "psa9") projectedNetSell = c.psa9Avg != null ? netPsa9Sell : null;
   else if (c.rawAvg != null) projectedNetSell = netRawSell;
   const saleVariance = netSale != null && projectedNetSell != null ? netSale - projectedNetSell : null;
   const saleVariancePct = saleVariance != null && projectedNetSell > 0 ? saleVariance / projectedNetSell : null;

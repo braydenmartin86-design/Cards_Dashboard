@@ -192,11 +192,7 @@ function daysHeld(card) {
 // Today's market value for the version of the card you hold.
 function currentMarketValue(card) {
   const g = String(card.grade || "").toLowerCase();
-  if (card.status === "Graded" || card.grade) {
-    if (PSA10_GRADES.includes(g)) return card.psa10Avg ?? null;
-    if (PSA9_GRADES.includes(g)) return card.psa9Avg ?? null;
-    return null;
-  }
+  if (card.status === "Graded" || card.grade) return g ? ownGradeValue(card) : null;
   return card.rawAvg ?? null;
 }
 
@@ -284,9 +280,9 @@ const PRICE_MOVE_MAX_AGE_DAYS = 60;
 function heldTier(c) {
   const g = String(c.grade || "").toLowerCase();
   if (c.status === "Graded" || c.grade) {
-    if (PSA10_GRADES.includes(g)) return { label: c.grade, history: c.psa10History, breakEven: c.psa10BE };
-    if (PSA9_GRADES.includes(g)) return { label: c.grade, history: c.psa9History, breakEven: c.psa9BE };
-    return null;
+    // Price moves only count once the saved prices are for this exact grade.
+    if (!g || compsGradeMismatch(c)) return null;
+    return valueSlotForGrade(g) === "psa10" ? { label: c.grade, history: c.psa10History, breakEven: c.psa10BE } : { label: c.grade, history: c.psa9History, breakEven: c.psa9BE };
   }
   return { label: "Raw", history: c.rawHistory, breakEven: c.rawBE };
 }

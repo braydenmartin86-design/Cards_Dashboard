@@ -33,7 +33,9 @@ const FILTERS = [
   { key: "Graded", label: "Graded" },
 ];
 
-const DECISION_FILTERS = ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10", "Hold"];
+const DECISION_FILTERS = ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10", "Check Comps", "Hold"];
+// "Sell PSA 9/10" cover every grader's slabs (an SGC 10 sells under "Sell PSA 10"), so name them plainly.
+const DECISION_FILTER_LABELS = { "Sell PSA 9": "Sell slab (9 or lower)", "Sell PSA 10": "Sell slab (10)", "Check Comps": "Update Comps" };
 
 function FilterRow({ statusFilter, setStatusFilter, decisionFilter, setDecisionFilter, sportFilter, setSportFilter, locationFilter, setLocationFilter, setSortKey, enriched }) {
   const sports = useMemo(() => {
@@ -60,7 +62,7 @@ function FilterRow({ statusFilter, setStatusFilter, decisionFilter, setDecisionF
           <label style={{ display: "block", marginBottom: 4 }}>Decision</label>
           <select value={decisionFilter} onChange={(e) => setDecisionFilter(e.target.value)} style={{ width: "auto", minWidth: 170 }}>
             <option value="all">Any decision</option>
-            {DECISION_FILTERS.map((d) => <option key={d} value={d}>{d}</option>)}
+            {DECISION_FILTERS.map((d) => <option key={d} value={d}>{DECISION_FILTER_LABELS[d] || d}</option>)}
           </select>
         </div>
         {sports.length > 2 && (
@@ -92,6 +94,7 @@ const DECISION_SORT_ORDER = {
   "Sell PSA 9": 1,
   "Sell Raw First": 2,
   "Grade First": 3,
+  "Check Comps": 3.5,
   Hold: 4,
   Listed: 5,
   Sold: 6,
@@ -617,9 +620,7 @@ function compSearchDefaults(card) {
 // Which market-value column a grade feeds (same grade groups the formula engine uses).
 function tierKeyForGrade(grade) {
   const g = String(grade || "").toLowerCase();
-  if (PSA10_GRADES.includes(g)) return "psa10";
-  if (PSA9_GRADES.includes(g)) return "psa9";
-  return null;
+  return valueSlotForGrade(g);
 }
 
 // eBay sold / 130point search text for one tier, for when CardSight has no confident comps.
@@ -1340,9 +1341,10 @@ function listingPrices(card, computed) {
   if (listing) return { listPrice: listing.listPrice, floor: listing.floor, label: listing.label, autoAccept: listing.autoAccept, autoDecline: listing.autoDecline };
   const g = String(card.grade || "").toLowerCase();
   const graded = card.status === "Graded" || Boolean(card.grade);
-  const value = graded ? (PSA10_GRADES.includes(g) ? card.psa10Avg : PSA9_GRADES.includes(g) ? card.psa9Avg : null) : card.rawAvg;
+  // Slabs only price from comps for their own grade (an SGC 10 never lists off PSA 10 prices).
+  const value = graded ? (g ? ownGradeValue(card) : null) : card.rawAvg;
   if (value == null) return null;
-  const floor = graded ? (PSA10_GRADES.includes(g) ? computed.psa10BE : computed.psa9BE) : computed.rawBE;
+  const floor = graded ? (valueSlotForGrade(g) === "psa10" ? computed.psa10BE : computed.psa9BE) : computed.rawBE;
   return { listPrice: value * (graded ? GRADED_LIST_MARKUP : RAW_LIST_MARKUP), floor, label: graded ? card.grade : "Raw", ...bestOfferSettings(value, floor) };
 }
 
@@ -2008,8 +2010,18 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
               <MiniStat label={gradeSlotLabel(card, "psa10")} value={computed.psa10Avg != null ? fmtMoney(computed.psa10Avg) : "—"} />
             </div>
             {compsGradeMismatch(card) && (
-              <div style={{ fontSize: 11.5, color: "#C9A227", border: "1px solid #C9A22755", background: "#C9A2270f", borderRadius: 6, padding: "6px 9px", marginBottom: 10, lineHeight: 1.5 }}>
-                ⚠️ The {card.grade} value may really be a PSA price — it was saved before the app tracked which grade comps were for (or before the card was graded). Use 🔄 Update Comps to get {card.grade} sales.
+              <div style={{ fontSize: 11.5, color: "#D9822B", border: "1px solid #D9822B55", background: "#D9822B0f", borderRadius: 6, padding: "6px 9px", marginBottom: 10, lineHeight: 1.5 }}>
+                ⚠️ The {card.grade} value ({fmtMoney(valueSlotForGrade(card.grade) === "psa10" ? card.psa10Avg : card.psa9Avg)}) may be another grade's price — it was saved before the app tracked which grade comps were for, or before the card was graded. {/^(sgc|bgs|cgc|tag)/i.test(card.grade) ? `${card.grade.split(" ")[0]} slabs usually sell well under PSA, so ` : ""}the app won't make a buy/sell call until it's confirmed. Use 🔄 Update Comps to get {card.grade} sales, or if you know this is the right price:
+                <div style={{ marginTop: 6 }}>
+                  <button type="button" className="btnSecondary" style={{ fontSize: 11.5, padding: "3px 10px" }} onClick={() => onUpdate({ ...card, compsGrade: card.grade })}>
+                    ✓ It's the right {card.grade} price
+                  </button>
+                </div>
+              </div>
+            )}
+            {card.status === "Graded" && card.grade && !compsGradeMismatch(card) && ownGradeValue(card) == null && (
+              <div style={{ fontSize: 11.5, color: "#D9822B", border: "1px solid #D9822B55", background: "#D9822B0f", borderRadius: 6, padding: "6px 9px", marginBottom: 10, lineHeight: 1.5 }}>
+                ⚠️ No {card.grade} price saved yet, so there's no buy/sell call. Use 🔄 Update Comps (or Enter prices by hand) with {card.grade} sales only — not PSA prices.
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
