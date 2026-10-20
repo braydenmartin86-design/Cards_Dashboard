@@ -1,19 +1,71 @@
 // ===== Content Creation =====
-// Built for faceless short-form video (YouTube Shorts first): ideas come from what's actually
-// happening in the app — a slab coming back, a good flip, a show haul — each with a ready-to-film
-// kit (hook, beats, on-screen text, hands-only shot list, caption + hashtags). Plus a plan with
-// post-by dates, a privacy check before posting, and a channel tracker.
+// Built for faceless short-form video (YouTube Shorts, TikTok, Instagram Reels): ideas come from
+// what's actually happening in the app — a slab coming back, a good flip, a show haul — each with
+// what to cover and a teaser caption + hashtags per platform. Plus a plan with post-by dates, a
+// privacy check before posting, each platform's own results, and a channel tracker.
 
 const CONTENT_PILLARS = ["Flip Breakdowns", "Grading Reveals", "Pickups & Hauls", "Is It Worth Grading?", "Budget Picks", "Market Moves", "Box Breaks", "Behind the Scenes"];
 const CONTENT_PLATFORMS = ["YouTube Shorts", "YouTube (long-form)", "TikTok", "Instagram Reels", "Multiple"];
 const PLATFORM_ICON = { "YouTube Shorts": "▶️", "YouTube (long-form)": "📺", TikTok: "🎵", "Instagram Reels": "📸", Multiple: "🔁" };
 // Platforms one short video can be cross-posted to.
 const SHORT_PLATFORMS = ["YouTube Shorts", "TikTok", "Instagram Reels"];
-// Each platform's own hashtags in place of #shorts.
-const PLATFORM_TAGS = { "YouTube Shorts": "#shorts", TikTok: "#cardtok", "Instagram Reels": "#reels #cardcommunity" };
-function captionFor(caption, platform) {
-  const base = String(caption || "").replace(/#shorts|#cardtok|#reels|#cardcommunity|#fyp/gi, "").replace(/\s{2,}/g, " ").trim();
-  return `${base} ${PLATFORM_TAGS[platform] || ""}`.trim();
+// ----- Captions: one per platform -----
+// A teaser that makes people watch (never the result — no "it sold for $X"), plus the hashtags
+// people in the hobby actually search on that platform. The player tag goes first so it's one of
+// the three YouTube shows above the title.
+const SPORT_HASHTAGS = {
+  NBA: ["#nbacards", "#basketballcards"],
+  WNBA: ["#wnbacards", "#basketballcards"],
+  NFL: ["#nflcards", "#footballcards"],
+  MLB: ["#baseballcards", "#mlbcards"],
+  AFL: ["#aflcards", "#footycards"],
+  Soccer: ["#soccercards", "#footballcards"],
+  MMA: ["#ufccards", "#mmacards"],
+  WWE: ["#wwecards", "#wrestlingcards"],
+  "Pokémon": ["#pokemoncards", "#pokemontcg"],
+};
+const CAPTION_TEASERS = {
+  "Market Moves": ["Did {topic} crash or climb? 👀 Watch till the end", "Guess where {topic} is now before the reveal 👇", "Everyone said {topic} would drop… did it? 🤔"],
+  "Grading Reveals": ["Did {topic} gem? 💎 Wait for it…", "3 months of waiting for this grade 😬", "Guess the grade before the reveal 👇"],
+  "Flip Breakdowns": ["Was this flip worth it? 🤔 Watch to the end", "Paid it. Sold it. Here's what was actually left 💸", "Would you have taken this deal? 👇"],
+  "Budget Picks": ["Would you buy {topic} right now? 👇", "Is this the cheapest {topic} will get? 🤔", "Buy now or wait? Tell me 👇"],
+  "Is It Worth Grading?": ["Grade it or sell it raw? 🤔 Comment before the answer", "Is {topic} worth grading? The answer surprised me", "Most people get this one wrong 👀"],
+  "Pickups & Hauls": ["Steal or overpay? You tell me 👇", "New pickups 👀 Which one's the best?", "What would you have paid? 👇"],
+  "Box Breaks": ["Was this box worth it? 📦 Watch till the end", "Did the box pay off? 👀"],
+  "Behind the Scenes": ["Nobody tells you this about selling cards 👀", "The part of card flipping no one talks about…"],
+};
+const DEFAULT_TEASERS = ["Watch till the end 👀", "What would you do? 👇"];
+const PLATFORM_HASHTAGS = {
+  "YouTube Shorts": ["#sportscards", "#thehobby", "#shorts"],
+  TikTok: ["#cardtok", "#sportscards", "#thehobby", "#fyp"],
+  "Instagram Reels": ["#sportscards", "#tradingcards", "#thehobby", "#cardcollector", "#sportscardscommunity", "#reels"],
+};
+const toHashtag = (s) => {
+  const t = String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return t ? `#${t}` : null;
+};
+// The sport from hashtags already in a caption (ideas made before captions carried a sport).
+function sportFromText(text) {
+  const t = String(text || "").toLowerCase();
+  return Object.keys(SPORT_HASHTAGS).find((k) => SPORT_HASHTAGS[k].some((h) => t.includes(h)) || (SPORT_TAGS[k] || "").split(" ").some((h) => h && t.includes(h))) || "";
+}
+function platformCaption(item, platform = item.platform, variant = item.captionVariant || 0) {
+  const teasers = CAPTION_TEASERS[item.pillar] || DEFAULT_TEASERS;
+  const teaser = teasers[variant % teasers.length].replace(/\{topic\}/g, item.player || "this card");
+  const nfa = ["Market Moves", "Budget Picks"].includes(item.pillar) && platform !== "TikTok" ? "\nNot financial advice." : "";
+  const sportTags = SPORT_HASHTAGS[item.sport] || [];
+  const player = toHashtag(item.player);
+  const base = PLATFORM_HASHTAGS[platform] || PLATFORM_HASHTAGS["YouTube Shorts"];
+  const tags =
+    platform === "TikTok"
+      ? [base[0], player, ...sportTags, ...base.slice(1)]
+      : platform === "Instagram Reels"
+      ? [player, ...sportTags, ...base]
+      : [player, ...sportTags, ...base];
+  const list = [...new Set(tags.filter(Boolean))].slice(0, platform === "Instagram Reels" ? 10 : platform === "TikTok" ? 6 : 6).join(" ");
+  if (platform === "TikTok") return `${teaser} ${list}`;
+  if (platform === "Instagram Reels") return `${teaser}${nfa}\n.\n.\n${list}`;
+  return `${teaser}${nfa}\n\n${list}`;
 }
 const CONTENT_STATUS = ["Idea", "Scripted", "Filmed", "Edited", "Posted"];
 const CONTENT_STATUS_COLOR = { Idea: "#5C7A99", Scripted: "#C9A227", Filmed: "#8B6FD6", Edited: "#2FA89A", Posted: "#4E8B6B" };
@@ -61,51 +113,34 @@ const MARKET_SHOTS = [
 ];
 const NFA = "Not financial advice.";
 
-// Sound + pacing: what stops a Short feeling like a flat slideshow. One payoff cue per type of
-// video, plus the basics every Short needs.
-const SOUND_PAYOFF = {
-  "Grading Reveals": "Drumroll before the grade, then a hit or 'ding' + screen shake on the reveal",
-  "Flip Breakdowns": "Ka-ching on each price, cash sound on the profit number",
-  "Market Moves": "Ka-ching on each price reveal; record scratch or bass drop + screen shake on the % change",
-  "Budget Picks": "Pop as each card appears, ka-ching on each price",
-  "Is It Worth Grading?": "Tick-tock tension before the verdict, then a hit on 'grade it' / 'sell raw'",
-  "Pickups & Hauls": "Pop as each card lands in frame, ka-ching on what you paid",
-  "Box Breaks": "Tension build before the big pull, hit + shake when it's revealed",
-  "Behind the Scenes": "Ka-ching on the sale, a drop sound on each fee taken off",
-};
-const SOUND_BASICS = [
-  "Hook on screen from 0:00 (no fade-in) with a whoosh",
-  "Change the picture every 1–2 seconds — a cut, a zoom on the number, or text popping in — with a whoosh or pop on each",
-  "Quiet upbeat music under everything (10–15% volume)",
-  "Voice at 1.1–1.2× speed, short sentences",
-  "End on the question: rising sound + quick zoom out",
-];
-function soundPlanFor(idea) {
-  return [SOUND_PAYOFF[idea && idea.pillar], ...SOUND_BASICS].filter(Boolean);
-}
-const bullets = (list) => list.map((s) => `• ${s}`).join("\n");
-
 function hashtagsFor(sport) {
   return `#shorts #sportscards #thehobby #cardcollector ${SPORT_TAGS[sport] || ""}`.trim();
 }
 
 function newContentItem(idea) {
-  return {
+  const item = {
     id: crypto.randomUUID(),
     title: idea?.title || "",
     platform: idea?.platform || "YouTube Shorts",
     pillar: idea?.pillar || "Flip Breakdowns",
     status: "Idea",
-    hook: idea?.hook || "",
     notes: idea?.beats ? idea.beats.map((b) => `• ${b}`).join("\n") : idea?.outline ? idea.outline.join("\n") : "",
-    onScreen: idea?.onScreen ? idea.onScreen.join("\n") : "",
-    shots: (idea?.shots || FACELESS_SHOTS).map((s) => `• ${s}`).join("\n"),
-    sounds: bullets(idea?.sounds || soundPlanFor(idea)),
-    caption: idea?.caption || "",
+    // For the caption's hashtags: the player (or card) and sport.
+    player: idea?.player || "",
+    sport: idea?.sport || sportFromText(idea?.caption),
+    captionVariant: 0,
     plannedFor: "",
     privacy: {},
     dateAdded: new Date().toISOString().slice(0, 10),
   };
+  item.caption = platformCaption(item);
+  return item;
+}
+
+// Today as YYYY-MM-DD in local time (toISOString would give yesterday on Australian mornings).
+function contentToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function daysAgo(dateStr) {
@@ -128,6 +163,8 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     const e = r.expected;
     ideas.push({
       key: `reveal-${r.card.id}`,
+      player: r.card.player,
+      sport: r.card.sport,
       when: "Slab just came back",
       title: `Grading reveal: ${name(r.card)}`,
       pillar: "Grading Reveals",
@@ -144,6 +181,8 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     const c = atGrading[0];
     ideas.push({
       key: `predict-${c.id}`,
+      player: c.player,
+      sport: c.sport,
       when: "Cards away at grading",
       title: `Predict the grade: ${name(c)}`,
       pillar: "Grading Reveals",
@@ -162,6 +201,8 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     const c = sold[0];
     ideas.push({
       key: `flip-${c.id}`,
+      player: c.player,
+      sport: c.sport,
       when: "Good flip this month",
       title: `Paid ${money0(c.totalCost)}, sold for ${money0(c.actualSellPrice)}: ${name(c)}`,
       pillar: "Flip Breakdowns",
@@ -229,6 +270,8 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     const c = [...pickups].sort((a, b) => b.totalCost - a.totalCost)[0];
     ideas.push({
       key: `pickups-${pickups.map((p) => p.id).join("").slice(0, 20)}`,
+      player: pickups.length === 1 ? c.player : "",
+      sport: c.sport,
       when: "New pickups",
       title: pickups.length > 1 ? `This week's pickups (${pickups.length} cards)` : `New pickup: ${name(c)}`,
       pillar: "Pickups & Hauls",
@@ -248,6 +291,8 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
       const up = m.change > 0;
       ideas.push({
         key: `move-${m.card.id}-${m.last.date}`,
+        player: m.card.player,
+        sport: m.card.sport,
         when: "Price just moved",
         title: `This card just ${up ? "jumped" : "dropped"} ${Math.round(Math.abs(m.change) * 100)}%`,
         pillar: "Market Moves",
@@ -287,6 +332,8 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     const c = gradeCandidate;
     ideas.push({
       key: `worthgrading-${c.id}`,
+      player: c.player,
+      sport: c.sport,
       when: "Grading decision",
       title: `Is this ${c.player} worth grading? The real maths`,
       pillar: "Is It Worth Grading?",
@@ -304,6 +351,8 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     if (stale) {
       ideas.push({
         key: `stale-${stale.card.id}`,
+        player: stale.card.player,
+        sport: stale.card.sport,
         when: "Listing won't sell",
         title: `Why isn't this card selling?`,
         pillar: "Behind the Scenes",
@@ -324,6 +373,8 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
   if (target) {
     ideas.push({
       key: `target-${target.id}`,
+      player: target.player,
+      sport: target.sport,
       when: "Buy window open",
       title: `The ${target.player} card I'm buying right now`,
       pillar: "Budget Picks",
@@ -343,6 +394,7 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
       const sellMonths = r.blocks.filter((b) => b.t === "SELL").map((b) => b.m).join(", ");
       ideas.push({
         key: `offseason-${r.key}-${month}`,
+        sport: r.key,
         when: "Off-season buying",
         title: `${r.sport} cards I'd buy in the off-season`,
         pillar: "Budget Picks",
@@ -359,6 +411,7 @@ function momentIdeas({ cards, pokemonCards, targets, boxBreaks, showPlan }) {
     if (heating) {
       ideas.push({
         key: `heating-${heating.key}-${month}`,
+        sport: heating.key,
         when: "Prices about to rise",
         title: `Why ${heating.sport} card prices go up next month`,
         pillar: "Market Moves",
@@ -446,7 +499,7 @@ function buildMarketIdea(f) {
   const a = Number(f.a) || 0;
   const b = Number(f.b) || 0;
   const tags = hashtagsFor(f.sport);
-  const base = { key: `market-${crypto.randomUUID()}`, when: "Market kit", shots: MARKET_SHOTS, source: "From the market kit maker — you don't need to own the card. Use your own screen recordings, not other people's photos." };
+  const base = { key: `market-${crypto.randomUUID()}`, when: "Market kit", sport: f.sport, shots: MARKET_SHOTS, source: "From the market kit maker — you don't need to own the card. Use your own screen recordings, not other people's photos." };
   if (f.fmt === "move") {
     const pct = a > 0 ? Math.round(((b - a) / a) * 100) : 0;
     const up = b >= a;
@@ -490,18 +543,8 @@ function IdeaCard({ idea, open, onToggle, onAdd, onDismiss }) {
       <div style={{ fontSize: 12, color: "#C9A227", fontStyle: "italic", marginBottom: 8, lineHeight: 1.5 }}>{idea.hook}</div>
       {open && (
         <div style={{ fontSize: 11.5, color: "#A7ADBB", lineHeight: 1.6, marginBottom: 8 }}>
-          <b style={{ color: "#EDEAE1" }}>Beats</b>
-          <ol style={{ margin: "2px 0 6px", paddingLeft: 18 }}>{idea.beats.map((b, i) => <li key={i}>{b}</li>)}</ol>
-          {idea.onScreen && idea.onScreen.length > 0 && (
-            <>
-              <b style={{ color: "#EDEAE1" }}>On-screen text</b>
-              <div style={{ margin: "2px 0 6px" }}>{idea.onScreen.join(" · ")}</div>
-            </>
-          )}
-          <b style={{ color: "#EDEAE1" }}>Shots (hands only)</b>
-          <ul style={{ margin: "2px 0 6px", paddingLeft: 18 }}>{(idea.shots || FACELESS_SHOTS).map((s, i) => <li key={i}>{s}</li>)}</ul>
-          <b style={{ color: "#EDEAE1" }}>📣 Sound & pacing</b>
-          <ul style={{ margin: "2px 0 0", paddingLeft: 18 }}>{(idea.sounds || soundPlanFor(idea)).map((s, i) => <li key={i}>{s}</li>)}</ul>
+          <b style={{ color: "#EDEAE1" }}>What to cover</b>
+          <ol style={{ margin: "2px 0 0", paddingLeft: 18 }}>{idea.beats.map((b, i) => <li key={i}>{b}</li>)}</ol>
         </div>
       )}
       <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 10, flex: 1 }}>{idea.source}</div>
@@ -511,7 +554,7 @@ function IdeaCard({ idea, open, onToggle, onAdd, onDismiss }) {
         </button>
         {onToggle && (
           <button className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={onToggle}>
-            {open ? "Hide kit" : "See the kit"}
+            {open ? "Hide" : "What to cover"}
           </button>
         )}
       </div>
@@ -622,6 +665,7 @@ function MoversBox({ onAdd }) {
     rows.length >= 2
       ? {
           key: `movers-${data.startedAt}`,
+          sport: rows[0].sport,
           when: "This week's movers",
           title: `This week's biggest card movers (${rows.length})`,
           pillar: "Market Moves",
@@ -707,8 +751,8 @@ Types they've planned before: ${liked || "none yet"}.
 Already showing (don't repeat): ${showing.slice(0, 15).join(" | ")}.
 They skipped these (avoid similar): ${skipped.slice(-10).join(" | ") || "none"}.
 
-Rules: don't invent prices, stats or news — write [check price] or [check stat] where a real number is needed. No face, no names, no location. Honest, no hype words. If it mentions buying, include "not financial advice" in the caption.
-Return ONLY JSON: {"title":"under 60 chars","pillar":"one of: ${CONTENT_PILLARS.join(", ")}","hook":"first line, under 15 words","beats":["4-5 short lines"],"onScreen":["3-4 short overlays"],"shots":["3 hands-only shots"],"sounds":["3-4 sound effect cues tied to moments"],"caption":"one line with 4-6 hashtags including #shorts"}`;
+Rules: don't invent prices, stats or news — write [check price] or [check stat] where a real number is needed. No face, no names, no location. Honest, no hype words.
+Return ONLY JSON: {"title":"under 60 chars","pillar":"one of: ${CONTENT_PILLARS.join(", ")}","hook":"first line, under 15 words","beats":["4-5 short lines"],"player":"main player or card it's about, or empty","sport":"one of: ${Object.keys(SPORT_HASHTAGS).join(", ")}, or empty"}`;
   const text = await callGeminiAi(prompt);
   const j = JSON.parse(String(text).replace(/```json|```/g, "").trim());
   if (!j.title || !j.hook || !Array.isArray(j.beats) || !j.beats.length) throw new Error("Incomplete idea");
@@ -719,29 +763,10 @@ Return ONLY JSON: {"title":"under 60 chars","pillar":"one of: ${CONTENT_PILLARS.
     pillar: CONTENT_PILLARS.includes(j.pillar) ? j.pillar : "Market Moves",
     hook: String(j.hook),
     beats: j.beats.map(String),
-    onScreen: Array.isArray(j.onScreen) ? j.onScreen.map(String) : [],
-    shots: Array.isArray(j.shots) && j.shots.length ? j.shots.map(String) : undefined,
-    sounds: Array.isArray(j.sounds) && j.sounds.length ? j.sounds.map(String) : undefined,
-    caption: j.caption ? String(j.caption) : `${hashtagsFor()}`,
+    player: j.player ? String(j.player) : "",
+    sport: SPORT_HASHTAGS[j.sport] ? j.sport : "",
     source: "✨ AI idea from your cards, targets and season calendar. Check any [bracketed] prices or stats before filming.",
   };
-}
-
-// Optional AI script writer, run only when asked (one call).
-async function writeShortScript(item) {
-  const prompt = `Write a faceless YouTube Short script (30-45 seconds) for a sports card channel. The creator never shows their face — hands and cards only, voiceover or on-screen captions. Australian creator, prices in AUD.
-Title: ${item.title}
-Hook idea: ${item.hook || "(write one)"}
-Points to cover:
-${item.notes || "(use the title)"}
-
-Pacing: the picture should change every 1-2 seconds, so keep each beat short and punchy.
-
-Return ONLY JSON: {"hook":"first sentence, under 15 words, said in the first 2 seconds","beats":["4-6 short lines, each one sentence"],"onScreen":["3-5 short on-screen text overlays"],"sounds":["4-6 sound effect / pacing cues tied to specific moments, e.g. 'ka-ching when $323 appears'"],"caption":"one-line caption with 4-6 relevant hashtags including #shorts"}
-Keep it honest — no hype words like "insane" or guaranteed profits, and say it's not financial advice if you mention buying.`;
-  const text = await callGeminiAi(prompt);
-  const json = JSON.parse(String(text).replace(/```json|```/g, "").trim());
-  return json;
 }
 
 function countPostedInPeriod(contentPlan, period) {
@@ -827,7 +852,7 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
   }
 
   function addFromIdea(idea) {
-    const item = { ...newContentItem(idea), ideaKey: idea.key, caption: idea.caption };
+    const item = { ...newContentItem(idea), ideaKey: idea.key };
     setContentPlan((prev) => [item, ...prev]);
     setSelectedId(item.id);
   }
@@ -840,10 +865,20 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
       prev.map((c) => {
         if (c.id !== id) return c;
         const next = { ...c, ...updates };
-        if (updates.status === "Posted" && c.status !== "Posted") next.datePosted = new Date().toISOString().slice(0, 10);
+        if (updates.status === "Posted" && c.status !== "Posted") next.datePosted = contentToday();
         return next;
       })
     );
+  }
+  // Changes that belong to the video, not one platform's post (title, post date/time, player,
+  // sport): applied to every linked copy. `patchFor(copy)` returns each copy's changes.
+  function updateGroup(id, patchFor) {
+    setContentPlan((prev) => {
+      const src = prev.find((c) => c.id === id);
+      if (!src) return prev;
+      const g = src.groupId || src.id;
+      return prev.map((c) => ((c.groupId || c.id) === g ? { ...c, ...patchFor(c) } : c));
+    });
   }
   function deleteItem(id) {
     setContentPlan((prev) => prev.filter((c) => c.id !== id));
@@ -866,11 +901,13 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
           groupId,
           platform: p,
           status: postedOn ? "Posted" : src.status === "Posted" ? "Edited" : src.status,
+          // Same video, so the same post date and time as the original when it's already up.
           datePosted: postedOn || undefined,
+          timePosted: postedOn && postedOn === src.datePosted ? src.timePosted : undefined,
           stats: {},
           resultNotes: "",
           privacy: postedOn ? { ...(src.privacy || {}) } : {},
-          caption: captionFor(src.caption, p),
+          caption: platformCaption({ ...src, sport: src.sport || sportFromText(src.caption) }, p),
           plannedFor: postedOn || new Date().toISOString().slice(0, 10),
           ideaKey: undefined,
           dateAdded: new Date().toISOString().slice(0, 10),
@@ -988,7 +1025,7 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
         </div>
       )}
 
-      <SectionTitle>📊 How your Shorts did</SectionTitle>
+      <SectionTitle>📊 How your videos did</SectionTitle>
       <ContentResults contentPlan={contentPlan} onOpen={setSelectedId} />
 
       <ChannelTracker />
@@ -1020,7 +1057,7 @@ function ContentCreation({ cards, pokemonCards, targets, boxBreaks, salesItems, 
       </div>
 
       {showAdd && <ContentAddModal onClose={() => setShowAdd(false)} onSave={addItem} />}
-      {selected && <ContentDetailModal item={selected} group={groupOf(selected)} onCrossPost={crossPost} onOpen={setSelectedId} onUpdate={updateItem} onDelete={deleteItem} onClose={() => setSelectedId(null)} />}
+      {selected && <ContentDetailModal item={selected} group={groupOf(selected)} onCrossPost={crossPost} onOpen={setSelectedId} onUpdate={updateItem} onUpdateGroup={updateGroup} onDelete={deleteItem} onClose={() => setSelectedId(null)} />}
     </div>
   );
 }
@@ -1032,7 +1069,7 @@ function ContentAddModal({ onClose, onSave }) {
   function submit(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    onSave(form);
+    onSave({ ...form, caption: platformCaption(form) });
   }
   return (
     <div className="modalOverlay" onClick={onClose}>
@@ -1054,11 +1091,19 @@ function ContentAddModal({ onClose, onSave }) {
               </select>
             </Field>
           </div>
-          <Field label="Hook (your first line)">
-            <input value={form.hook} onChange={(e) => setForm({ ...form, hook: e.target.value })} placeholder='e.g. "I paid $20 for this. It sold for $90."' />
-          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Player or card (for hashtags)">
+              <input value={form.player} onChange={(e) => setForm({ ...form, player: e.target.value })} placeholder="e.g. Cooper Flagg" />
+            </Field>
+            <Field label="Sport">
+              <select value={form.sport} onChange={(e) => setForm({ ...form, sport: e.target.value })}>
+                <option value="">—</option>
+                {Object.keys(SPORT_HASHTAGS).map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </Field>
+          </div>
           <Field label="Points to cover">
-            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={4} style={textareaStyle} placeholder="Bullet points are fine — or add it and use ✨ Write script" />
+            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={4} style={textareaStyle} placeholder="Bullet points are fine" />
           </Field>
           <button className="btnPrimary" type="submit" style={{ justifyContent: "center", marginTop: 6 }}>Add to plan</button>
         </form>
@@ -1111,7 +1156,7 @@ function CrossPostBox({ item, group, onCrossPost, onOpen }) {
             </button>
           </div>
           <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6, lineHeight: 1.5 }}>
-            Adds a linked copy for each platform with its own status, privacy check and stats. The caption swaps in that platform's tags (#cardtok, #reels). Upload your original export to each one, not a download with another app's watermark.
+            Adds a linked copy for each platform with its own status, privacy check, stats, and a caption and hashtags written for that platform. Title, post date/time and length stay in sync across them. Upload your original export to each one, not a download with another app's watermark.
           </div>
         </>
       ) : (
@@ -1121,43 +1166,39 @@ function CrossPostBox({ item, group, onCrossPost, onOpen }) {
   );
 }
 
-function ContentDetailModal({ item, group = [item], onCrossPost, onOpen, onUpdate, onDelete, onClose }) {
-  const [writing, setWriting] = useState(false);
-  const [error, setError] = useState(null);
+function ContentDetailModal({ item, group = [item], onCrossPost, onOpen, onUpdate, onUpdateGroup, onDelete, onClose }) {
   const [copied, setCopied] = useState(false);
   const privacy = item.privacy || {};
   const allClear = privacyChecksFor(item).every((p) => privacy[p.key]);
+  const sport = item.sport ?? sportFromText(item.caption);
+  // Linked copies share the video's details; without a group updater, just this one.
+  const updateVideo = (patchFor) => (onUpdateGroup ? onUpdateGroup(item.id, patchFor) : onUpdate(item.id, patchFor(item)));
 
-  async function write() {
-    setWriting(true);
-    setError(null);
-    try {
-      const s = await writeShortScript(item);
-      onUpdate(item.id, {
-        hook: s.hook || item.hook,
-        notes: (s.beats || []).map((b) => `• ${b}`).join("\n") || item.notes,
-        onScreen: (s.onScreen || []).join("\n") || item.onScreen,
-        caption: s.caption || item.caption,
-        sounds: Array.isArray(s.sounds) && s.sounds.length ? bullets(s.sounds) : item.sounds,
-        status: item.status === "Idea" ? "Scripted" : item.status,
-      });
-    } catch (e) {
-      setError("Couldn't write a script right now — try again in a minute.");
-    } finally {
-      setWriting(false);
-    }
-  }
   async function copyCaption() {
     const ok = await copyToClipboard(item.caption || "");
     setCopied(ok);
     setTimeout(() => setCopied(false), 1600);
   }
+  // Player/sport belong to the video, so every platform's caption is rebuilt with the new tags.
+  function setTagInfo(patch) {
+    updateVideo((c) => {
+      const next = { ...c, sport: c.sport ?? sportFromText(c.caption), ...patch };
+      return { ...patch, caption: platformCaption(next, next.platform) };
+    });
+  }
+  function newCaption() {
+    const variant = (item.captionVariant || 0) + 1;
+    onUpdate(item.id, { captionVariant: variant, caption: platformCaption({ ...item, sport }, item.platform, variant) });
+  }
 
   return (
     <div className="modalOverlay" onClick={onClose}>
       <div className="modalBox" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-        <ModalHeader title={item.title} onClose={onClose} />
+        <ModalHeader title={`${PLATFORM_ICON[item.platform] || ""} ${item.title || "Untitled"}`} onClose={onClose} />
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label={group.length > 1 ? "Title (changes it on every platform)" : "Title"}>
+            <input value={item.title || ""} onChange={(e) => updateVideo(() => ({ title: e.target.value }))} placeholder="Video title" />
+          </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             <Field label="Status">
               <select value={item.status} onChange={(e) => onUpdate(item.id, { status: e.target.value })}>
@@ -1173,33 +1214,32 @@ function ContentDetailModal({ item, group = [item], onCrossPost, onOpen, onUpdat
               </select>
             </Field>
           </div>
-          <Field label="Hook (first 2 seconds)">
-            <input value={item.hook || ""} onChange={(e) => onUpdate(item.id, { hook: e.target.value })} />
+          <Field label="What to cover">
+            <textarea value={item.notes || ""} onChange={(e) => onUpdate(item.id, { notes: e.target.value })} rows={4} style={textareaStyle} />
           </Field>
-          <Field label="Beats / what to say">
-            <textarea value={item.notes || ""} onChange={(e) => onUpdate(item.id, { notes: e.target.value })} rows={5} style={textareaStyle} />
-          </Field>
-          <div>
-            <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px", borderColor: "#C9A22766", color: "#C9A227" }} onClick={write} disabled={writing}>
-              {writing ? "✨ Writing…" : "✨ Write script for me (AI)"}
-            </button>
-            <span style={{ fontSize: 11, color: "#6B7180", marginLeft: 8 }}>Rewrites the hook, beats, on-screen text and caption in a faceless Shorts style.</span>
-            {error && <div style={{ fontSize: 11.5, color: "#B4472E", marginTop: 4 }}>{error}</div>}
-          </div>
-          <Field label="On-screen text (one per line)">
-            <textarea value={item.onScreen || ""} onChange={(e) => onUpdate(item.id, { onScreen: e.target.value })} rows={3} style={textareaStyle} />
-          </Field>
-          <Field label="Shot list (hands only)">
-            <textarea value={item.shots || ""} onChange={(e) => onUpdate(item.id, { shots: e.target.value })} rows={4} style={textareaStyle} />
-          </Field>
-          <Field label="📣 Sound & pacing plan">
-            <textarea value={item.sounds ?? bullets(soundPlanFor(item))} onChange={(e) => onUpdate(item.id, { sounds: e.target.value })} rows={5} style={textareaStyle} />
-          </Field>
-          <Field label="Caption + hashtags">
-            <textarea value={item.caption || ""} onChange={(e) => onUpdate(item.id, { caption: e.target.value })} rows={2} style={textareaStyle} />
-          </Field>
-          <div>
-            <button type="button" className="btnSecondary" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={copyCaption} disabled={!item.caption}>{copied ? "Copied ✓" : "Copy caption"}</button>
+
+          {/* Caption for this platform */}
+          <div style={{ border: "1px solid #2C303B", borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#EDEAE1", marginBottom: 8 }}>{PLATFORM_ICON[item.platform] || ""} {item.platform} caption + hashtags</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
+              <Field label="Player or card (for hashtags)">
+                <input value={item.player || ""} onChange={(e) => setTagInfo({ player: e.target.value })} placeholder="e.g. Cooper Flagg" />
+              </Field>
+              <Field label="Sport">
+                <select value={sport || ""} onChange={(e) => setTagInfo({ sport: e.target.value })}>
+                  <option value="">—</option>
+                  {Object.keys(SPORT_HASHTAGS).map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </Field>
+            </div>
+            <textarea value={item.caption || ""} onChange={(e) => onUpdate(item.id, { caption: e.target.value })} rows={item.platform === "Instagram Reels" ? 5 : 3} style={textareaStyle} />
+            <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" className="btnSecondary" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={copyCaption} disabled={!item.caption}>{copied ? "Copied ✓" : "Copy caption"}</button>
+              <button type="button" className="btnSecondary" style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={newCaption}>↻ Different caption</button>
+            </div>
+            <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6, lineHeight: 1.5 }}>
+              A teaser that makes people watch to find out, never the answer. {item.platform === "TikTok" ? "TikTok: #cardtok is the hobby's main tag; keep it short." : item.platform === "Instagram Reels" ? "Instagram: tags under the dots keep the caption clean." : "YouTube shows the first three hashtags above the title."} Changing the player or sport rebuilds every platform's caption.
+            </div>
           </div>
 
           {onCrossPost && <CrossPostBox key={item.id} item={item} group={group} onCrossPost={onCrossPost} onOpen={onOpen} />}
@@ -1219,14 +1259,7 @@ function ContentDetailModal({ item, group = [item], onCrossPost, onOpen, onUpdat
             )}
           </div>
 
-          {item.status === "Posted" && (
-            <>
-              <Field label="Posted on">
-                <input type="date" value={item.datePosted || ""} onChange={(e) => onUpdate(item.id, { datePosted: e.target.value })} style={{ maxWidth: 180 }} />
-              </Field>
-              <ResultsPanel key={item.id} item={item} onUpdate={onUpdate} />
-            </>
-          )}
+          {item.status === "Posted" && <ResultsPanel key={item.id} item={item} group={group} onUpdate={onUpdate} onUpdateVideo={updateVideo} />}
 
           <button onClick={() => { onDelete(item.id); onClose(); }} style={{ background: "transparent", border: "1px solid #4a2a24", color: "#B4472E", borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-start" }}>
             <Trash2 size={14} /> Remove
@@ -1237,31 +1270,93 @@ function ContentDetailModal({ item, group = [item], onCrossPost, onOpen, onUpdat
   );
 }
 
-// ===== Results: how each posted Short did =====
-// Stats copied from YouTube Studio (Content → the Short → Analytics) at three checkpoints after
-// posting, then simple insights across videos plus a text summary to paste to Claude for a review.
+// ===== Results: how each posted video did =====
+// Each platform's own analytics, copied in at three checkpoints after posting. Date, time and
+// length belong to the video, so linked copies on other platforms share them. Insights compare
+// platforms on common ground: views, how many got past the first second, how much they watched.
 const STAT_CHECKPOINTS = [
   { key: "48h", label: "48 hours", days: 2 },
   { key: "7d", label: "7 days", days: 7 },
   { key: "30d", label: "30 days", days: 30 },
 ];
-const STAT_FIELDS = [
-  { key: "views", label: "Views" },
-  { key: "stayed", label: "Stayed to watch %", pct: true },
-  { key: "avgViewed", label: "Avg % viewed", pct: true },
-  { key: "likes", label: "Likes" },
-  { key: "comments", label: "Comments" },
-  { key: "shares", label: "Shares" },
-  { key: "subs", label: "Subs gained" },
-];
-// Rough guides for Shorts from creator experience — not official YouTube numbers.
-const STAYED_GOOD = 70;
-const STAYED_OK = 55;
+const PLATFORM_STATS = {
+  "YouTube Shorts": [
+    { key: "views", label: "Views" },
+    { key: "subs", label: "Subscribers" },
+    { key: "stayed", label: "Stayed to watch %", pct: true },
+    { key: "avgDuration", label: "Avg view duration", time: true },
+    { key: "likes", label: "Likes" },
+    { key: "comments", label: "Comments" },
+    { key: "shares", label: "Shares" },
+    { key: "uniqueViewers", label: "Unique viewers" },
+  ],
+  TikTok: [
+    { key: "views", label: "Views" },
+    { key: "profileViews", label: "Profile views" },
+    { key: "likes", label: "Likes" },
+    { key: "comments", label: "Comments" },
+    { key: "shares", label: "Shares" },
+    { key: "avgWatch", label: "Avg watch time", time: true },
+    { key: "fullWatch", label: "Watched full video %", pct: true },
+    { key: "followers", label: "Followers" },
+  ],
+  "Instagram Reels": [
+    { key: "views", label: "Views" },
+    { key: "avgWatch", label: "Avg watch time", time: true },
+    { key: "follows", label: "Follows" },
+    { key: "skipRate", label: "Skip rate %", pct: true },
+    { key: "shares", label: "Shares" },
+    { key: "likes", label: "Likes" },
+    { key: "saves", label: "Saves" },
+    { key: "comments", label: "Comments" },
+    { key: "followersViewed", label: "Followers viewed %", pct: true },
+    { key: "nonFollowersViewed", label: "Non-followers viewed %", pct: true },
+  ],
+};
+const statFieldsFor = (platform) => PLATFORM_STATS[platform] || PLATFORM_STATS["YouTube Shorts"];
+const STATS_WHERE = {
+  "YouTube Shorts": 'YouTube Studio → Content → Shorts → this video → Analytics. "Stayed to watch" is on the Engagement tab.',
+  TikTok: "TikTok → this video → ⋯ → Analytics (Overview and Viewers tabs).",
+  "Instagram Reels": "Instagram → this Reel → View insights.",
+};
+// Rough guides for short-form video from creator experience — not official platform numbers.
+const HOOK_GOOD = 70;
+const HOOK_OK = 55;
 const VIEWED_GOOD = 80;
 const VIEWED_OK = 60;
 
 const statNum = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
 const fmtCount = (n) => (n == null ? "—" : Math.round(n).toLocaleString("en-AU"));
+
+// "0:23", "1:05" or plain seconds → seconds.
+function parseDuration(v) {
+  if (v === "" || v == null) return null;
+  const s = String(v).trim();
+  if (/^\d+:\d{1,2}$/.test(s)) {
+    const [m, sec] = s.split(":").map(Number);
+    return m * 60 + sec;
+  }
+  const n = Number(s);
+  return isNaN(n) ? null : n;
+}
+// Common ground across platforms. Hook = % who didn't swipe straight past (YouTube "stayed to
+// watch", Instagram 100 − skip rate; TikTok doesn't show one).
+function hookPct(item, s) {
+  if (statNum(s.stayed) != null) return statNum(s.stayed);
+  if (statNum(s.skipRate) != null) return 100 - statNum(s.skipRate);
+  return null;
+}
+// Average watch time as a % of the video's length (needs the length), or an older saved "% viewed".
+function viewedPct(item, s) {
+  const d = parseDuration(s.avgDuration ?? s.avgWatch);
+  const len = statNum(item.lengthSec);
+  if (d != null && len) return Math.round((d / len) * 100);
+  return statNum(s.avgViewed);
+}
+// New subscribers / followers from this video.
+const newFollowers = (s) => statNum(s.subs) ?? statNum(s.followers) ?? statNum(s.follows);
+const HOOK_LABEL = { "YouTube Shorts": "stayed", "Instagram Reels": "didn't skip" };
+const FOLLOW_LABEL = { "YouTube Shorts": "subs" };
 
 function latestStats(item) {
   for (const c of [...STAT_CHECKPOINTS].reverse()) {
@@ -1276,48 +1371,52 @@ function dueCheckpoint(item) {
   const age = daysAgo(item.datePosted);
   return STAT_CHECKPOINTS.filter((c) => age >= c.days && !(item.stats && item.stats[c.key] && statNum(item.stats[c.key].views) != null)).pop() || null;
 }
-function statColor(key, v) {
+function statColor(kind, v) {
   if (v == null) return "#8B90A0";
-  const [good, ok] = key === "stayed" ? [STAYED_GOOD, STAYED_OK] : key === "avgViewed" ? [VIEWED_GOOD, VIEWED_OK] : [null, null];
+  const [good, ok] = kind === "hook" ? [HOOK_GOOD, HOOK_OK] : kind === "viewed" ? [VIEWED_GOOD, VIEWED_OK] : [null, null];
   if (good == null) return "#EDEAE1";
   return v >= good ? "#4E8B6B" : v >= ok ? "#C9A227" : "#B4472E";
 }
+const average = (vals) => (vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null);
 
 // Plain-English takeaways across posted videos with stats.
 function resultInsights(rows) {
   const withStats = rows.filter((r) => r.s);
   if (!withStats.length) return [];
   const out = [];
-  const avg = (key) => {
-    const vals = withStats.map((r) => statNum(r.s[key])).filter((v) => v != null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  };
-  const stayed = avg("stayed");
-  const viewed = avg("avgViewed");
-  if (stayed != null) {
+  const hook = average(withStats.map((r) => hookPct(r.item, r.s)).filter((v) => v != null));
+  const viewed = average(withStats.map((r) => viewedPct(r.item, r.s)).filter((v) => v != null));
+  if (hook != null) {
     out.push(
-      stayed >= STAYED_GOOD
-        ? `Hooks are working — on average ${Math.round(stayed)}% stay to watch.`
-        : stayed >= STAYED_OK
-        ? `Hooks are OK (${Math.round(stayed)}% stay). Put the most surprising number on screen at 0:00 to push past ${STAYED_GOOD}%.`
-        : `Most people swipe away in the first second (${Math.round(stayed)}% stay). The hook is the thing to fix first: text on screen from 0:00, the biggest number or question up front.`
+      hook >= HOOK_GOOD
+        ? `Hooks are working — on average ${Math.round(hook)}% get past the first second (YouTube "stayed to watch", Instagram not skipped).`
+        : hook >= HOOK_OK
+        ? `Hooks are OK (${Math.round(hook)}% get past the first second). Put the most surprising number or question on screen at 0:00 to push past ${HOOK_GOOD}%.`
+        : `Most people swipe away in the first second (only ${Math.round(hook)}% stay). Fix the hook first: text on screen from 0:00, the biggest number or question up front.`
     );
   }
   if (viewed != null) {
     out.push(
       viewed >= VIEWED_GOOD
-        ? `People who stay mostly watch to the end (${Math.round(viewed)}% viewed on average).`
-        : `People drop off in the middle (${Math.round(viewed)}% viewed on average). Cut it shorter, change the picture every 1–2 seconds, and add sound on each change.`
+        ? `People who stay mostly watch to the end (${Math.round(viewed)}% of the video on average).`
+        : `People drop off in the middle (${Math.round(viewed)}% of the video watched on average). Cut it shorter, change the picture every 1–2 seconds, and add sound on each change.`
     );
+  } else if (withStats.some((r) => parseDuration(r.s.avgDuration ?? r.s.avgWatch) != null)) {
+    out.push("Add each video's length (seconds) so the app can work out how much of it people watch.");
   }
+  const tiktokFull = average(withStats.filter((r) => r.item.platform === "TikTok").map((r) => statNum(r.s.fullWatch)).filter((v) => v != null));
+  if (tiktokFull != null) out.push(`On TikTok, ${Math.round(tiktokFull)}% watch to the very end${tiktokFull < 20 ? " — a shorter cut or a payoff saved for the last second helps" : ""}.`);
+  const igNew = average(withStats.filter((r) => r.item.platform === "Instagram Reels").map((r) => statNum(r.s.nonFollowersViewed)).filter((v) => v != null));
+  if (igNew != null) out.push(`${Math.round(igNew)}% of Instagram views come from non-followers${igNew >= 50 ? " — Reels are reaching new people" : " — mostly your followers so far; trending audio and stronger hooks help reach new people"}.`);
+
   const best = [...withStats].sort((a, b) => (statNum(b.s.views) || 0) - (statNum(a.s.views) || 0));
   if (best.length >= 2) {
-    out.push(`Best so far: "${best[0].item.title}" (${fmtCount(statNum(best[0].s.views))} views). Weakest: "${best[best.length - 1].item.title}" (${fmtCount(statNum(best[best.length - 1].s.views))}). Compare their hooks.`);
+    out.push(`Best so far: "${best[0].item.title}" on ${best[0].item.platform} (${fmtCount(statNum(best[0].s.views))} views). Weakest: "${best[best.length - 1].item.title}" on ${best[best.length - 1].item.platform} (${fmtCount(statNum(best[best.length - 1].s.views))}). Compare their first seconds.`);
   }
   // By type of video, once there's more than one type with stats.
   const byPillar = {};
   for (const r of withStats) (byPillar[r.item.pillar] = byPillar[r.item.pillar] || []).push(statNum(r.s.views) || 0);
-  const pillars = Object.entries(byPillar).map(([p, v]) => ({ p, avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length }));
+  const pillars = Object.entries(byPillar).map(([p, v]) => ({ p, avg: average(v), n: v.length }));
   if (pillars.length >= 2) {
     pillars.sort((a, b) => b.avg - a.avg);
     out.push(`By type: ${pillars.map((x) => `${x.p} ${fmtCount(x.avg)} avg views (${x.n})`).join(" · ")}. Make more of "${pillars[0].p}".`);
@@ -1327,38 +1426,53 @@ function resultInsights(rows) {
   for (const r of withStats) (groups[r.item.groupId || r.item.id] = groups[r.item.groupId || r.item.id] || []).push(r);
   for (const g of Object.values(groups).filter((g) => g.length >= 2)) {
     const sorted = [...g].sort((a, b) => (statNum(b.s.views) || 0) - (statNum(a.s.views) || 0));
-    out.push(`"${g[0].item.title}" across platforms: ${sorted.map((r) => `${r.item.platform} ${fmtCount(statNum(r.s.views))} views${statNum(r.s.stayed) != null ? ` (${statNum(r.s.stayed)}% stayed)` : ""}`).join(" vs ")}. Compare at the same checkpoint for a fair test.`);
+    out.push(
+      `"${g[0].item.title}" across platforms: ${sorted
+        .map((r) => {
+          const h = hookPct(r.item, r.s);
+          return `${r.item.platform} ${fmtCount(statNum(r.s.views))} views${h != null ? ` (${Math.round(h)}% ${HOOK_LABEL[r.item.platform] || "stayed"})` : ""}`;
+        })
+        .join(" vs ")}. Compare at the same checkpoint for a fair test.`
+    );
   }
   // By platform overall.
   const byPlatform = {};
   for (const r of withStats) (byPlatform[r.item.platform] = byPlatform[r.item.platform] || []).push(statNum(r.s.views) || 0);
-  const plats = Object.entries(byPlatform).map(([p, v]) => ({ p, avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length }));
+  const plats = Object.entries(byPlatform).map(([p, v]) => ({ p, avg: average(v), n: v.length }));
   if (plats.length >= 2) {
     plats.sort((a, b) => b.avg - a.avg);
     out.push(`By platform: ${plats.map((x) => `${x.p} ${fmtCount(x.avg)} avg views (${x.n})`).join(" · ")}.`);
   }
   const totalViews = withStats.reduce((s, r) => s + (statNum(r.s.views) || 0), 0);
   const comments = withStats.reduce((s, r) => s + (statNum(r.s.comments) || 0), 0);
-  const subs = withStats.reduce((s, r) => s + (statNum(r.s.subs) || 0), 0);
+  const follows = withStats.reduce((s, r) => s + (newFollowers(r.s) || 0), 0);
   if (totalViews >= 200) {
-    out.push(`${(comments / totalViews * 1000).toFixed(1)} comments and ${(subs / totalViews * 1000).toFixed(1)} subs per 1,000 views. ${comments / totalViews < 0.003 ? "End every Short on a question people can answer in one word, and pin a comment." : "Good engagement — reply to comments quickly to keep it going."}`);
+    out.push(`${((comments / totalViews) * 1000).toFixed(1)} comments and ${((follows / totalViews) * 1000).toFixed(1)} new followers/subs per 1,000 views. ${comments / totalViews < 0.003 ? "End every video on a question people can answer in one word, and pin a comment." : "Good engagement — reply to comments quickly to keep it going."}`);
   }
-  if (withStats.length < 5) out.push(`Only ${withStats.length} video${withStats.length === 1 ? "" : "s"} with stats so far — patterns get reliable after about 5–10.`);
+  if (withStats.length < 5) out.push(`Only ${withStats.length} post${withStats.length === 1 ? "" : "s"} with stats so far — patterns get reliable after about 5–10.`);
   return out;
 }
 
 function reviewText(rows) {
-  const lines = ["My YouTube Shorts results (faceless sports card channel, Australian, prices in AUD). Please review what worked, what didn't, and what to change next.", ""];
+  const lines = ["My short-form video results (faceless sports card channel, Australian, prices in AUD), on YouTube Shorts, TikTok and Instagram Reels. Please review what worked, what didn't, and what to change next.", ""];
   rows.forEach((r, i) => {
     const it = r.item;
-    lines.push(`${i + 1}. "${it.title}" — posted ${it.datePosted || "?"} · ${it.pillar} · ${it.platform}`);
-    if (it.hook) lines.push(`   Hook: ${it.hook}`);
-    if (it.onScreen) lines.push(`   On-screen: ${it.onScreen.split("\n").filter(Boolean).join(" | ")}`);
+    lines.push(`${i + 1}. "${it.title}" — ${it.platform} · posted ${it.datePosted || "?"}${it.timePosted ? ` at ${it.timePosted}` : ""} · ${it.pillar}`);
     if (it.lengthSec) lines.push(`   Length: ${it.lengthSec}s`);
+    if (it.caption) lines.push(`   Caption: ${it.caption.replace(/\s*\n+\s*/g, " ")}`);
     for (const c of STAT_CHECKPOINTS) {
       const s = it.stats && it.stats[c.key];
       if (!s || statNum(s.views) == null) continue;
-      lines.push(`   ${c.label}: ${STAT_FIELDS.map((f) => (statNum(s[f.key]) == null ? null : `${f.label.replace(" %", "")} ${statNum(s[f.key])}${f.pct ? "%" : ""}`)).filter(Boolean).join(" · ")}`);
+      const parts = statFieldsFor(it.platform)
+        .map((f) => {
+          const v = s[f.key];
+          if (v === "" || v == null) return null;
+          return `${f.label.replace(" %", "")} ${f.time ? v : `${statNum(v)}${f.pct ? "%" : ""}`}`;
+        })
+        .filter(Boolean);
+      const vp = viewedPct(it, s);
+      if (vp != null) parts.push(`≈${vp}% of the video watched on average`);
+      lines.push(`   ${c.label}: ${parts.join(" · ")}`);
     }
     if (it.resultNotes) lines.push(`   My notes: ${it.resultNotes}`);
     lines.push("");
@@ -1368,7 +1482,7 @@ function reviewText(rows) {
 
 function ContentResults({ contentPlan, onOpen }) {
   const [copied, setCopied] = useState(false);
-  const posted = contentPlan.filter((c) => c.status === "Posted").sort((a, b) => String(b.datePosted || "").localeCompare(String(a.datePosted || "")));
+  const posted = contentPlan.filter((c) => c.status === "Posted").sort((a, b) => `${b.datePosted || ""} ${b.timePosted || ""}`.localeCompare(`${a.datePosted || ""} ${a.timePosted || ""}`));
   const rows = posted.map((item) => ({ item, s: latestStats(item), due: dueCheckpoint(item) }));
   const due = rows.filter((r) => r.due);
   const insights = resultInsights(rows);
@@ -1381,7 +1495,7 @@ function ContentResults({ contentPlan, onOpen }) {
   }
 
   if (!posted.length) {
-    return <div style={{ ...box, fontSize: 12.5, color: "#6B7180" }}>Once you mark a Short as posted, log its stats here at 48 hours, 7 days and 30 days to see what's working.</div>;
+    return <div style={{ ...box, fontSize: 12.5, color: "#6B7180" }}>Once you mark a video as posted, log its stats here at 48 hours, 7 days and 30 days to see what's working.</div>;
   }
   return (
     <div style={box}>
@@ -1390,40 +1504,44 @@ function ContentResults({ contentPlan, onOpen }) {
           <div style={{ fontSize: 12, fontWeight: 600, color: "#C9A227", marginBottom: 4 }}>⏰ Stats to log</div>
           {due.map((r) => (
             <div key={r.item.id} style={{ fontSize: 12.5, padding: "2px 0" }}>
+              {PLATFORM_ICON[r.item.platform] || ""}{" "}
               <button type="button" onClick={() => onOpen(r.item.id)} style={{ background: "none", border: "none", color: "#EDEAE1", cursor: "pointer", padding: 0, textDecoration: "underline", fontSize: 12.5, textAlign: "left" }}>
                 {r.item.title}
               </button>{" "}
-              <span style={{ color: "#8B90A0" }}>— {r.due.label} stats</span>
+              <span style={{ color: "#8B90A0" }}>— {r.due.label} stats on {r.item.platform}</span>
             </div>
           ))}
-          <div style={{ fontSize: 11, color: "#6B7180", marginTop: 4 }}>YouTube Studio → Content → Shorts → the video → Analytics. "Stayed to watch" is on the Engagement tab.</div>
         </div>
       )}
 
       <div style={{ border: "1px solid #24272F", borderRadius: 8, overflow: "hidden" }}>
-        {rows.map(({ item, s }) => (
-          <div key={item.id} onClick={() => onOpen(item.id)} className="cardRow" style={{ display: "flex", gap: 10, padding: "8px 12px", borderTop: "1px solid #24272F", cursor: "pointer", alignItems: "center", fontSize: 12.5, flexWrap: "wrap" }}>
-            <span className="mono" style={{ fontSize: 11, color: "#6B7180", minWidth: 74 }}>{item.datePosted}</span>
-            <span style={{ fontWeight: 600, flex: 1, minWidth: 150 }}>
-              <span title={item.platform}>{PLATFORM_ICON[item.platform] || ""}</span> {item.title}
-            </span>
-            {s ? (
-              <span style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
-                <span>👁 {fmtCount(statNum(s.views))}</span>
-                <span style={{ color: statColor("stayed", statNum(s.stayed)) }}>stayed {statNum(s.stayed) == null ? "—" : `${statNum(s.stayed)}%`}</span>
-                <span style={{ color: statColor("avgViewed", statNum(s.avgViewed)) }}>viewed {statNum(s.avgViewed) == null ? "—" : `${statNum(s.avgViewed)}%`}</span>
-                <span>💬 {fmtCount(statNum(s.comments))}</span>
-                <span>+{fmtCount(statNum(s.subs))} subs</span>
-                <span style={{ color: "#6B7180" }}>@ {s.checkpoint.label}</span>
+        {rows.map(({ item, s }) => {
+          const h = s ? hookPct(item, s) : null;
+          const v = s ? viewedPct(item, s) : null;
+          return (
+            <div key={item.id} onClick={() => onOpen(item.id)} className="cardRow" style={{ display: "flex", gap: 10, padding: "8px 12px", borderTop: "1px solid #24272F", cursor: "pointer", alignItems: "center", fontSize: 12.5, flexWrap: "wrap" }}>
+              <span className="mono" style={{ fontSize: 11, color: "#6B7180", minWidth: 74 }}>{item.datePosted}</span>
+              <span style={{ fontWeight: 600, flex: 1, minWidth: 150 }}>
+                <span title={item.platform}>{PLATFORM_ICON[item.platform] || ""}</span> {item.title}
               </span>
-            ) : (
-              <span style={{ fontSize: 11.5, color: "#6B7180" }}>no stats yet</span>
-            )}
-          </div>
-        ))}
+              {s ? (
+                <span style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
+                  <span>👁 {fmtCount(statNum(s.views))}</span>
+                  {h != null && <span style={{ color: statColor("hook", h) }}>{HOOK_LABEL[item.platform] || "stayed"} {Math.round(h)}%</span>}
+                  {v != null && <span style={{ color: statColor("viewed", v) }}>watched {v}%</span>}
+                  <span>💬 {fmtCount(statNum(s.comments))}</span>
+                  <span>+{fmtCount(newFollowers(s))} {FOLLOW_LABEL[item.platform] || "followers"}</span>
+                  <span style={{ color: "#6B7180" }}>@ {s.checkpoint.label}</span>
+                </span>
+              ) : (
+                <span style={{ fontSize: 11.5, color: "#6B7180" }}>no stats yet</span>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 6 }}>
-        Colours are rough guides for Shorts: stayed to watch <span style={{ color: "#4E8B6B" }}>{STAYED_GOOD}%+ good</span>, <span style={{ color: "#C9A227" }}>{STAYED_OK}%+ OK</span>; average viewed <span style={{ color: "#4E8B6B" }}>{VIEWED_GOOD}%+ good</span> (over 100% means people rewatched).
+      <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 6, lineHeight: 1.6 }}>
+        Rough guides: past the first second (YouTube stayed / Instagram didn't skip) <span style={{ color: "#4E8B6B" }}>{HOOK_GOOD}%+ good</span>, <span style={{ color: "#C9A227" }}>{HOOK_OK}%+ OK</span>; watched (average watch time ÷ length) <span style={{ color: "#4E8B6B" }}>{VIEWED_GOOD}%+ good</span> — over 100% means people rewatched.
       </div>
 
       {insights.length > 0 && (
@@ -1435,28 +1553,46 @@ function ContentResults({ contentPlan, onOpen }) {
       {rows.some((r) => r.s) && (
         <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" className="btnSecondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={copy}>{copied ? "Copied ✓" : "📋 Copy results for a review"}</button>
-          <span style={{ fontSize: 11, color: "#6B7180" }}>Paste it to Claude for a full review: titles, hooks, on-screen text, every checkpoint and your notes.</span>
+          <span style={{ fontSize: 11, color: "#6B7180" }}>Paste it to Claude for a full review: every platform, checkpoint, caption and your notes.</span>
         </div>
       )}
     </div>
   );
 }
 
-function ResultsPanel({ item, onUpdate }) {
+function ResultsPanel({ item, group = [item], onUpdate, onUpdateVideo }) {
   const stats = item.stats || {};
   // Open on what's due, else the latest checkpoint logged, else 48 hours.
   const firstOpen = (dueCheckpoint(item) || (latestStats(item) || {}).checkpoint || STAT_CHECKPOINTS[0]).key;
   const [cp, setCp] = useState(firstOpen);
   const cur = stats[cp] || {};
   const reached = (c) => item.datePosted && daysAgo(item.datePosted) >= c.days;
+  const fields = statFieldsFor(item.platform);
+  const shared = group.length > 1;
+  // Date, time and length are the video's: every linked platform copy gets them.
+  const setVideo = (patch) => (onUpdateVideo ? onUpdateVideo(() => patch) : onUpdate(item.id, patch));
+  const watched = viewedPct(item, cur);
 
   function set(field, value) {
-    onUpdate(item.id, { stats: { ...stats, [cp]: { ...cur, [field]: value, loggedAt: new Date().toISOString().slice(0, 10) } } });
+    onUpdate(item.id, { stats: { ...stats, [cp]: { ...cur, [field]: value, loggedAt: contentToday() } } });
   }
   return (
     <div style={{ border: "1px solid #2FA89A55", borderRadius: 8, padding: "10px 12px", background: "#2FA89A0d" }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "#2FA89A", marginBottom: 8 }}>📊 Results</div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#2FA89A", marginBottom: 8 }}>📊 {item.platform} results</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8, marginBottom: 4 }}>
+        <Field label="Date posted">
+          <input type="date" value={item.datePosted || ""} onChange={(e) => setVideo({ datePosted: e.target.value })} />
+        </Field>
+        <Field label="Time posted">
+          <input type="time" value={item.timePosted || ""} onChange={(e) => setVideo({ timePosted: e.target.value })} />
+        </Field>
+        <Field label="Length (sec)">
+          <input type="number" min="0" value={item.lengthSec ?? ""} onChange={(e) => setVideo({ lengthSec: e.target.value })} />
+        </Field>
+      </div>
+      {shared && <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 8 }}>Date, time and length are shared with this video on {group.filter((x) => x.id !== item.id).map((x) => x.platform).join(" and ")}.</div>}
+
+      <div style={{ display: "flex", gap: 6, margin: "6px 0 10px", flexWrap: "wrap" }}>
         {STAT_CHECKPOINTS.map((c) => (
           <button key={c.key} type="button" className={`filterBtn ${cp === c.key ? "active" : ""}`} onClick={() => setCp(c.key)}>
             {c.label}{stats[c.key] && statNum(stats[c.key].views) != null ? " ✓" : !reached(c) ? " ·" : ""}
@@ -1464,24 +1600,31 @@ function ResultsPanel({ item, onUpdate }) {
         ))}
       </div>
       {!reached(STAT_CHECKPOINTS.find((c) => c.key === cp)) && <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 6 }}>Not {STAT_CHECKPOINTS.find((c) => c.key === cp).label} yet — numbers logged early won't compare fairly.</div>}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
-        {STAT_FIELDS.map((f) => (
-          <Field key={f.key} label={f.label}>
-            <input type="number" min="0" step="any" value={cur[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} style={{ color: statColor(f.key, statNum(cur[f.key])) }} />
-          </Field>
-        ))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 }}>
+        {fields.map((f) => {
+          const kind = f.key === "stayed" ? "hook" : null;
+          return (
+            <Field key={f.key} label={f.label}>
+              {f.time ? (
+                <input value={cur[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} placeholder="0:23" inputMode="numeric" />
+              ) : (
+                <input type="number" min="0" max={f.pct ? 100 : undefined} step="any" value={cur[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} style={{ color: kind ? statColor(kind, statNum(cur[f.key])) : undefined }} />
+              )}
+            </Field>
+          );
+        })}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 8, marginTop: 8 }}>
-        <Field label="Length (sec)">
-          <input type="number" min="0" value={item.lengthSec ?? ""} onChange={(e) => onUpdate(item.id, { lengthSec: e.target.value })} />
-        </Field>
+      {watched != null && (
+        <div style={{ fontSize: 11.5, marginTop: 6, color: statColor("viewed", watched) }}>
+          ≈ {watched}% of the video watched on average{watched > 100 ? " (people rewatched it)" : ""}.
+        </div>
+      )}
+      <div style={{ marginTop: 8 }}>
         <Field label="Notes (what you tried, what you'd change)">
-          <input value={item.resultNotes || ""} onChange={(e) => onUpdate(item.id, { resultNotes: e.target.value })} placeholder="e.g. first video, no sound effects, slow middle" />
+          <input value={item.resultNotes || ""} onChange={(e) => onUpdate(item.id, { resultNotes: e.target.value })} placeholder="e.g. added sound effects, faster cuts" />
         </Field>
       </div>
-      <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6, lineHeight: 1.5 }}>
-        From YouTube Studio → Content → Shorts → this video → Analytics. Stayed to watch = the "Stayed to watch" side of "Stayed to watch vs Swiped away".
-      </div>
+      <div style={{ fontSize: 11, color: "#6B7180", marginTop: 6, lineHeight: 1.5 }}>{STATS_WHERE[item.platform] || STATS_WHERE["YouTube Shorts"]} Times like 0:23 are minutes:seconds.</div>
     </div>
   );
 }
