@@ -394,10 +394,14 @@ function SalesPerformance({ items }) {
 // ===== Listing check-up =====
 // What to do with listings that haven't sold, by days since listing (or since the last price
 // cut / relist): check comps at 14 days, cut 5–10% at 21, relist at 30, and stop cutting once
-// the price reaches break-even. Price cuts are kept so you can see how far cards came down.
+// the price reaches break-even. Cards with no recent comps (base cards, lots) just come down 10%
+// off the listed price each round instead. Price cuts are kept so you can see how far cards came down.
 
 const LISTING_STEPS = { check: 14, cut: 21, relist: 30, stop: 45 };
 const LISTING_CUT_PCT = 0.07;
+// No comps (base cards, lots — things that are hard to comp): cut straight off the listed price
+// instead, a little more per step since there's no market price to aim at. Never below break-even.
+const LISTING_NO_COMPS_CUT_PCT = 0.1;
 const LISTING_OVERPRICED_PCT = 0.1;
 const CHEAP_CARD_COST = 15;
 
@@ -459,12 +463,12 @@ function listingCheck(c) {
 
   if (stepDays < LISTING_STEPS.check) return { ...base, stage: "fresh", priority: 9 };
   if (price == null) return step("noPrice", 2, "#C9A227", "Add the price it's listed at so the check-up can suggest cuts.");
-  if (value == null || compsAge == null || compsAge >= STALE_COMPS_DAYS) {
-    return step("comps", 3, "#C9A227", `Update its comps before changing the price — ${compsAge == null ? "it has none saved" : `they're ${compsAge} days old`}.`);
-  }
+  // Without recent comps, price cuts come off the listed price instead of aiming at a market value.
+  const hasComps = value != null && compsAge != null && compsAge < STALE_COMPS_DAYS;
+  base.hasComps = hasComps;
 
   const floorPrice = nice(breakEven);
-  if (price > value * (1 + LISTING_OVERPRICED_PCT) && !atFloor) {
+  if (hasComps && price > value * (1 + LISTING_OVERPRICED_PCT) && !atFloor) {
     const target = Math.max(nice(value), floorPrice);
     const pct = Math.round((price / value - 1) * 100);
     return step("over", 2, "#B4472E", `Listed ${pct}% above comps (${fm(value)}). Lower it to ${fm(target)}${floorPrice > nice(value) ? " — your break-even, the lowest to go" : ""}${viaSmc}.`, target);
@@ -472,7 +476,7 @@ function listingCheck(c) {
 
   if (atFloor) {
     if (totalDays >= LISTING_STEPS.stop) {
-      if (falling && c.totalCost < CHEAP_CARD_COST) {
+      if (hasComps && falling && c.totalCost < CHEAP_CARD_COST) {
         return step("stop", 2, "#B4472E", `At break-even after ${totalDays} days and prices are falling. It's a cheap card — fine to drop to ${fm(value)} to get the cash back, or add it to a lot.`, nice(value));
       }
       return step("stop", 3, "#B4472E", consigned ? `At break-even after ${totalDays} days — stop cutting. Ask ShipMyCards to pull it back to your vault and hold it for the sell window, or bring it home for a lot.` : `At break-even after ${totalDays} days — stop cutting. Take it down and hold, add it to a team lot, or try ${ebay ? "Facebook or Instagram" : "eBay"}.`);
@@ -481,6 +485,20 @@ function listingCheck(c) {
       return step("relist", 4, "#5C7A99", `At break-even with no room to cut — ${relistHow}${ebay ? " for a fresh run in search" : ""}.`);
     }
     return step("hold", 6, "#8B90A0", `Already at break-even (${fm(breakEven)}) — leave the price. Relist at ${LISTING_STEPS.relist} days if it hasn't sold.`);
+  }
+
+  if (!hasComps) {
+    // Markdowns off the listed price: 10% at day 21, then relist at 30 — never below break-even.
+    const target = Math.max(nice(price * (1 - LISTING_NO_COMPS_CUT_PCT)), floorPrice);
+    const pct = Math.round((1 - target / price) * 100);
+    const floorNote = target === floorPrice ? " — that's your break-even, the lowest to go" : "";
+    if (stepDays >= LISTING_STEPS.relist) {
+      return step("relist", 4, "#5C7A99", `Up ${stepDays} days since the last change — ${relistHow}, or drop it ${pct}% to ${fm(target)}${floorNote}.`, target);
+    }
+    if (stepDays >= LISTING_STEPS.cut) {
+      return step("cut", 3, "#C9A227", `No sale in ${stepDays} days — drop it ${pct}% to ${fm(target)}${floorNote}${ebay ? ", or send watchers an offer at that price" : viaSmc}. (No comps needed — it's off your listed price.)`, target);
+    }
+    return step("watch", 5, "#4E8B6B", `No comps saved, and that's fine — if it hasn't sold by day ${LISTING_STEPS.cut}, drop it ${pct}% to ${fm(target)}.`);
   }
 
   if (stepDays >= LISTING_STEPS.relist) {
@@ -666,7 +684,16 @@ function auctionPlan(check) {
   const pcs = c.sellingMethod === "SMC → PC Sportscards (eBay)";
   if (!check.ebay && !pcs) return null;
   const { fm, nice } = listingMoney(c);
-  if (check.value == null) return { note: "Update its comps first — an auction needs a realistic idea of where it'll finish." };
+  if (check.value == null || check.hasComps === false) {
+    // No comps (base cards, lots): no telling where it'd finish, so just protect break-even.
+    const floor = check.breakEven != null ? fm(nice(check.breakEven)) : null;
+    if (pcs) return { risky: true, note: "PC Sportscards' auctions start at 99c with no reserve — without comps there's no telling where it'd finish, so fixed price is safer." };
+    return {
+      note: floor
+        ? `Start the bidding at your break-even (${floor}) so it can't sell at a loss — 7 days, ending ${c.sport === "AFL" ? "Sunday evening, Australian time" : "Sunday evening US time (Monday morning in Australia)"}.`
+        : "Start the bidding at the least you'd take — 7 days, ending Sunday evening.",
+    };
+  }
   const cost = Number(c.totalCost) || 0;
   const method = pcs ? c.sellingMethod : "eBay";
   const keepAt = (price) => price - (estimateSellingFee(method, price) ?? price * (c.feesPct || 0.13)) - cost;
@@ -738,17 +765,20 @@ function listingTimeline(check) {
   const { fm, nice } = listingMoney(c);
   const start = c.lastListingActionAt || c.dateListed;
   const floor = check.breakEven != null ? nice(check.breakEven) : null;
-  const cutTo = check.price != null ? Math.max(nice(check.price * (1 - LISTING_CUT_PCT)), floor || 0) : null;
+  // No recent comps: cuts come straight off the listed price (see listingCheck).
+  const noComps = check.value == null || check.compsAge == null || check.compsAge >= STALE_COMPS_DAYS;
+  const cutPct = noComps ? LISTING_NO_COMPS_CUT_PCT : LISTING_CUT_PCT;
+  const cutTo = check.price != null ? Math.max(nice(check.price * (1 - cutPct)), floor || 0) : null;
   const steps = check.smcMarketplace
     ? [{ day: SMC_MARKETPLACE_TRY_DAYS, from: start, text: `No sale yet → ${check.smcNext}` }]
     : [
-        { day: LISTING_STEPS.check, from: start, text: `Check comps${check.compsAge != null && check.compsAge >= STALE_COMPS_DAYS ? " (yours are out of date)" : ""} — is the price still right?` },
+        { day: LISTING_STEPS.check, from: start, text: noComps ? "Check in — no comps needed, nothing to change yet" : "Check comps — is the price still right?" },
         {
           day: LISTING_STEPS.cut,
           from: start,
           text:
             cutTo != null && check.price != null && cutTo < check.price
-              ? `Lower about 7% to ${fm(cutTo)}${check.ebay ? " — or send watchers an offer at that price" : check.consigned ? " (ask ShipMyCards to change it)" : ""}`
+              ? `Lower about ${Math.round(cutPct * 100)}% to ${fm(cutTo)}${noComps ? " (off your listed price)" : ""}${check.ebay ? " — or send watchers an offer at that price" : check.consigned ? " (ask ShipMyCards to change it)" : ""}`
               : `Price is already at break-even — don't cut, wait for the relist`,
         },
         { day: LISTING_STEPS.relist, from: start, text: `${check.relistHow[0].toUpperCase() + check.relistHow.slice(1)}${check.ebay ? " — or try a 7-day auction" : ""}`, auction: true },
@@ -923,7 +953,7 @@ function ListingCheckup({ items, onUpdate, onOpen }) {
     <div style={{ marginBottom: 20 }}>
       <DashCard title={`🏷️ Listing check-up${actionCount ? ` · ${actionCount} need action` : ""}`}>
         <div style={{ fontSize: 11, color: "#6B7180", marginBottom: 2 }}>
-          Check comps at {LISTING_STEPS.check} days, cut 5–10% at {LISTING_STEPS.cut}, relist at {LISTING_STEPS.relist} — never below break-even.
+          Check comps at {LISTING_STEPS.check} days, cut 5–10% at {LISTING_STEPS.cut}, relist at {LISTING_STEPS.relist} — never below break-even. No comps (base cards, lots)? It cuts {Math.round(LISTING_NO_COMPS_CUT_PCT * 100)}% off your listed price instead.
         </div>
         {stats && (
           <div style={{ fontSize: 11.5, color: "#8B90A0", marginBottom: 2 }}>
