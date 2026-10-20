@@ -120,34 +120,32 @@ function renderSeasonalTiming(card) {
   
   if (!isSellDecision || !card.sport || typeof seasonalSellCheck !== "function") return null;
 
-  const check = seasonalSellCheck(card.sport);
-  
-  if (check && check.isGoodTiming) {
-    return (
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          padding: "2px 6px",
-          borderRadius: 4,
-          textTransform: "uppercase",
-          letterSpacing: "0.3px",
-          background: "#1E3A2B",
-          color: "#4E8B6B",
-          border: "1px solid #2E5940",
-          whiteSpace: "nowrap",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
-        }}
-        title={`Seasonal Timing (${card.sport}): ${check.monthName} is a Sell month`}
-      >
-        ✅ Good Timing
-      </span>
-    );
-  }
-
-  return null;
+  // Sell now / wait / list high, from the sell window and what waiting is worth.
+  const call = sellOrWait(card, recommendedListing(card));
+  if (!call) return null;
+  const st = SELL_OR_WAIT_STYLE[call.verdict];
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        padding: "2px 6px",
+        borderRadius: 4,
+        textTransform: "uppercase",
+        letterSpacing: "0.3px",
+        background: st.bg,
+        color: st.color,
+        border: `1px solid ${st.border}`,
+        whiteSpace: "nowrap",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+      }}
+      title={call.text}
+    >
+      {st.icon} {call.label}
+    </span>
+  );
 }
 
 // Single Grade Timing declaration (Grading)
@@ -1955,22 +1953,26 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
                 <div style={{ fontSize: 11, color: "#6B7180", lineHeight: 1.6 }}>{sellMethod.why}</div>
               </div>
             )}
-            {timingCheck && (
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #4E8B6B33" }}>
-                <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 4 }}>Seasonal timing check ({timingCheck.sportLabel})</div>
-                {timingCheck.isGoodTiming ? (
-                  <div style={{ fontSize: 12.5, color: "#4E8B6B", fontWeight: 600 }}>✅ Good timing — {timingCheck.monthName} is a Sell month on the calendar.</div>
-                ) : (
-                  <div style={{ fontSize: 12.5, color: "#C9A227", fontWeight: 600 }}>
-                    ⏳ {timingCheck.monthName} is a {timingCheck.currentAction || "quiet"} month on the calendar, not a Sell month
-                    {timingCheck.nextSellMonth ? ` — next Sell window is ${timingCheck.nextSellMonth}` : ""}.
+            {timingCheck && (() => {
+              const call = sellOrWait({ ...computed, sport: isPkmn ? "Pokémon" : card.sport }, listing);
+              const st = call ? SELL_OR_WAIT_STYLE[call.verdict] : null;
+              return (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #4E8B6B33" }}>
+                  <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 4 }}>Sell now or wait? ({timingCheck.sportLabel})</div>
+                  {call ? (
+                    <>
+                      <div style={{ fontSize: 13.5, color: st.color, fontWeight: 700 }}>{st.icon} {call.label}</div>
+                      <div style={{ fontSize: 12, color: "#C6CAD4", marginTop: 3, lineHeight: 1.5 }}>{call.text}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12.5, color: "#8B90A0" }}>{timingCheck.monthName} is a {timingCheck.currentAction || "quiet"} month for {timingCheck.sportLabel}.</div>
+                  )}
+                  <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 4, lineHeight: 1.5 }}>
+                    The profit maths says sell either way — this is only about timing. In-season prices often run about 10–20% higher (a rough guide), so waiting only pays when the window is close and the card's worth enough. {timingCheck.note}
                   </div>
-                )}
-                <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 4, lineHeight: 1.5 }}>
-                  The profit math still says sell — this is only about timing, not whether it's profitable. {timingCheck.note}
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
           );
         })()}

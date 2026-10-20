@@ -164,6 +164,16 @@ const SEASON_ROWS = [
     note: "Prices for players still in the playoffs (Apr-Jun) are at their highest, so only buy players knocked out early. The real lull is after the Finals and draft (late Jun-Aug). Ship in Jul for the season start and rookie hype (Oct-Nov); All-Star and Prizm's release (Feb) are a second window.",
   },
   {
+    sport: "Basketball (WNBA)",
+    key: "WNBA",
+    blocks: [
+      { m: "Jan", t: "BUY" }, { m: "Feb", t: "SHIP" }, { m: "Mar", t: "BUY" }, { m: "Apr", t: "GRADE" },
+      { m: "May", t: "SELL" }, { m: "Jun", t: "SHIP" }, { m: "Jul", t: "SELL" }, { m: "Aug", t: "GRADE" },
+      { m: "Sep", t: "SELL" }, { m: "Oct", t: "SELL" }, { m: "Nov", t: "BUY" }, { m: "Dec", t: "BUY" },
+    ],
+    note: "The season runs mid-May to September, with the playoffs and Finals in Sep-Oct. Demand spikes at tip-off and rookie debuts (May), All-Star (Jul) and the playoffs. The long off-season (Nov-Mar) is the cheapest time to buy. The draft is mid-April — buy draft picks before it or well after, like the NFL. Ship in Feb so slabs are back for May, or Jun for the playoffs. Buyers are mostly in the US, and star rookies drive most of the market, so a player's form matters more than the month.",
+  },
+  {
     sport: "WWE",
     key: "WWE",
     blocks: [
@@ -184,14 +194,14 @@ const SEASON_ROWS = [
     note: "Normal years: the club off-season (May-Jul) is the quiet buying window; sell at the season start (Sep) and the Champions League knockouts and title run-ins (Mar-Apr). Ship in Jun for Sep, or Dec for Mar. Tournament years are different — the Euros (2028) and World Cup (2030) make Jun-Jul a big sell window instead. The Jan transfer window can also be a cheap entry for players about to join bigger clubs.",
   },
   {
-    sport: "MMA",
+    sport: "UFC / MMA",
     key: "MMA",
     blocks: [
       { m: "Jan", t: "GRADE" }, { m: "Feb", t: "BUY" }, { m: "Mar", t: "BUY" }, { m: "Apr", t: "SHIP" },
       { m: "May", t: "GRADE" }, { m: "Jun", t: "SELL" }, { m: "Jul", t: "SELL" }, { m: "Aug", t: "GRADE" },
       { m: "Sep", t: "GRADE" }, { m: "Oct", t: "GRADE" }, { m: "Nov", t: "BUY" }, { m: "Dec", t: "GRADE" },
     ],
-    note: "International Fight Week (late Jun/early Jul) is the promotion's biggest annual event and the clearest sell spike. Ship in Apr for ~3 months of runway. There's no off-season, so who's fighting soon matters far more than the month — sell a fighter's cards in the build-up to a big fight.",
+    note: "UFC's International Fight Week (late Jun/early Jul) is its biggest annual event and the clearest sell spike. Ship in Apr for ~3 months of runway. There's no off-season, so who's fighting soon matters far more than the month — sell a fighter's cards in the build-up to a big fight.",
   },
   {
     sport: "Pokémon",

@@ -856,6 +856,45 @@ function recommendedListing(card) {
   };
 }
 
+// Sell now, or hold for the sport's sell window? Waiting only pays when the window is close and the
+// card is worth enough for the seasonal bump to beat putting the money back to work. In-season
+// prices often run roughly 10–20% above the quiet months — a rough guide, not a guarantee.
+const SEASON_UPLIFT = 0.15;
+const SEASON_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function sellOrWait(card, listing) {
+  if (!listing || typeof seasonalSellCheck !== "function") return null;
+  const season = seasonalSellCheck(card.sport);
+  if (!season) return null;
+  const value = card.sellDecision === "Sell Raw First" ? card.rawAvg : ownGradeValue(card);
+  if (value == null) return null;
+  const money = (aud) => (sellsInUsd(card) ? fmtUsd(audToUsd(aud)) : fmtMoney(aud));
+  const make = (verdict, label, text) => ({ verdict, label, text, season });
+
+  if (season.isGoodTiming) return make("sell", "Sell now", `${season.monthName} is a sell month for ${season.sportLabel} — good timing.`);
+  if (!season.nextSellMonth) return make("sell", "Sell now", "No sell window on the calendar for this sport — sell when the numbers work.");
+
+  // Weeks until the start of the next sell month.
+  const now = new Date();
+  const idx = SEASON_MONTHS.indexOf(season.nextSellMonth);
+  const target = new Date(now.getFullYear() + (idx <= now.getMonth() ? 1 : 0), idx, 1);
+  const weeks = Math.max(1, Math.round((target - now) / (7 * 86400000)));
+  const gain = value * SEASON_UPLIFT * (1 - (card.feesPct || 0.13));
+  const trend = card.priceTrend && card.priceTrend.points && typeof trendChangePct === "function" ? trendChangePct(card.priceTrend.points) : null;
+  const when = `The next ${season.sportLabel} sell window (${season.nextSellMonth}) is about ${weeks} week${weeks === 1 ? "" : "s"} away`;
+
+  if (trend != null && trend <= -0.05) return make("sell", "Sell now", `Prices are falling (${Math.round(trend * 100)}% lately) — waiting for ${season.nextSellMonth} could mean selling lower. Take the profit now.`);
+  if (value < 30 || gain < 10) return make("sell", "Sell now", `${when}, but waiting might only add about ${money(gain)}. Not worth tying the money up — sell and reinvest.`);
+  if (weeks <= 6) return make("wait", `Wait · ${season.nextSellMonth}`, `${when} and could add about ${money(gain)}. Hold and list then — or list now at ${money(value * 1.1)} in case someone pays it.`);
+  if (weeks <= 12 || gain >= 40) return make("listHigh", "List high now", `${when}. List now about 10% above comps (${money(value * 1.1)}) with Best Offer — if someone pays it, great; if not, it's already up when ${season.nextSellMonth} arrives and the Listing check-up brings it down over time.`);
+  return make("sell", "Sell now", `${when} — too long to wait for about ${money(gain)} more. Sell now and put the money back to work.`);
+}
+const SELL_OR_WAIT_STYLE = {
+  sell: { color: "#4E8B6B", bg: "#1E3A2B", border: "#2E5940", icon: "✅" },
+  wait: { color: "#C9A227", bg: "#3A2E1E", border: "#59462E", icon: "⏳" },
+  listHigh: { color: "#4E8BC9", bg: "#1E2B3A", border: "#2E4559", icon: "🏷️" },
+};
+
 // Which route to actually sell through, using the same rules as the Selling Playbook. Cards in
 // the ShipMyCards vault are sold from there (never shipped home first) using SMC's own consignment
 // partner PC Sportscards (eBay consignment) for anything US$50+, graded or raw. Fanatics Collect's
