@@ -904,6 +904,12 @@ const SELL_OR_WAIT_STYLE = {
 // Oct 2026), so it's only worth a short try for cards under US$50. Cards in hand = self-list.
 const SMC_MARKETPLACE_TRY_DAYS = 7;
 
+// Sports whose buyers are mostly in the US, so their cards are hard to sell in Australia: cheap
+// ones stay in the vault and get consigned there rather than shipped home. Storage is close to free
+// (first 180 days included, then ~10% of the US$1 intake fee per 90 days), so holding costs nothing.
+const US_MARKET_SPORTS = ["NFL", "MLB", "WNBA"];
+const sellsBestInUS = (card) => US_MARKET_SPORTS.includes(card && card.sport);
+
 function suggestedSellingMethod(card, listing) {
   if (!listing) return null;
   const value = listing.listPrice;
@@ -911,6 +917,12 @@ function suggestedSellingMethod(card, listing) {
   const isGraded = card.status === "Graded" || Boolean(card.grade);
 
   if (card.location === "ShipMyCards Vault") {
+    if (usd < 50 && sellsBestInUS(card)) {
+      return {
+        method: "ShipMyCards Marketplace",
+        why: `Give the ShipMyCards Marketplace (1%) about a week, then consign it to PC Sportscards from the vault. Under US$50 their fee is higher (~18% + US$1), but ${card.sport} cards sell far better to US buyers than in Australia, so it's usually still better than shipping it home. Storage while it waits is close to free.`,
+      };
+    }
     if (usd < 50) {
       return {
         method: "ShipMyCards Marketplace",

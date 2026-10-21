@@ -58,7 +58,8 @@ function SellingPlaybook() {
           steps={[
             "US$50+, graded or raw? Send it straight to PC Sportscards' eBay consignment through SMC (~14% + US$1 under US$1,000) — biggest audience, fastest payout, and usually the best net",
             "Fanatics Collect's auction looks cheaper (1% + US$3), but buyers pay a ~20% premium on top so bids land under eBay prices — only worth it for very in-demand slabs",
-            "Under US$50? Don't consign — try the ShipMyCards Marketplace (1%) for about a week, then batch cheap cards into one shipment home and sell them as team lots",
+            "Under US$50? Try the ShipMyCards Marketplace (1%) for about a week, then batch cheap cards into one shipment home and sell them as team lots",
+            "Except NFL, MLB and WNBA — their buyers are mostly in the US, so keep cheap ones in the vault and consign them to PC Sportscards after the Marketplace week, even with the higher under-US$50 fee (~18% + US$1). Storage is close to free: the first 180 days are included, then about US$0.10 a card every 90 days",
             "Skip the Marketplace for anything over US$50 — it has very few buyers, so it mostly just costs you time",
             "Need cash now? The SMC Purchase Program pays 70–85% of conservative value instantly — usually a worse deal than waiting a week for PC Sportscards",
             "Payouts come back as SMC store credit — confirm how you cash it out",
@@ -127,7 +128,7 @@ function SellingPlaybook() {
             </ul>
           </li>
           <li style={{ marginBottom: 6 }}>
-            <b style={{ color: "#EDEAE1" }}>Under US$50:</b> don't consign; 18% + US$1 is too much. Try the ShipMyCards Marketplace (1%) for about a week, then ship your cheap cards home together in one box and sell them as team lots like your Bulls lot.
+            <b style={{ color: "#EDEAE1" }}>Under US$50:</b> try the ShipMyCards Marketplace (1%) for about a week, then ship your cheap cards home together in one box and sell them as team lots like your Bulls lot. <b style={{ color: "#C9A227" }}>Except NFL, MLB and WNBA</b> — they're hard to sell in Australia, so leave them in the vault and consign them to PC Sportscards after the Marketplace week (~18% + US$1 under US$50). Holding them costs almost nothing: storage is included for 180 days, then about US$0.10 a card every 90 days.
           </li>
           <li>
             <b style={{ color: "#EDEAE1" }}>Optional:</b> if you're in no rush on a pricier card, put it on the Marketplace for a week first — but not longer.

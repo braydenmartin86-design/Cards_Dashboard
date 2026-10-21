@@ -449,8 +449,10 @@ function listingCheck(c) {
   const smcMarketplace = c.sellingMethod === "ShipMyCards Marketplace";
   const priceUsd = price != null ? audToUsd(price) : null;
   const smcNext =
-    priceUsd != null && priceUsd < 50
+    priceUsd != null && priceUsd < 50 && !sellsBestInUS(c)
       ? "bring it home with your other cheap vault cards in one shipment and sell them as a team lot"
+      : priceUsd != null && priceUsd < 50
+      ? `consign it to PC Sportscards from the vault — their fee is higher under US$50, but ${c.sport} cards sell far better to US buyers than in Australia`
       : "move it to PC Sportscards' eBay consignment through ShipMyCards";
   const atFloor = price != null && price <= breakEven * 1.02;
   const base = { card: c, totalDays, stepDays, price, value, breakEven, compsAge, ebay, consigned, relistHow, smcMarketplace, smcNext, falling };

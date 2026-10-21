@@ -497,11 +497,16 @@ function MoneyPlanner({ balance, b, update, cards, pokemonCards, targets, buyLis
     })
     .filter((o) => o.cost > 0 && o.gain > 0);
 
-  // 📦 Ship home: cheap cards stuck in the vault (under US$50 isn't worth consigning).
-  const vaultCheap = all
+  // 📦 Ship home: cheap cards stuck in the vault (under US$50 isn't worth consigning) — except
+  // sports that sell far better to US buyers (NFL, MLB…), which stay there and get consigned.
+  const vaultCheapAll = all
     .filter((c) => c.location === "ShipMyCards Vault" && (c.status === "Raw" || c.status === "Graded"))
     .map((c) => ({ c, v: currentMarketValue(c) }))
     .filter((x) => x.v != null && audToUsd(x.v) < 50);
+  const vaultCheap = vaultCheapAll.filter((x) => !sellsBestInUS(x.c));
+  const stayInUS = vaultCheapAll.filter((x) => sellsBestInUS(x.c));
+  const stayValue = stayInUS.reduce((s, x) => s + x.v, 0);
+  const stayFees = stayInUS.reduce((s, x) => s + pcSportscardsViaSmcFee(x.v), 0);
   const vaultValue = vaultCheap.reduce((s, x) => s + x.v, 0);
   const shipCost = Number(p.shipHomeCost) || 0;
   const shipWorth = vaultCheap.length >= SHIP_MIN_CARDS && shipCost <= vaultValue * SHIP_MAX_SHARE;
@@ -618,7 +623,12 @@ function MoneyPlanner({ balance, b, update, cards, pokemonCards, targets, buyLis
 
       {shipOpt && !shipWorth && (
         <div style={{ fontSize: 11.5, color: "#8B90A0", marginTop: 8, lineHeight: 1.5 }}>
-          📦 Not yet worth shipping your {vaultCheap.length} cheap vault card{vaultCheap.length === 1 ? "" : "s"} home — about {fmtMoney(shipCost / vaultCheap.length)} each, and {fmtMoney(shipCost)} shipping is {Math.round((shipCost / Math.max(vaultValue, 1)) * 100)}% of the {fmtMoney(vaultValue)} they're worth. It's worth it once the box is worth about {fmtMoney(shipCost / SHIP_MAX_SHARE)}+{vaultCheap.length < SHIP_MIN_CARDS ? ` and has ${SHIP_MIN_CARDS}+ cards` : ""} — keep adding cheap pickups to the vault until then.
+          📦 Not yet worth shipping your {vaultCheap.length} cheap {[...new Set(vaultCheap.map((x) => x.c.sport).filter(Boolean))].join("/")} vault card{vaultCheap.length === 1 ? "" : "s"} home — about {fmtMoney(shipCost / vaultCheap.length)} each, and {fmtMoney(shipCost)} shipping is {Math.round((shipCost / Math.max(vaultValue, 1)) * 100)}% of the {fmtMoney(vaultValue)} they're worth. It's worth it once the box is worth about {fmtMoney(shipCost / SHIP_MAX_SHARE)}+{vaultCheap.length < SHIP_MIN_CARDS ? ` and has ${SHIP_MIN_CARDS}+ cards` : ""} — keep adding cheap pickups to the vault until then.
+        </div>
+      )}
+      {stayInUS.length > 0 && (
+        <div style={{ fontSize: 11.5, color: "#8B90A0", marginTop: 8, lineHeight: 1.5 }}>
+          🇺🇸 Leave your {stayInUS.length} cheap {[...new Set(stayInUS.map((x) => x.c.sport))].join("/")} vault card{stayInUS.length === 1 ? "" : "s"} ({fmtMoney(stayValue)}) in the US — they sell far better to US buyers than in Australia. Give each a week on the ShipMyCards Marketplace, then consign to PC Sportscards: about {fmtMoney(stayFees)} in fees all up ({Math.round((stayFees / Math.max(stayValue, 1)) * 100)}%), taken from the sale, not your bankroll. Storage while they wait is close to free — the first 180 days are included, then about US$0.10 a card every 90 days.
         </div>
       )}
       {notYet.length > 0 && plan.length > 0 && (
