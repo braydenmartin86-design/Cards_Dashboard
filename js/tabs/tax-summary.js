@@ -19,7 +19,7 @@ function inRange(dateStr, start, end) {
   return dateStr >= start && dateStr <= end;
 }
 
-function BusinessSummary({ cards, pokemonCards, boxBreaks, manualExpenses, setManualExpenses }) {
+function BusinessSummary({ cards, pokemonCards, boxBreaks, manualExpenses, setManualExpenses, targets = [], buyList = [] }) {
   const [period, setPeriod] = useState(currentFYLabel());
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -152,7 +152,7 @@ function BusinessSummary({ cards, pokemonCards, boxBreaks, manualExpenses, setMa
 
   return (
     <div style={{ marginTop: 24 }}>
-      <BudgetCalendar cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} />
+      <BudgetCalendar cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} targets={targets} buyList={buyList} />
 
       <SectionTitle>🧾 Business & tax summary</SectionTitle>
       <div style={{ fontSize: 13, color: "#8B90A0", marginBottom: 16, lineHeight: 1.6 }}>

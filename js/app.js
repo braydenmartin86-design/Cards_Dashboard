@@ -515,7 +515,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
         )}
 
         {tab === "taxsummary" && (
-          <BusinessSummary cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} />
+          <BusinessSummary cards={cards} pokemonCards={pokemonCards} boxBreaks={boxBreaks} manualExpenses={manualExpenses} setManualExpenses={setManualExpenses} targets={targets} buyList={buyList} />
         )}
 
        {(tab === "portfolio" || tab === "pokemon") && (
