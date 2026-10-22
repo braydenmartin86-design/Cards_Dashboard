@@ -53,6 +53,11 @@ const GRADING_PRICE_LIST = [
   { company: "QLD store", grader: "SGC", tier: "Immediate", price: 299.95, maxAud: Infinity, days: 28, time: "20+ business days", returnIncluded: false },
   { company: "QLD store", grader: "CGA", tier: "Standard", price: 24.95, maxAud: Infinity, days: 52, time: "25–50 business days", returnIncluded: false, pokemonOnly: true },
   { company: "QLD store", grader: "CGA", tier: "Collector Bulk", price: 19.95, maxAud: Infinity, days: 52, time: "25–50 business days", returnIncluded: false, pokemonOnly: true, minCards: 20 },
+  // PSA through ShipMyCards (US) — only for cards already in the SMC vault: no postage either way,
+  // and the slab comes back to the vault ready to sell from there. US$26 per card was the user's
+  // last fee (Oct 2026). The higher tier is an estimate — check SMC's current PSA pricing.
+  { company: "ShipMyCards", grader: "PSA", tier: "Value", priceUsd: 26, maxUsd: 499, days: 100, time: "~2–4 months (PSA US)", returnIncluded: true, vaultOnly: true },
+  { company: "ShipMyCards", grader: "PSA", tier: "Regular (estimate)", priceUsd: 75, maxUsd: 1499, days: 75, time: "~2–3 months (PSA US)", returnIncluded: true, vaultOnly: true, estimate: true },
   // TCG Grading (Sydney) — Pokémon only; a local slab sells for far less than PSA.
   { company: "TCG Grading", grader: "TCG", tier: "Routine", price: 16, maxAud: Infinity, days: 60, time: "not stated", returnIncluded: false, pokemonOnly: true },
   { company: "TCG Grading", grader: "TCG", tier: "6-card package", price: 95 / 6, maxAud: Infinity, days: 60, time: "not stated", returnIncluded: false, pokemonOnly: true, minCards: 6 },
@@ -67,7 +72,15 @@ const GRADING_POSTAGE = {
   Slabbys: { out: 13, back: 15, note: "post ~A$13 to NSW or drop off at Swap It; return postage a guess (charged separately)" },
   "TCG Grading": { out: 13, back: 19, note: "post ~A$13 to Sydney; return ~A$19 Express Post" },
   "QLD store": { out: 13, back: 15, note: "post ~A$13 to Queensland; return postage a guess (not stated)" },
+  ShipMyCards: { out: 0, back: 0, note: "already in the vault — no postage; the slab comes back to the vault" },
 };
+const VAULT = "ShipMyCards Vault";
+// A card in the ShipMyCards vault is graded from there: "PSA via Australia" (the default) means
+// PSA via ShipMyCards for it — no shipping it home and back.
+function effectiveGradingService(c) {
+  const s = c && c.gradingService;
+  return c && c.location === VAULT && (!s || s === "PSA via Australia") ? "PSA via ShipMyCards" : s;
+}
 const GRADING_POSTAGE_DEFAULT = { out: 13, back: 15 };
 const postageFor = (company) => GRADING_POSTAGE[company] || GRADING_POSTAGE_DEFAULT;
 // What a slab from each grader resells for compared with the same grade from PSA — rough guides,
@@ -94,12 +107,16 @@ function gradingTierFits(t, declaredAud) {
 // when the return isn't included.
 function gradingOptionCost(t) {
   const p = postageFor(t.company);
-  return t.price + p.out + (t.returnIncluded ? 0 : p.back);
+  return feeAud(t) + p.out + (t.returnIncluded ? 0 : p.back);
 }
+// US$-priced tiers (ShipMyCards) convert at the live rate.
+const feeAud = (t) => (t.priceUsd != null ? t.priceUsd * currentUsdToAudRate() : t.price);
 // Every option a single card can go through, cheapest first (no bulk minimums or paused tiers).
-function gradingOptionsFor(declaredAud, sport, { graders } = {}) {
-  return GRADING_PRICE_LIST.filter((t) => !t.unavailable && !(t.minCards > 1) && (!t.pokemonOnly || sport === "Pokémon") && (!graders || graders.includes(t.grader)) && gradingTierFits(t, declaredAud))
-    .map((t) => ({ ...t, total: gradingOptionCost(t) }))
+// Cards in the ShipMyCards vault are graded from there; cards in hand from Australia.
+function gradingOptionsFor(declaredAud, sport, { graders, location } = {}) {
+  const inVault = location === VAULT;
+  return GRADING_PRICE_LIST.filter((t) => !t.unavailable && !(t.minCards > 1) && Boolean(t.vaultOnly) === inVault && (!t.pokemonOnly || sport === "Pokémon") && (!graders || graders.includes(t.grader)) && gradingTierFits(t, declaredAud))
+    .map((t) => ({ ...t, price: feeAud(t), total: gradingOptionCost(t) }))
     .sort((a, b) => a.total - b.total);
 }
 
@@ -122,13 +139,13 @@ function bestGradingChoices(card, computed) {
   const cost = Number(computed.totalCost) || 0;
   const sellRaw = raw * (1 - fees) - cost;
   const declared = Math.max(v10, v9, raw);
-  const options = gradingOptionsFor(declared, sport)
+  const options = gradingOptionsFor(declared, sport, { location: card.location })
     .map((o) => {
       const m = graderResaleFactor(o.grader, sport);
       const profit = (p10 * v10 * m + p9 * v9 * m + pBelow * raw) * (1 - fees) - cost - o.total;
       // What each result would mean in profit, so the risk is visible, not just the average.
       const outcome = (v) => v * (1 - fees) - cost - o.total;
-      return { ...o, factor: m, profit, gain: profit - sellRaw, service: GRADER_SERVICE[o.grader], if10: outcome(v10 * m), if9: outcome(v9 * m), ifLower: outcome(raw) };
+      return { ...o, factor: m, profit, gain: profit - sellRaw, service: o.vaultOnly ? "PSA via ShipMyCards" : GRADER_SERVICE[o.grader], if10: outcome(v10 * m), if9: outcome(v9 * m), ifLower: outcome(raw) };
     })
     .sort((a, b) => b.gain - a.gain);
   return { options, sellRaw, p10, p9, source: exp.source, declared };
@@ -146,7 +163,11 @@ function gradingCost(service, declaredValue = 0) {
     const opt = gradingOptionsFor(declaredValue, grader === "TCG" || grader === "CGA" ? "Pokémon" : null, { graders: [grader] })[0];
     return opt ? Math.round(opt.total * 100) / 100 : 0;
   }
-  if (service === "PSA via ShipMyCards") return 25;
+  if (service === "PSA via ShipMyCards") {
+    const opt = gradingOptionsFor(declaredValue, null, { graders: ["PSA"], location: VAULT })[0];
+    // Above the tiers on record, assume PSA's ~US$150 express-level pricing until SMC's is checked.
+    return Math.round((opt ? opt.total : 150 * currentUsdToAudRate()) * 100) / 100;
+  }
 
   return 0;
 }
@@ -162,7 +183,10 @@ function estimateGradingTurnaroundDays(service, declaredValueAUD) {
     const opt = gradingOptionsFor(declaredValueAUD || 0, grader === "TCG" || grader === "CGA" ? "Pokémon" : null, { graders: [grader] })[0];
     return opt ? opt.days : null;
   }
-  if (s === "psa via shipmycards" || s === "psa via usa") return 60; // estimate, not published here
+  if (s === "psa via shipmycards" || s === "psa via usa") {
+    const opt = gradingOptionsFor(declaredValueAUD || 0, null, { graders: ["PSA"], location: VAULT })[0];
+    return opt ? opt.days : 60;
+  }
   return null;
 }
 
@@ -203,7 +227,7 @@ function applyStatusTransitions(prev, next) {
     // unless the caller already set it (the submission planner does).
     if (!out.gradingSentDate || out.gradingSentDate === prev.gradingSentDate) {
       const declaredValue = Math.max(Number(prev.psa9Avg) || 0, Number(prev.psa10Avg) || 0, Number(prev.rawAvg) || 0);
-      out.gradingCostPaid = gradingCost(out.gradingService || prev.gradingService, declaredValue);
+      out.gradingCostPaid = gradingCost(effectiveGradingService({ ...prev, ...out, gradingService: out.gradingService || prev.gradingService }), declaredValue);
       out.gradingSentDate = today;
     }
     out.gradingExpectation = gradingExpectationFor(prev);
@@ -391,15 +415,15 @@ function computeCard(c) {
   const psa10 = c.psa10Avg ?? (status === "Graded" ? null : c.psa9Avg) ?? 0;
 
   // A raw card's graded values are PSA prices; grading through BGS/CGC/TCG resells for less.
-  const resale = status === "Raw" ? serviceResaleFactor(c.gradingService, c.sport) : 1;
+  const resale = status === "Raw" ? serviceResaleFactor(effectiveGradingService(c), c.sport) : 1;
   const netRawSell = raw * (1 - fees);
   const netPsa9Sell = psa9 * resale * (1 - fees);
   const netPsa10Sell = psa10 * resale * (1 - fees);
 
   const declaredValue = Math.max(psa9, psa10, raw);
-  const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
+  const autoGradingCost = gradingCost(effectiveGradingService(c), declaredValue) || 0;
 
-  const isSelfGraded = SELF_GRADED_SERVICES.includes(c.gradingService);
+  const isSelfGraded = SELF_GRADED_SERVICES.includes(effectiveGradingService(c));
 
   const appliedGradingCost = Number(c.gradingCostPaid) > 0
     ? Number(c.gradingCostPaid)
@@ -517,7 +541,7 @@ let sellDecision = "";
 
   let gradingTurnaroundDays = null, gradingDaysElapsed = null, gradingProgressPct = null;
   if (status === "At Grading" && c.gradingSentDate) {
-    gradingTurnaroundDays = estimateGradingTurnaroundDays(c.gradingService, declaredValue);
+    gradingTurnaroundDays = estimateGradingTurnaroundDays(effectiveGradingService(c), declaredValue);
     const sent = new Date(c.gradingSentDate);
     const now = new Date();
     gradingDaysElapsed = Math.max(0, Math.round((now - sent) / 86400000));
@@ -566,15 +590,15 @@ function computePokemonCard(c) {
   const psa10 = c.psa10Avg ?? (status === "Graded" ? null : c.psa9Avg) ?? 0;
 
   // Graded values are PSA prices; CGC/TCG slabs resell for less (CGC holds up better for Pokémon).
-  const resale = status === "Raw" ? serviceResaleFactor(c.gradingService, "Pokémon") : 1;
+  const resale = status === "Raw" ? serviceResaleFactor(effectiveGradingService(c), "Pokémon") : 1;
   const netRawSell = raw * (1 - fees);
   const netPsa9Sell = psa9 * resale * (1 - fees);
   const netPsa10Sell = psa10 * resale * (1 - fees);
 
   const declaredValue = Math.max(psa9, psa10, raw);
-  const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
+  const autoGradingCost = gradingCost(effectiveGradingService(c), declaredValue) || 0;
 
-  const isSelfGraded = SELF_GRADED_SERVICES.includes(c.gradingService);
+  const isSelfGraded = SELF_GRADED_SERVICES.includes(effectiveGradingService(c));
 
   const appliedGradingCost = Number(c.gradingCostPaid) > 0
     ? Number(c.gradingCostPaid)
@@ -692,7 +716,7 @@ function computePokemonCard(c) {
 
   let gradingTurnaroundDays = null, gradingDaysElapsed = null, gradingProgressPct = null;
   if (status === "At Grading" && c.gradingSentDate) {
-    gradingTurnaroundDays = estimateGradingTurnaroundDays(c.gradingService, declaredValue);
+    gradingTurnaroundDays = estimateGradingTurnaroundDays(effectiveGradingService(c), declaredValue);
     const sent = new Date(c.gradingSentDate);
     const now = new Date();
     gradingDaysElapsed = Math.max(0, Math.round((now - sent) / 86400000));

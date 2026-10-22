@@ -343,14 +343,15 @@ function GixenPlaybook() {
               </tr>
             </thead>
             <tbody>
-              {[...GRADING_PRICE_LIST].sort((a, b) => a.grader.localeCompare(b.grader) || a.price - b.price).map((t) => (
+              {[...GRADING_PRICE_LIST].sort((a, b) => a.grader.localeCompare(b.grader) || feeAud(a) - feeAud(b)).map((t) => (
                 <tr key={`${t.company}-${t.grader}-${t.tier}`} style={{ borderTop: "1px solid #24272F", opacity: t.unavailable ? 0.5 : 1 }}>
                   <td style={{ padding: "4px 6px 4px 0" }}>
                     {t.company} · <b>{t.grader}</b> {t.tier}
                     {t.pokemonOnly ? " (Pokémon)" : ""}
                     {t.minCards > 1 ? ` (min ${t.minCards} cards)` : ""}
+                    {t.vaultOnly ? " (cards in the SMC vault)" : ""}
                   </td>
-                  <td>${t.price.toFixed(2)}</td>
+                  <td>{t.priceUsd != null ? `US$${t.priceUsd} (≈$${feeAud(t).toFixed(2)})` : `$${t.price.toFixed(2)}`}</td>
                   <td title={(GRADING_POSTAGE[t.company] || {}).note || ""}>${gradingOptionCost(t).toFixed(2)}</td>
                   <td>{t.maxAud === Infinity ? "any" : t.maxAud != null ? `A$${t.maxAud.toLocaleString()}` : `US$${t.maxUsd.toLocaleString()}`}</td>
                   <td>{t.time}</td>
@@ -360,7 +361,7 @@ function GixenPlaybook() {
           </table>
         </div>
         <div style={{ fontSize: 11, color: "#6B7180", marginTop: 10, lineHeight: 1.6 }}>
-          *All in = fee + postage from Clyde North + return postage where it isn't included: The Hobby ~A$13 post or drop off (~1 hr), return included · Cherry ~A$13 or drop off, return A$20 (A$10 to collect in store) · Slabd A$10 Sendle pickup, return ~A$15 (guess) · Slabbys ~A$13 to NSW or Swap It, return ~A$15 (guess) · TCG Grading ~A$13 to Sydney, return ~A$19. Faded rows are paused right now; bulk tiers need the minimum number of cards. PSA has suspended its under-US$300/500 tiers, so PSA from Australia currently starts at A$110 — only worth it for cards where a 10 is worth a lot more than raw. "Covers up to" is the declared (graded) value. Non-US-produced cards (Japanese Pokémon, One Piece, Lorcana, Yu-Gi-Oh, Dragon Ball) go via PSA Hong Kong and add 1-2 months. Each raw card's window in My Cards shows the best option for that card.
+          Cards already in the ShipMyCards vault are graded from there (PSA via ShipMyCards, ~US$26 — no postage either way, and the slab goes back into the vault); cards in hand go through an Australian company. *All in = fee + postage from Clyde North + return postage where it isn't included: The Hobby ~A$13 post or drop off (~1 hr), return included · Cherry ~A$13 or drop off, return A$20 (A$10 to collect in store) · Slabd A$10 Sendle pickup, return ~A$15 (guess) · Slabbys ~A$13 to NSW or Swap It, return ~A$15 (guess) · TCG Grading ~A$13 to Sydney, return ~A$19. Faded rows are paused right now; bulk tiers need the minimum number of cards. PSA has suspended its under-US$300/500 tiers, so PSA from Australia currently starts at A$110 — only worth it for cards where a 10 is worth a lot more than raw. "Covers up to" is the declared (graded) value. Non-US-produced cards (Japanese Pokémon, One Piece, Lorcana, Yu-Gi-Oh, Dragon Ball) go via PSA Hong Kong and add 1-2 months. Each raw card's window in My Cards shows the best option for that card.
         </div>
       </div>
 

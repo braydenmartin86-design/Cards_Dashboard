@@ -1854,13 +1854,13 @@ function GradingChoicesPanel({ card, computed, onUpdate }) {
 
   return (
     <div style={box}>
-      <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 4 }}>Best way to grade it (from Australia)</div>
+      <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 4 }}>Best way to grade it ({card.location === "ShipMyCards Vault" ? "from the ShipMyCards vault" : "from Australia"})</div>
       {!best ? (
-        <div style={{ fontSize: 12.5, color: "#8B90A0" }}>No Australian service in the price list covers this card's value.</div>
+        <div style={{ fontSize: 12.5, color: "#8B90A0" }}>{card.location === "ShipMyCards Vault" ? "No ShipMyCards PSA tier on record covers this card's value — check SMC's current PSA pricing." : "No Australian service in the price list covers this card's value."}</div>
       ) : worth ? (
         <div style={{ fontSize: 13, color: "#EDEAE1", lineHeight: 1.5 }}>
           <b style={{ color: "#B9A3F0" }}>💎 {label(best)}</b> — {fmtMoney(best.total)} all in, back in {best.time}. Expected about <b style={{ color: "#4E8B6B" }}>+{fmtMoney(best.gain)}</b> more than selling raw now ({fmtMoney(sellRaw)}).
-          {card.gradingService !== best.service && (
+          {effectiveGradingService(card) !== best.service && (
             <button type="button" className="btnSecondary" style={{ fontSize: 11, padding: "3px 9px", marginLeft: 8 }} onClick={() => onUpdate({ ...card, gradingService: best.service })}>
               Use {best.grader} for this card
             </button>
@@ -1908,7 +1908,7 @@ function GradingChoicesPanel({ card, computed, onUpdate }) {
         </div>
       )}
       <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 6, lineHeight: 1.5 }}>
-        +/− = expected profit compared with selling raw now. Uses {res.source === "Default" ? "default" : res.source.toLowerCase()} chances ({Math.round(res.p10 * 100)}% a 10, {Math.round(res.p9 * 100)}% a 9); below a 9 it's treated as worth about raw. All in = fee + that company's postage from Clyde North (Slabd A$10 Sendle pickup, others ~A$13) + return postage where it isn't included (Cherry A$20, TCG ~A$19, Slabd/Slabbys ~A$15 guessed; The Hobby includes it). Dropping off at The Hobby or Cherry saves the postage out. Hover a price for the breakdown. Non-PSA resale % are rough guides. TCG Grading is Pokémon only.
+        +/− = expected profit compared with selling raw now. Uses {res.source === "Default" ? "default" : res.source.toLowerCase()} chances ({Math.round(res.p10 * 100)}% a 10, {Math.round(res.p9 * 100)}% a 9); below a 9 it's treated as worth about raw. All in = fee + that company's postage from Clyde North (Slabd A$10 Sendle pickup, others ~A$13) + return postage where it isn't included (Cherry A$20, TCG ~A$19, Slabd/Slabbys ~A$15 guessed; The Hobby includes it). Dropping off at The Hobby or Cherry saves the postage out. Cards in the ShipMyCards vault are graded there instead (no postage, the slab goes back into the vault). Hover a price for the breakdown. Non-PSA resale % are rough guides. TCG Grading is Pokémon only.
       </div>
     </div>
   );
