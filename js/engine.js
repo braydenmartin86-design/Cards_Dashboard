@@ -15,15 +15,139 @@ function tieredPsaAuCost(declaredValueAUD) {
   return 2199;
 }
 
+// ===== Australian grading price list (from the user's screenshots, Oct 2026) =====
+// Prices are A$ per card. `maxUsd` / `maxAud` is the highest declared (graded) value the tier
+// covers. `returnIncluded`: true = freight both ways is in the price; false = return shipping is
+// extra; null = not stated (treated as extra, and flagged). PSA has suspended its under-US$300/500
+// tiers, so PSA from Australia currently starts at A$110 (The Hobby).
+const GRADING_PRICE_LIST = [
+  // PSA
+  { company: "The Hobby", grader: "PSA", tier: "C1000", price: 110, maxUsd: 1000, days: 165, time: "5–6 months", returnIncluded: true },
+  { company: "The Hobby", grader: "PSA", tier: "C1500", price: 165, maxUsd: 1500, days: 53, time: "1.5–2 months", returnIncluded: true },
+  { company: "The Hobby", grader: "PSA", tier: "C2500", price: 350, maxUsd: 2500, days: 38, time: "1–1.5 months", returnIncluded: true },
+  { company: "The Hobby", grader: "PSA", tier: "C5000", price: 699, maxUsd: 5000, days: 13, time: "7–10 business days", returnIncluded: true },
+  { company: "Slabbys", grader: "PSA", tier: "Standard", price: 130, maxUsd: 1000, days: 135, time: "90–100 business days", returnIncluded: false },
+  { company: "Slabbys", grader: "PSA", tier: "Priority", price: 200, maxUsd: 1500, days: 105, time: "70–80 business days", returnIncluded: false },
+  { company: "Slabbys", grader: "PSA", tier: "Express", price: 399, maxUsd: 2500, days: 35, time: "20–30 business days", returnIncluded: false },
+  // Slabd's prices include A$2 handling + A$2 data entry per card (Quick Submit).
+  { company: "Slabd", grader: "PSA", tier: "Standard Bulk", price: 93.95, maxAud: 499, days: 140, time: "~100 business days", returnIncluded: false, minCards: 15 },
+  { company: "Slabd", grader: "PSA", tier: "Standard", price: 113.95, maxAud: 999, days: 140, time: "~100 business days", returnIncluded: false },
+  { company: "Slabd", grader: "PSA", tier: "Regular", price: 153.95, maxAud: 1499, days: 112, time: "~80 business days", returnIncluded: false },
+  { company: "Cherry", grader: "PSA", tier: "Regular", price: 160, maxUsd: 1499, days: 60, time: "~2 months", returnIncluded: false },
+  { company: "Cherry", grader: "PSA", tier: "Express", price: 375, maxUsd: 2499, days: 45, time: "1–2 months", returnIncluded: false },
+  { company: "Cherry", grader: "PSA", tier: "Super Express", price: 650, maxUsd: 4999, days: 23, time: "20–25 days", returnIncluded: false },
+  // Beckett (BGS)
+  { company: "Slabd", grader: "BGS", tier: "Base", price: 53.95, maxAud: 400, days: 168, time: "~120 business days", returnIncluded: false },
+  { company: "Slabd", grader: "BGS", tier: "Standard", price: 123.95, maxAud: 999, days: 84, time: "~60 business days", returnIncluded: false },
+  { company: "Slabd", grader: "BGS", tier: "Express", price: 303.95, maxAud: 2495, days: 56, time: "~40 business days", returnIncluded: false },
+  { company: "Slabbys", grader: "BGS", tier: "Base", price: 75, maxUsd: 500, days: 135, time: "95+ business days", returnIncluded: false },
+  { company: "Slabbys", grader: "BGS", tier: "Express", price: 249, maxUsd: 2500, days: 30, time: "20+ business days", returnIncluded: false },
+  { company: "Cherry", grader: "BGS", tier: "Base", price: 40, maxUsd: 2000, days: 120, time: "unavailable right now", returnIncluded: false, unavailable: true },
+  { company: "Cherry", grader: "BGS", tier: "Standard", price: 80, maxUsd: 10000, days: 90, time: "unavailable right now", returnIncluded: false, unavailable: true },
+  { company: "Cherry", grader: "BGS", tier: "Priority", price: 300, maxUsd: 50000, days: 25, time: "3–4 weeks", returnIncluded: false },
+  // CGC
+  { company: "The Hobby", grader: "CGC", tier: "Under US$1000", price: 40, maxUsd: 1000, days: 90, time: "~3 months", returnIncluded: true },
+  // SGC and CGA through a Queensland store (the only Australian SGC pricing found, Oct 2026).
+  // Max covered value and return postage aren't stated.
+  { company: "QLD store", grader: "SGC", tier: "Standard", price: 89.95, maxAud: Infinity, days: 85, time: "60+ business days", returnIncluded: false },
+  { company: "QLD store", grader: "SGC", tier: "Immediate", price: 299.95, maxAud: Infinity, days: 28, time: "20+ business days", returnIncluded: false },
+  { company: "QLD store", grader: "CGA", tier: "Standard", price: 24.95, maxAud: Infinity, days: 52, time: "25–50 business days", returnIncluded: false, pokemonOnly: true },
+  { company: "QLD store", grader: "CGA", tier: "Collector Bulk", price: 19.95, maxAud: Infinity, days: 52, time: "25–50 business days", returnIncluded: false, pokemonOnly: true, minCards: 20 },
+  // TCG Grading (Sydney) — Pokémon only; a local slab sells for far less than PSA.
+  { company: "TCG Grading", grader: "TCG", tier: "Routine", price: 16, maxAud: Infinity, days: 60, time: "not stated", returnIncluded: false, pokemonOnly: true },
+  { company: "TCG Grading", grader: "TCG", tier: "6-card package", price: 95 / 6, maxAud: Infinity, days: 60, time: "not stated", returnIncluded: false, pokemonOnly: true, minCards: 6 },
+];
+// Postage from Clyde North VIC to each company, and back when the return isn't included.
+// The Hobby (Point Cook) and Cherry (Melbourne) are about an hour's drive — dropping off saves the
+// postage out, and Cherry's in-store pickup is A$10 instead of A$20 delivered.
+const GRADING_POSTAGE = {
+  "The Hobby": { out: 13, back: 0, note: "post ~A$13 or drop off (~1 hr drive); return included" },
+  Cherry: { out: 13, back: 20, note: "post ~A$13 or drop off; return A$20 tracked, or A$10 to collect in store" },
+  Slabd: { out: 10, back: 15, note: "A$10 Sendle home pickup; return postage a guess (not stated)" },
+  Slabbys: { out: 13, back: 15, note: "post ~A$13 to NSW or drop off at Swap It; return postage a guess (charged separately)" },
+  "TCG Grading": { out: 13, back: 19, note: "post ~A$13 to Sydney; return ~A$19 Express Post" },
+  "QLD store": { out: 13, back: 15, note: "post ~A$13 to Queensland; return postage a guess (not stated)" },
+};
+const GRADING_POSTAGE_DEFAULT = { out: 13, back: 15 };
+const postageFor = (company) => GRADING_POSTAGE[company] || GRADING_POSTAGE_DEFAULT;
+// What a slab from each grader resells for compared with the same grade from PSA — rough guides,
+// since buyers pay a premium for PSA. CGC holds up better for Pokémon than for sports cards.
+function graderResaleFactor(grader, sport) {
+  const pokemon = sport === "Pokémon";
+  if (grader === "PSA") return 1;
+  if (grader === "BGS") return 0.85;
+  if (grader === "CGC") return pokemon ? 0.85 : 0.65;
+  // SGC slabs sell for about the same as TCG Grading's, in the user's experience.
+  if (grader === "TCG" || grader === "SGC" || grader === "CGA") return pokemon ? 0.4 : 0.25;
+  return 0.8;
+}
+// The resale factor for a raw card's chosen grading service (PSA = 1).
+function serviceResaleFactor(service, sport) {
+  const grader = { "BGS via Australia": "BGS", "CGC via Australia": "CGC", "TCG Grading (AU)": "TCG", "SGC via Australia": "SGC", "CGA via Australia": "CGA" }[service];
+  return grader ? graderResaleFactor(grader, sport) : 1;
+}
+function gradingTierFits(t, declaredAud) {
+  if (t.maxAud != null) return declaredAud <= t.maxAud;
+  return audToUsd(declaredAud) <= t.maxUsd;
+}
+// All-in cost of one option for a single card: the fee plus that company's postage there, and back
+// when the return isn't included.
+function gradingOptionCost(t) {
+  const p = postageFor(t.company);
+  return t.price + p.out + (t.returnIncluded ? 0 : p.back);
+}
+// Every option a single card can go through, cheapest first (no bulk minimums or paused tiers).
+function gradingOptionsFor(declaredAud, sport, { graders } = {}) {
+  return GRADING_PRICE_LIST.filter((t) => !t.unavailable && !(t.minCards > 1) && (!t.pokemonOnly || sport === "Pokémon") && (!graders || graders.includes(t.grader)) && gradingTierFits(t, declaredAud))
+    .map((t) => ({ ...t, total: gradingOptionCost(t) }))
+    .sort((a, b) => a.total - b.total);
+}
+
+// Which company and tier to grade a raw card through — or whether to grade at all. For each option
+// that covers the card's value: expected profit after the all-in cost and that grader's resale
+// discount, compared with selling raw now. Uses the card's grading chances (photo check, set gem
+// rate, or your/default rates); below a 9 the card is treated as worth about what it was raw.
+const GRADER_SERVICE = { PSA: "PSA via Australia", BGS: "BGS via Australia", CGC: "CGC via Australia", TCG: "TCG Grading (AU)", SGC: "SGC via Australia", CGA: "CGA via Australia" };
+function bestGradingChoices(card, computed) {
+  const v10 = Number(card.psa10Avg) || 0;
+  const v9 = Number(card.psa9Avg) || 0;
+  const raw = Number(card.rawAvg) || 0;
+  if (!v10 && !v9) return null;
+  const sport = card.sport;
+  const fees = card.feesPct || 0.13;
+  const exp = gradingExpectationFor(card);
+  const p10 = exp.p10;
+  const p9 = exp.p9;
+  const pBelow = Math.max(0, 1 - p10 - p9);
+  const cost = Number(computed.totalCost) || 0;
+  const sellRaw = raw * (1 - fees) - cost;
+  const declared = Math.max(v10, v9, raw);
+  const options = gradingOptionsFor(declared, sport)
+    .map((o) => {
+      const m = graderResaleFactor(o.grader, sport);
+      const profit = (p10 * v10 * m + p9 * v9 * m + pBelow * raw) * (1 - fees) - cost - o.total;
+      // What each result would mean in profit, so the risk is visible, not just the average.
+      const outcome = (v) => v * (1 - fees) - cost - o.total;
+      return { ...o, factor: m, profit, gain: profit - sellRaw, service: GRADER_SERVICE[o.grader], if10: outcome(v10 * m), if9: outcome(v9 * m), ifLower: outcome(raw) };
+    })
+    .sort((a, b) => b.gain - a.gain);
+  return { options, sellRaw, p10, p9, source: exp.source, declared };
+}
+
+// Services where you send the card yourself, so the fee is a cost on the card.
+const SELF_GRADED_SERVICES = ["PSA via Australia", "BGS via Australia", "CGC via Australia", "TCG Grading (AU)", "SGC via Australia", "CGA via Australia", "PSA via ShipMyCards"];
+
 function gradingCost(service, declaredValue = 0) {
   if (!service || service === "None" || service === "Bought Graded") return 0;
-  
-  if (service === "PSA via Australia") {
-    return declaredValue > 500 ? 45 : 22;
+
+  // From Australia: the cheapest tier that covers the card's declared value, all in.
+  const grader = { "PSA via Australia": "PSA", "BGS via Australia": "BGS", "CGC via Australia": "CGC", "TCG Grading (AU)": "TCG", "SGC via Australia": "SGC", "CGA via Australia": "CGA" }[service];
+  if (grader) {
+    const opt = gradingOptionsFor(declaredValue, grader === "TCG" || grader === "CGA" ? "Pokémon" : null, { graders: [grader] })[0];
+    return opt ? Math.round(opt.total * 100) / 100 : 0;
   }
   if (service === "PSA via ShipMyCards") return 25;
-  if (service === "SGC via Australia") return 20;
-  
+
   return 0;
 }
 // Rough expected turnaround in days, used only for the Grading Tracker progress bar. PSA via
@@ -33,17 +157,12 @@ function gradingCost(service, declaredValue = 0) {
 function estimateGradingTurnaroundDays(service, declaredValueAUD) {
   if (!service) return null;
   const s = service.toLowerCase();
-  if (s === "psa via australia" || s === "psa via aus") {
-    const usd = audToUsd(declaredValueAUD);
-    if (usd <= 500) return 225; // 7-8 months
-    if (usd <= 1000) return 68; // 2-2.5 months
-    if (usd <= 1500) return 53; // 1.5-2 months
-    if (usd <= 2500) return 38; // 1-1.5 months
-    if (usd <= 5000) return 13; // 7-10 business days
-    return 10;
+  const grader = { "psa via australia": "PSA", "psa via aus": "PSA", "bgs via australia": "BGS", "cgc via australia": "CGC", "tcg grading (au)": "TCG", "sgc via australia": "SGC", "sgc via aus": "SGC", "cga via australia": "CGA" }[s];
+  if (grader) {
+    const opt = gradingOptionsFor(declaredValueAUD || 0, grader === "TCG" || grader === "CGA" ? "Pokémon" : null, { graders: [grader] })[0];
+    return opt ? opt.days : null;
   }
   if (s === "psa via shipmycards" || s === "psa via usa") return 60; // estimate, not published here
-  if (s === "sgc via australia" || s === "sgc via aus") return 30; // estimate, not published here
   return null;
 }
 
@@ -271,21 +390,19 @@ function computeCard(c) {
   // A raw card with no PSA 10 price yet borrows the PSA 9 one for its estimates; a slab never does.
   const psa10 = c.psa10Avg ?? (status === "Graded" ? null : c.psa9Avg) ?? 0;
 
+  // A raw card's graded values are PSA prices; grading through BGS/CGC/TCG resells for less.
+  const resale = status === "Raw" ? serviceResaleFactor(c.gradingService, c.sport) : 1;
   const netRawSell = raw * (1 - fees);
-  const netPsa9Sell = psa9 * (1 - fees);
-  const netPsa10Sell = psa10 * (1 - fees);
+  const netPsa9Sell = psa9 * resale * (1 - fees);
+  const netPsa10Sell = psa10 * resale * (1 - fees);
 
   const declaredValue = Math.max(psa9, psa10, raw);
   const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
 
-  const isSelfGraded = [
-    "PSA via Australia",
-    "PSA via ShipMyCards",
-    "SGC via Australia"
-  ].includes(c.gradingService);
+  const isSelfGraded = SELF_GRADED_SERVICES.includes(c.gradingService);
 
-  const appliedGradingCost = Number(c.gradingCostPaid) > 0 
-    ? Number(c.gradingCostPaid) 
+  const appliedGradingCost = Number(c.gradingCostPaid) > 0
+    ? Number(c.gradingCostPaid)
     : (isSelfGraded && (status === "At Grading" || status === "Graded") ? autoGradingCost : 0);
 
   const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + appliedGradingCost;
@@ -305,19 +422,21 @@ function computeCard(c) {
     const gemRate = c.setGemRate !== "" && c.setGemRate != null ? Math.max(0, Math.min(1, Number(c.setGemRate) / 100)) : null;
     if (analysis) {
       const belowValue = raw ?? 0;
-      const expectedRevenue = psa10 * (1 - fees) * analysis.psa10Prob + psa9 * (1 - fees) * analysis.psa9Prob + belowValue * (1 - fees) * analysis.belowProb;
+      const expectedRevenue = psa10 * resale * (1 - fees) * analysis.psa10Prob + psa9 * resale * (1 - fees) * analysis.psa9Prob + belowValue * (1 - fees) * analysis.belowProb;
       gradedEV = expectedRevenue - totalCost - futureGCost;
     } else if (gemRate != null) {
       const p10 = gemRate;
       const p9 = Math.min(1 - p10, 0.40);
       const pBelow = Math.max(0, 1 - p10 - p9); // Captures floor loss on PSA 8/7
-      
-      gradedEV = p10 * (netPsa10Sell - totalCost - futureGCost) + 
-                 p9 * (netPsa9Sell - totalCost - futureGCost) + 
+
+      gradedEV = p10 * (netPsa10Sell - totalCost - futureGCost) +
+                 p9 * (netPsa9Sell - totalCost - futureGCost) +
                  pBelow * (netRawSell - totalCost - futureGCost);
     } else {
+      // Below a 9, the fee is paid and the card's worth about what it was raw.
       const { p10: p10Prob, p9: p9Prob } = defaultGradeRates();
-      gradedEV = p10Prob * (netPsa10Sell - totalCost - futureGCost) + p9Prob * (netPsa9Sell - totalCost - futureGCost);
+      const pBelow = Math.max(0, 1 - p10Prob - p9Prob);
+      gradedEV = p10Prob * (netPsa10Sell - totalCost - futureGCost) + p9Prob * (netPsa9Sell - totalCost - futureGCost) + pBelow * (netRawSell - totalCost - futureGCost);
     }
   }
 
@@ -446,21 +565,19 @@ function computePokemonCard(c) {
   // A raw card with no PSA 10 price yet borrows the PSA 9 one for its estimates; a slab never does.
   const psa10 = c.psa10Avg ?? (status === "Graded" ? null : c.psa9Avg) ?? 0;
 
+  // Graded values are PSA prices; CGC/TCG slabs resell for less (CGC holds up better for Pokémon).
+  const resale = status === "Raw" ? serviceResaleFactor(c.gradingService, "Pokémon") : 1;
   const netRawSell = raw * (1 - fees);
-  const netPsa9Sell = psa9 * (1 - fees);
-  const netPsa10Sell = psa10 * (1 - fees);
+  const netPsa9Sell = psa9 * resale * (1 - fees);
+  const netPsa10Sell = psa10 * resale * (1 - fees);
 
   const declaredValue = Math.max(psa9, psa10, raw);
   const autoGradingCost = gradingCost(c.gradingService, declaredValue) || 0;
 
-  const isSelfGraded = [
-    "PSA via Australia",
-    "PSA via ShipMyCards", 
-    "SGC via Australia"
-  ].includes(c.gradingService);
+  const isSelfGraded = SELF_GRADED_SERVICES.includes(c.gradingService);
 
-  const appliedGradingCost = Number(c.gradingCostPaid) > 0 
-    ? Number(c.gradingCostPaid) 
+  const appliedGradingCost = Number(c.gradingCostPaid) > 0
+    ? Number(c.gradingCostPaid)
     : (isSelfGraded && (status === "At Grading" || status === "Graded") ? autoGradingCost : 0);
 
   const totalCost = (c.paid || 0) + (c.shipping || 0) + holdingCost + appliedGradingCost;
@@ -477,19 +594,21 @@ function computePokemonCard(c) {
     const gemRate = c.setGemRate !== "" && c.setGemRate != null ? Math.max(0, Math.min(1, Number(c.setGemRate) / 100)) : null;
     if (analysis) {
       const belowValue = raw ?? 0;
-      const expectedRevenue = psa10 * (1 - fees) * analysis.psa10Prob + psa9 * (1 - fees) * analysis.psa9Prob + belowValue * (1 - fees) * analysis.belowProb;
+      const expectedRevenue = psa10 * resale * (1 - fees) * analysis.psa10Prob + psa9 * resale * (1 - fees) * analysis.psa9Prob + belowValue * (1 - fees) * analysis.belowProb;
       gradedEV = expectedRevenue - totalCost - futureGCost;
     } else if (gemRate != null) {
       const p10 = gemRate;
       const p9 = Math.min(1 - p10, 0.40);
       const pBelow = Math.max(0, 1 - p10 - p9); // Captures floor loss on PSA 8/7
-      
-      gradedEV = p10 * (netPsa10Sell - totalCost - futureGCost) + 
-                 p9 * (netPsa9Sell - totalCost - futureGCost) + 
+
+      gradedEV = p10 * (netPsa10Sell - totalCost - futureGCost) +
+                 p9 * (netPsa9Sell - totalCost - futureGCost) +
                  pBelow * (netRawSell - totalCost - futureGCost);
     } else {
+      // Below a 9, the fee is paid and the card's worth about what it was raw.
       const { p10: p10Prob, p9: p9Prob } = defaultGradeRates();
-      gradedEV = p10Prob * (netPsa10Sell - totalCost - futureGCost) + p9Prob * (netPsa9Sell - totalCost - futureGCost);
+      const pBelow = Math.max(0, 1 - p10Prob - p9Prob);
+      gradedEV = p10Prob * (netPsa10Sell - totalCost - futureGCost) + p9Prob * (netPsa9Sell - totalCost - futureGCost) + pBelow * (netRawSell - totalCost - futureGCost);
     }
   }
 

@@ -4,10 +4,14 @@
 const STATUS_OPTIONS = ["Raw", "At Grading", "Graded", "Listed", "Sold"];
 const GRADE_OPTIONS = ["PSA 9", "PSA 10", "SGC 9", "SGC 9.5", "SGC 10", "BGS 9", "BGS 9.5", "BGS 10", "CGC 9", "CGC 9.5", "CGC 10", "TAG 9", "TAG 10", "PSA 8", "PSA 7", "PSA 6 or lower", "SGC 8 or lower", "BGS 8.5", "BGS 8 or lower", "CGC 8.5 or lower"];
 const GRADING_SERVICE_OPTIONS = [
-  "PSA via Australia", 
-  "PSA via ShipMyCards", 
-  "SGC via Australia", 
-  "Bought Graded", 
+  "PSA via Australia",
+  "BGS via Australia",
+  "CGC via Australia",
+  "TCG Grading (AU)",
+  "SGC via Australia",
+  "CGA via Australia",
+  "PSA via ShipMyCards",
+  "Bought Graded",
   "None"
 ];
 const SPORT_OPTIONS = ["NFL", "NBA", "WNBA", "MLB", "AFL", "Soccer", "MMA", "WWE", "Pokémon", "Other"];

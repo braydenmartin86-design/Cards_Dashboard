@@ -514,7 +514,7 @@ function AddCardModal({ onClose, onSave, playerLabel }) {
           </Field>
           {form.gradingService === "PSA via Australia" && (
             <div style={{ fontSize: 11, color: "#6B7180", marginTop: -6 }}>
-              Priced by declared value, not flat — cards not produced in the USA (Japanese Pokémon, One Piece, Lorcana, Yu-Gi-Oh, Dragon Ball, etc.) route via PSA Hong Kong and add 1-2 months to turnaround.
+              Priced by declared value — currently from A$110 all in (PSA's cheaper tiers are suspended), plus postage. Cards not produced in the USA (Japanese Pokémon, One Piece, Lorcana, Yu-Gi-Oh, Dragon Ball, etc.) route via PSA Hong Kong and add 1-2 months. Each card's window shows the best company to use.
             </div>
           )}
           <Field label="Set gem rate % (optional — from GemRate)">
@@ -1836,6 +1836,84 @@ function MonthlyPriceCheck({ cards, setCards }) {
   );
 }
 
+// ===== Best way to grade (from Australia) =====
+// Every company/tier that covers this card's value, ranked by expected profit over selling raw,
+// with the verdict up top — including "not worth grading" when nothing clears the bar.
+const GRADING_WORTH_MIN = 10;
+function GradingChoicesPanel({ card, computed, onUpdate }) {
+  const [showAll, setShowAll] = useState(false);
+  const isPkmn = card.sport === "Pokémon" || computed.sport === "Pokémon";
+  const res = bestGradingChoices({ ...card, sport: isPkmn ? "Pokémon" : card.sport }, computed);
+  if (!res) return null;
+  const { options, sellRaw } = res;
+  const best = options[0];
+  const worth = best && best.gain >= GRADING_WORTH_MIN;
+  const label = (o) => `${o.company} · ${o.grader} ${o.tier}`;
+  const shown = showAll ? options : options.slice(0, 4);
+  const box = { border: `1px solid ${worth ? "#8B6FD655" : "#2C303B"}`, borderRadius: 8, padding: "10px 12px", background: worth ? "#8B6FD60d" : "#14161C", marginBottom: 16 };
+
+  return (
+    <div style={box}>
+      <div style={{ fontSize: 11, color: "#8B90A0", textTransform: "uppercase", marginBottom: 4 }}>Best way to grade it (from Australia)</div>
+      {!best ? (
+        <div style={{ fontSize: 12.5, color: "#8B90A0" }}>No Australian service in the price list covers this card's value.</div>
+      ) : worth ? (
+        <div style={{ fontSize: 13, color: "#EDEAE1", lineHeight: 1.5 }}>
+          <b style={{ color: "#B9A3F0" }}>💎 {label(best)}</b> — {fmtMoney(best.total)} all in, back in {best.time}. Expected about <b style={{ color: "#4E8B6B" }}>+{fmtMoney(best.gain)}</b> more than selling raw now ({fmtMoney(sellRaw)}).
+          {card.gradingService !== best.service && (
+            <button type="button" className="btnSecondary" style={{ fontSize: 11, padding: "3px 9px", marginLeft: 8 }} onClick={() => onUpdate({ ...card, gradingService: best.service })}>
+              Use {best.grader} for this card
+            </button>
+          )}
+          <div style={{ fontSize: 12, marginTop: 4, display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {[["a 10", best.if10], ["a 9", best.if9], ["lower", best.ifLower]].map(([k, v]) => (
+              <span key={k} style={{ color: v >= 0 ? "#4E8B6B" : "#B4472E" }}>If {k}: {v >= 0 ? "+" : ""}{fmtMoney(v)}</span>
+            ))}
+            <span style={{ color: "#6B7180" }}>(profit on the card, vs {fmtMoney(sellRaw)} selling raw)</span>
+          </div>
+          {best.if9 < 0 && (
+            <div style={{ fontSize: 11.5, color: "#C9A227", marginTop: 4 }}>
+              ⚠️ It only pays off if it gets a 10 — a 9 loses {fmtMoney(-best.if9)}. That's why My Cards may still say {computed.sellDecision || "Hold"}; grade it only if you're confident in the corners, centering and surface (a Grade Check photo helps).
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ fontSize: 13, color: "#C9A227", lineHeight: 1.5 }}>
+          <b>Not worth grading.</b> Selling raw keeps about {fmtMoney(sellRaw)}; the best option ({label(best)}, {fmtMoney(best.total)} all in) only changes that by {best.gain >= 0 ? "+" : ""}{fmtMoney(best.gain)} after the fee and the risk of a lower grade.
+        </div>
+      )}
+
+      {options.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {shown.map((o, i) => (
+            <div key={`${o.company}-${o.grader}-${o.tier}`} style={{ display: "flex", gap: 8, fontSize: 12, padding: "4px 0", borderTop: "1px solid #24272F", flexWrap: "wrap", alignItems: "baseline" }}>
+              <span style={{ flex: 1, minWidth: 170, color: i === 0 ? "#EDEAE1" : "#A7ADBB" }}>
+                {label(o)}
+                {o.grader !== "PSA" && <span style={{ color: "#6B7180", fontSize: 11 }}> · resells ~{Math.round(o.factor * 100)}% of PSA</span>}
+              </span>
+              <span className="mono" style={{ color: "#8B90A0" }} title={`${fmtMoney(o.price)} fee + ${fmtMoney(postageFor(o.company).out)} there${o.returnIncluded ? " (return included)" : ` + ${fmtMoney(postageFor(o.company).back)} back`} — ${(GRADING_POSTAGE[o.company] || {}).note || ""}`}>
+                {fmtMoney(o.total)}
+              </span>
+              <span style={{ color: "#6B7180", minWidth: 110 }}>{o.time}</span>
+              <span style={{ fontWeight: 600, minWidth: 60, textAlign: "right", color: o.gain >= GRADING_WORTH_MIN ? "#4E8B6B" : o.gain >= 0 ? "#C9A227" : "#B4472E" }}>
+                {o.gain >= 0 ? "+" : ""}{fmtMoney(o.gain)}
+              </span>
+            </div>
+          ))}
+          {options.length > 4 && (
+            <button type="button" onClick={() => setShowAll((v) => !v)} style={{ background: "none", border: "none", color: "#2FA89A", cursor: "pointer", fontSize: 11.5, padding: "4px 0" }}>
+              {showAll ? "Show fewer" : `Show all ${options.length} options`}
+            </button>
+          )}
+        </div>
+      )}
+      <div style={{ fontSize: 10.5, color: "#6B7180", marginTop: 6, lineHeight: 1.5 }}>
+        +/− = expected profit compared with selling raw now. Uses {res.source === "Default" ? "default" : res.source.toLowerCase()} chances ({Math.round(res.p10 * 100)}% a 10, {Math.round(res.p9 * 100)}% a 9); below a 9 it's treated as worth about raw. All in = fee + that company's postage from Clyde North (Slabd A$10 Sendle pickup, others ~A$13) + return postage where it isn't included (Cherry A$20, TCG ~A$19, Slabd/Slabbys ~A$15 guessed; The Hobby includes it). Dropping off at The Hobby or Cherry saves the postage out. Hover a price for the breakdown. Non-PSA resale % are rough guides. TCG Grading is Pokémon only.
+      </div>
+    </div>
+  );
+}
+
 function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player" }) {
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState(card);
@@ -2031,6 +2109,8 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
               <TrendSparkline history={card.psa9History} color="#8B6FD6" />
               <TrendSparkline history={card.psa10History} color="#C9A227" />
             </div>
+
+            {card.status === "Raw" && <GradingChoicesPanel card={card} computed={computed} onUpdate={onUpdate} />}
 
             <SectionTitle>Profitability (GGR = gross gain after cost)</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
