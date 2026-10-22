@@ -1002,8 +1002,10 @@ function ListingCheckup({ items, onUpdate, onOpen }) {
   );
 }
 
-function MySales({ items, onUpdate, onDelete, onAddManualSale }) {
-  const [search, setSearch] = useState("");
+function MySales({ items, onUpdate, onDelete, onAddManualSale, initialSearch = "" }) {
+  const [search, setSearch] = useState(initialSearch);
+  // Arriving from a My Cards search: pick it up here.
+  useEffect(() => setSearch(initialSearch), [initialSearch]);
   const [visibleCount, setVisibleCount] = useState(50);
   const [editingItem, setEditingItem] = useState(null);
   const [showManualModal, setShowManualModal] = useState(false);
@@ -1015,8 +1017,7 @@ function MySales({ items, onUpdate, onDelete, onAddManualSale }) {
 
   const searched = useMemo(() => {
     if (!search.trim()) return sorted;
-    const q = search.trim().toLowerCase();
-    return sorted.filter((i) => `${i.player} ${i.card} ${i.cardNum}`.toLowerCase().includes(q));
+    return sorted.filter((i) => cardMatchesSearch(i, search));
   }, [sorted, search]);
 
   useEffect(() => setVisibleCount(50), [search]);

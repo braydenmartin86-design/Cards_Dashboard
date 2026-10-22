@@ -127,7 +127,7 @@ function gradingOptionsFor(declaredAud, sport, { graders, location } = {}) {
 const GRADER_SERVICE = { PSA: "PSA via Australia", BGS: "BGS via Australia", CGC: "CGC via Australia", TCG: "TCG Grading (AU)", SGC: "SGC via Australia", CGA: "CGA via Australia" };
 function bestGradingChoices(card, computed) {
   const v10 = Number(card.psa10Avg) || 0;
-  const v9 = Number(card.psa9Avg) || 0;
+  const v9 = Number(card.psa9Avg) > 0 ? Number(card.psa9Avg) : Number(computed.psa9Estimate) || 0;
   const raw = Number(card.rawAvg) || 0;
   if (!v10 && !v9) return null;
   const sport = card.sport;
@@ -263,8 +263,36 @@ function gradeSlotLabel(card, slot) {
   return valueSlotForGrade(g) === slot ? card.grade : generic;
 }
 
+// A PSA 9 estimate for a raw card with no PSA 9 comp (or one saved as $0): about 35% of the PSA 10
+// price, which is typical for modern cards, but never under 15% above raw and never over 60% of the
+// PSA 10. Rough — a real PSA 9 comp always replaces it.
+function estimatePsa9(c) {
+  if (Number(c.psa9Avg) > 0) return null;
+  const p10 = Number(c.psa10Avg) || 0;
+  if (!p10) return null;
+  const raw = Number(c.rawAvg) || 0;
+  const est = Math.min(Math.max(p10 * 0.35, raw * 1.15), p10 * 0.6);
+  return Math.round(est * 100) / 100;
+}
+
+// Your own call to hold a card (a player you believe in) beats the model's decision until its
+// review date, then the model's call comes back with a prompt to review.
+function applyManualHold(c, decision) {
+  const active = c.status === "Raw" || c.status === "Graded";
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const manualHold = active && Boolean(c.holdManual) && (!c.holdUntil || c.holdUntil >= today);
+  return {
+    modelDecision: decision,
+    manualHold,
+    holdReviewDue: active && Boolean(c.holdManual) && Boolean(c.holdUntil) && c.holdUntil < today,
+    decision: manualHold ? "Hold" : decision,
+  };
+}
+
 // The sell-decision badge text, naming the card's own grade ("Sell BGS 9.5", not "Sell PSA 9").
 function sellDecisionLabel(card, decision) {
+  if (card && card.manualHold && decision === "Hold") return "📌 Holding";
   const label = (SELL_DECISION_STYLE[decision] || SELL_DECISION_STYLE[""]).label;
   if ((decision === "Sell PSA 9" || decision === "Sell PSA 10") && card && card.grade) return `Sell ${card.grade}`;
   return label;
@@ -410,7 +438,10 @@ function computeCard(c) {
   const isActive = status === "Raw" || status === "Graded";
 
   const raw = c.rawAvg ?? 0;
-  const psa9 = c.psa9Avg ?? 0;
+  // No PSA 9 price (missing, or saved as $0) on a raw card: estimate one, so grading isn't judged
+  // as if a 9 were worthless. Flagged as an estimate wherever it shows.
+  const psa9Est = status === "Raw" ? estimatePsa9(c) : null;
+  const psa9 = psa9Est ?? c.psa9Avg ?? 0;
   // A raw card with no PSA 10 price yet borrows the PSA 9 one for its estimates; a slab never does.
   const psa10 = c.psa10Avg ?? (status === "Graded" ? null : c.psa9Avg) ?? 0;
 
@@ -509,7 +540,10 @@ let sellDecision = "";
     }
   }
 
-  const gradeCall = status !== "Raw" || sellDecision === "Sell Raw First" ? "NO" : gradeWorthIt;
+  const { modelDecision, manualHold, holdReviewDue, decision: heldDecision } = applyManualHold(c, sellDecision);
+  sellDecision = heldDecision;
+
+  const gradeCall = status !== "Raw" || modelDecision === "Sell Raw First" ? "NO" : gradeWorthIt;
 
   let sellPriority = 9;
   if (sellDecision === "") sellPriority = 9;
@@ -564,6 +598,10 @@ let sellDecision = "";
     psa9GGR,
     psa10GGR,
     gradedEV,
+    psa9Estimate: psa9Est,
+    modelDecision,
+    manualHold,
+    holdReviewDue,
     gradeCall,
     sellDecision,
     sellPriority,
@@ -585,7 +623,10 @@ function computePokemonCard(c) {
   const isActive = status === "Raw" || status === "Graded";
 
   const raw = c.rawAvg ?? 0;
-  const psa9 = c.psa9Avg ?? 0;
+  // No PSA 9 price (missing, or saved as $0) on a raw card: estimate one, so grading isn't judged
+  // as if a 9 were worthless. Flagged as an estimate wherever it shows.
+  const psa9Est = status === "Raw" ? estimatePsa9(c) : null;
+  const psa9 = psa9Est ?? c.psa9Avg ?? 0;
   // A raw card with no PSA 10 price yet borrows the PSA 9 one for its estimates; a slab never does.
   const psa10 = c.psa10Avg ?? (status === "Graded" ? null : c.psa9Avg) ?? 0;
 
@@ -685,6 +726,9 @@ function computePokemonCard(c) {
     }
   }
 
+  const { modelDecision, manualHold, holdReviewDue, decision: heldDecision } = applyManualHold(c, sellDecision);
+  sellDecision = heldDecision;
+
   // 3. Priority Mapping (Reads gradeCall safely now)
   let sellPriority = 9;
   if (sellDecision === "") sellPriority = 9;
@@ -738,6 +782,10 @@ function computePokemonCard(c) {
     psa9GGR,
     psa10GGR,
     gradedEV,
+    psa9Estimate: psa9Est,
+    modelDecision,
+    manualHold,
+    holdReviewDue,
     gradeCall,
     sellDecision,
     sellPriority,

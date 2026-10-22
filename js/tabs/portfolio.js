@@ -33,6 +33,59 @@ const FILTERS = [
   { key: "Graded", label: "Graded" },
 ];
 
+// ===== Search =====
+// Every word has to match somewhere on the card — player, set, year, number, parallel, grade,
+// sport, status or where it is — so "purdy prizm 10" finds the Purdy Prizm PSA 10. Accents are
+// ignored (pokemon = Pokémon).
+const searchFold = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+function cardMatchesSearch(c, query) {
+  const words = searchFold(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = searchFold([c.player, c.card, c.cardNum && `#${String(c.cardNum).replace(/^#/, "")}`, c.cardNum, c.year, c.set, c.parallel, c.grade, c.sport, c.status, c.location, c.sellingMethod, c.notes].filter(Boolean).join(" "));
+  return words.every((w) => hay.includes(w));
+}
+
+function CardSearchBar({ value, onChange, placeholder, resultCount, elsewhere, onOpenSales, onOpenGrading }) {
+  const searching = value.trim().length > 0;
+  const linkBtn = { background: "none", border: "none", color: "#2FA89A", cursor: "pointer", padding: 0, fontSize: 12, textDecoration: "underline" };
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ position: "relative" }}>
+        <input
+          type="search"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && onChange("")}
+          placeholder={placeholder}
+          aria-label="Search your cards"
+          style={{ width: "100%", paddingLeft: 34, boxSizing: "border-box" }}
+        />
+        <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "#6B7180", fontSize: 14, pointerEvents: "none" }}>🔍</span>
+      </div>
+      {searching && (
+        <div style={{ fontSize: 12, color: "#8B90A0", marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <span>
+            {resultCount} card{resultCount === 1 ? "" : "s"} here{resultCount === 0 ? " — check the filters below if you expected some" : ""}
+          </span>
+          {elsewhere && elsewhere.atGrading > 0 && (
+            <button type="button" style={linkBtn} onClick={onOpenGrading}>
+              {elsewhere.atGrading} at grading
+            </button>
+          )}
+          {elsewhere && elsewhere.listed + elsewhere.sold > 0 && (
+            <button type="button" style={linkBtn} onClick={onOpenSales}>
+              {[elsewhere.listed ? `${elsewhere.listed} listed` : null, elsewhere.sold ? `${elsewhere.sold} sold` : null].filter(Boolean).join(", ")} — see My Sales
+            </button>
+          )}
+          <button type="button" style={{ ...linkBtn, color: "#6B7180", marginLeft: "auto" }} onClick={() => onChange("")}>
+            Clear
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DECISION_FILTERS = ["Sell Raw First", "Grade First", "Sell PSA 9", "Sell PSA 10", "Check Comps", "Hold"];
 // "Sell PSA 9/10" cover every grader's slabs (an SGC 10 sells under "Sell PSA 10"), so name them plainly.
 const DECISION_FILTER_LABELS = { "Sell PSA 9": "Sell slab (9 or lower)", "Sell PSA 10": "Sell slab (10)", "Check Comps": "Update Comps" };
@@ -1836,6 +1889,75 @@ function MonthlyPriceCheck({ cards, setCards }) {
   );
 }
 
+// ===== Your own hold =====
+// For cards you want to keep regardless of the maths (a player you believe in): the decision shows
+// "📌 Holding" until a review date, with what My Cards would otherwise say alongside.
+function addMonthsIso(months) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + months);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function HoldControl({ card, computed, onUpdate }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState(card.holdNote || "");
+  const [until, setUntil] = useState(card.holdUntil || addMonthsIso(3));
+  const model = sellDecisionLabel({ ...card, manualHold: false }, computed.modelDecision);
+  const box = (color) => ({ border: `1px solid ${color}55`, background: `${color}0f`, borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12.5, lineHeight: 1.5 });
+  const btn = { fontSize: 11.5, padding: "3px 10px" };
+
+  if (computed.manualHold) {
+    return (
+      <div style={box("#5C7A99")}>
+        <b style={{ color: "#9DB4CC" }}>📌 You're holding this</b>
+        {card.holdNote ? ` — "${card.holdNote}"` : ""}. Review on <b>{card.holdUntil || "no date set"}</b>.
+        <div style={{ color: "#8B90A0", fontSize: 11.5, marginTop: 2 }}>The maths alone would say: {model}. Prices and comps still update while you hold.</div>
+        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+          <button type="button" className="btnSecondary" style={btn} onClick={() => onUpdate({ ...card, holdUntil: addMonthsIso(3) })}>Hold 3 more months</button>
+          <button type="button" className="btnSecondary" style={btn} onClick={() => onUpdate({ ...card, holdManual: false })}>Stop holding</button>
+        </div>
+      </div>
+    );
+  }
+  if (computed.holdReviewDue) {
+    return (
+      <div style={box("#C9A227")}>
+        <b style={{ color: "#C9A227" }}>📌 Time to review your hold</b> ({card.holdUntil}){card.holdNote ? ` — "${card.holdNote}"` : ""}. My Cards now says: <b>{model}</b>.
+        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+          <button type="button" className="btnSecondary" style={btn} onClick={() => onUpdate({ ...card, holdUntil: addMonthsIso(3) })}>Keep holding 3 months</button>
+          <button type="button" className="btnSecondary" style={btn} onClick={() => onUpdate({ ...card, holdManual: false })}>Stop holding</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginBottom: 12 }}>
+      {!open ? (
+        <button type="button" className="btnSecondary" style={btn} onClick={() => setOpen(true)} title="Keep this card no matter what the maths says">
+          📌 Hold this card
+        </button>
+      ) : (
+        <div style={box("#5C7A99")}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>📌 Hold this card</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <Field label="Why (optional)">
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Believe in him long term" style={{ minWidth: 220 }} />
+            </Field>
+            <Field label="Review on">
+              <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+            </Field>
+            <button type="button" className="btnPrimary" style={{ fontSize: 12, padding: "6px 12px", marginBottom: 2 }} onClick={() => onUpdate({ ...card, holdManual: true, holdNote: note.trim(), holdUntil: until })}>Hold it</button>
+            <button type="button" className="btnSecondary" style={{ ...btn, marginBottom: 2 }} onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+          <div style={{ fontSize: 11, color: "#8B90A0", marginTop: 6 }}>
+            The card shows "📌 Holding" instead of "{model}" until the review date, then it asks whether to keep holding. A good review point is just before the sport's next sell window.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===== Best way to grade (from Australia) =====
 // Every company/tier that covers this card's value, ranked by expected profit over selling raw,
 // with the verdict up top — including "not worth grading" when nothing clears the bar.
@@ -1989,6 +2111,8 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
           )}
         </div>
 
+        {(card.status === "Raw" || card.status === "Graded") && <HoldControl card={card} computed={computed} onUpdate={onUpdate} />}
+
         {card.location && card.location !== "In Hand" && ["Sell Raw First", "Sell PSA 9", "Sell PSA 10"].includes(computed.sellDecision) && (
           <div style={{ fontSize: 12, color: "#C9A227", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
             ⚠️ Time to sell, but this card isn't in hand — list it through {card.location} instead of shipping it yourself.
@@ -2086,9 +2210,18 @@ function DetailModal({ card, onClose, onUpdate, onDelete, playerLabel = "Player"
             <SectionTitle>Market values (60d avg)</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
               <MiniStat label="Raw" value={computed.rawAvg != null ? fmtMoney(computed.rawAvg) : "—"} />
-              <MiniStat label={gradeSlotLabel(card, "psa9")} value={computed.psa9Avg != null ? fmtMoney(computed.psa9Avg) : "—"} />
+              {computed.psa9Estimate != null ? (
+                <MiniStat label="PSA 9 (estimate)" value={`≈ ${fmtMoney(computed.psa9Estimate)}`} color="#C9A227" />
+              ) : (
+                <MiniStat label={gradeSlotLabel(card, "psa9")} value={computed.psa9Avg != null ? fmtMoney(computed.psa9Avg) : "—"} />
+              )}
               <MiniStat label={gradeSlotLabel(card, "psa10")} value={computed.psa10Avg != null ? fmtMoney(computed.psa10Avg) : "—"} />
             </div>
+            {computed.psa9Estimate != null && (
+              <div style={{ fontSize: 11.5, color: "#C9A227", border: "1px solid #C9A22755", background: "#C9A2270f", borderRadius: 6, padding: "6px 9px", marginBottom: 10, lineHeight: 1.5 }}>
+                ⚠️ No PSA 9 sales saved, so the grading maths uses an <b>estimate of about {fmtMoney(computed.psa9Estimate)}</b> — roughly 35% of the PSA 10 price (typical for modern cards), and at least a bit above raw. Use 🔄 Update Comps or Enter prices by hand with real PSA 9 sales to replace it.
+              </div>
+            )}
             {compsGradeMismatch(card) && (
               <div style={{ fontSize: 11.5, color: "#D9822B", border: "1px solid #D9822B55", background: "#D9822B0f", borderRadius: 6, padding: "6px 9px", marginBottom: 10, lineHeight: 1.5 }}>
                 ⚠️ The {card.grade} value ({fmtMoney(valueSlotForGrade(card.grade) === "psa10" ? card.psa10Avg : card.psa9Avg)}) may be another grade's price — it was saved before the app tracked which grade comps were for, or before the card was graded. {/^(sgc|bgs|cgc|tag)/i.test(card.grade) ? `${card.grade.split(" ")[0]} slabs usually sell well under PSA, so ` : ""}the app won't make a buy/sell call until it's confirmed. Use 🔄 Update Comps to get {card.grade} sales, or if you know this is the right price:

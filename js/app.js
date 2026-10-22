@@ -20,6 +20,9 @@ function App() {
   const [decisionFilter, setDecisionFilter] = useState("all");
   const [sportFilter, setSportFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
+  const [cardSearch, setCardSearch] = useState("");
+  // Search handed to My Sales when jumping there from a My Cards search.
+  const [salesSearch, setSalesSearch] = useState("");
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
 
@@ -246,6 +249,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     } else if (locationFilter !== "all") {
       list = list.filter((c) => c.location === locationFilter);
     }
+    if (cardSearch.trim()) list = list.filter((c) => cardMatchesSearch(c, cardSearch));
     if (!sortKey) {
       return [...list].sort(
         (a, b) =>
@@ -255,12 +259,26 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
       );
     }
     return list;
-  }, [enriched, statusFilter, decisionFilter, sportFilter, locationFilter, sortKey]);
+  }, [enriched, statusFilter, decisionFilter, sportFilter, locationFilter, sortKey, cardSearch]);
 
   const filteredPokemonCards = useMemo(
-    () => enrichedPokemonCards.filter((c) => c.status === "Raw" || c.status === "Graded"),
-    [enrichedPokemonCards]
+    () => enrichedPokemonCards.filter((c) => (c.status === "Raw" || c.status === "Graded") && (!cardSearch.trim() || cardMatchesSearch({ ...c, sport: c.sport || "Pokémon" }, cardSearch))),
+    [enrichedPokemonCards, cardSearch]
   );
+  // Matches that aren't in the My Cards list (away at grading, listed or sold), so a search for a
+  // player finds every copy you have.
+  const searchElsewhere = useMemo(() => {
+    if (!cardSearch.trim()) return null;
+    const pool = tab === "pokemon" ? pokemonCards : cards;
+    const hits = (pool || []).filter((c) => !["Raw", "Graded"].includes(c.status) && cardMatchesSearch(tab === "pokemon" ? { ...c, sport: c.sport || "Pokémon" } : c, cardSearch));
+    const count = (s) => hits.filter((c) => c.status === s).length;
+    return { atGrading: count("At Grading"), listed: count("Listed"), sold: count("Sold") };
+  }, [cardSearch, cards, pokemonCards, tab]);
+  // A fresh search box on each list; a search carried to My Sales only lasts while you're there.
+  useEffect(() => {
+    setCardSearch("");
+    if (tab !== "sales") setSalesSearch("");
+  }, [tab]);
 
   // Single Totals Declarations
   const totals = useMemo(() => {
@@ -523,6 +541,19 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     {/* 1. Stat Bar dynamically calculates portfolio vs. pokemon metrics */}
     <StatBar totals={isPokemon ? pokemonTotals : totals} />
 
+    <CardSearchBar
+      value={cardSearch}
+      onChange={setCardSearch}
+      placeholder={isPokemon ? "Search your Pokémon cards — name, set, number, grade…" : "Search your cards — player, set, year, number, grade…"}
+      resultCount={(isPokemon ? filteredPokemonCards : filtered).length}
+      elsewhere={searchElsewhere}
+      onOpenSales={() => {
+        setSalesSearch(cardSearch);
+        setTab("sales");
+      }}
+      onOpenGrading={() => setTab("gradingtracker")}
+    />
+
     {/* 2. Filter Row allows sorting and filtering both categories identically */}
     <FilterRow
       statusFilter={statusFilter}
@@ -554,8 +585,9 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
 )}
 
        {tab === "sales" && (
-  <MySales 
-    items={salesItems} 
+  <MySales
+    items={salesItems}
+    initialSearch={salesSearch}
     onUpdate={updateCardIn} 
     onDelete={deleteCardIn} 
     onAddManualSale={(newCard) => setCards((prev) => [newCard, ...prev])}
