@@ -197,7 +197,7 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
       cards.map((c) => {
         const computed = computeCard(c);
         const listing = recommendedListing(computed);
-        const expectedListProfit = listing ? listing.listPrice * (1 - computed.feesPct) - computed.totalCost : null;
+        const expectedListProfit = listing ? listing.listPrice * (1 - (computed.feesPct || 0.13)) - computed.totalCost : null;
         return { ...computed, expectedListProfit };
       }),
     [cards]
@@ -207,9 +207,13 @@ const activeCards = isPokemon ? (pokemonCards || []) : (cards || []);
     return pokemonCards
       .map((card) => {
         const computed = computePokemonCard(card);
+        // Worked out fresh every time, like sports cards — never a value saved on the card earlier.
+        const listing = recommendedListing(computed);
+        const expectedListProfit = listing ? listing.listPrice * (1 - (computed.feesPct || 0.13)) - computed.totalCost : null;
         return {
           ...card,
           ...computed,
+          expectedListProfit,
         };
       })
       .sort((a, b) => {
